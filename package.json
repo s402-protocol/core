@@ -1,0 +1,90 @@
+{
+  "name": "s402",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "s402 — Sui-native HTTP 402 protocol. Wire-compatible with x402, architecturally superior via atomic PTBs. Five payment schemes: exact, stream, escrow, seal, prepaid.",
+  "license": "MIT",
+  "author": "Danny Devs",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s402-protocol/core.git"
+  },
+  "homepage": "https://github.com/s402-protocol/core#readme",
+  "bugs": {
+    "url": "https://github.com/s402-protocol/core/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "sui",
+    "http-402",
+    "payments",
+    "x402",
+    "micropayments",
+    "streaming",
+    "escrow",
+    "web3",
+    "protocol"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "default": "./dist/index.mjs"
+    },
+    "./types": {
+      "import": {
+        "types": "./dist/types.d.mts",
+        "default": "./dist/types.mjs"
+      },
+      "default": "./dist/types.mjs"
+    },
+    "./http": {
+      "import": {
+        "types": "./dist/http.d.mts",
+        "default": "./dist/http.mjs"
+      },
+      "default": "./dist/http.mjs"
+    },
+    "./compat": {
+      "import": {
+        "types": "./dist/compat.d.mts",
+        "default": "./dist/compat.mjs"
+      },
+      "default": "./dist/compat.mjs"
+    },
+    "./errors": {
+      "import": {
+        "types": "./dist/errors.d.mts",
+        "default": "./dist/errors.mjs"
+      },
+      "default": "./dist/errors.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build && npm run typecheck && npm run test"
+  },
+  "devDependencies": {
+    "tsdown": "^0.20.3",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.5"
+  }
+}
