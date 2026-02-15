@@ -6,7 +6,7 @@
  *   - s402 clients can talk to x402 servers (graceful degradation)
  *
  * Roundtrip: fromX402(toX402(s402)) preserves all x402 fields.
- * s402-only fields (mandate, stream, escrow, unlock extras) are stripped.
+ * s402-only fields (mandate, stream, escrow, unlock extensions) are stripped.
  */
 
 import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload } from './types.js';
@@ -133,7 +133,7 @@ export function fromX402Payload(x402: x402PaymentPayload): s402ExactPayload {
 
 /**
  * Convert outbound s402 requirements to x402 V1 wire format.
- * Strips s402-only fields (mandate, stream, escrow, unlock extras).
+ * Strips s402-only fields (mandate, stream, escrow, unlock extensions).
  * Only works for "exact" scheme — other schemes have no x402 equivalent.
  *
  * Includes both `maxAmountRequired` (V1) and `amount` (V2) for maximum interop.

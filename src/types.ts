@@ -71,7 +71,7 @@ export interface s402PaymentRequirements {
   /** When these requirements expire (Unix timestamp ms). Facilitator MUST reject after this. */
   expiresAt?: number;
 
-  // ── Scheme-specific extras ──
+  // ── Scheme-specific extensions ──
 
   /** Extra fields for stream scheme */
   stream?: s402StreamExtra;

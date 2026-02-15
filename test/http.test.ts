@@ -212,10 +212,10 @@ describe('s402 HTTP encode/decode', () => {
 
     it('decodePaymentPayload accepts all five valid schemes', () => {
       for (const scheme of ['exact', 'stream', 'escrow', 'unlock', 'prepaid']) {
-        const extra: Record<string, string> = {};
-        if (scheme === 'unlock') extra.encryptionId = 'enc123';
-        if (scheme === 'prepaid') extra.ratePerCall = '100';
-        const encoded = btoa(JSON.stringify({ scheme, payload: { transaction: 'tx', signature: 'sig', ...extra } }));
+        const schemeFields: Record<string, string> = {};
+        if (scheme === 'unlock') schemeFields.encryptionId = 'enc123';
+        if (scheme === 'prepaid') schemeFields.ratePerCall = '100';
+        const encoded = btoa(JSON.stringify({ scheme, payload: { transaction: 'tx', signature: 'sig', ...schemeFields } }));
         const decoded = decodePaymentPayload(encoded);
         expect(decoded.scheme).toBe(scheme);
       }

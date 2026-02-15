@@ -225,7 +225,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
     expect(reqs.mandate).toEqual({ required: true, minPerTx: '500' });
   });
 
-  it('includes stream/escrow/unlock extras', () => {
+  it('includes stream/escrow/unlock extensions', () => {
     const server = new s402ResourceServer();
     const reqs = server.buildRequirements({
       schemes: ['stream'],
