@@ -1,6 +1,6 @@
 # s402
 
-**Sui-native HTTP 402 protocol.** Interoperable with [x402](https://github.com/coinbase/x402) via the `exact` scheme and compat layer. Architecturally superior via Sui's atomic Programmable Transaction Blocks (PTBs).
+**Sui-native HTTP 402 protocol.** Interoperable with [x402](https://github.com/coinbase/x402) via the `exact` scheme and compat layer. Atomic settlement via Sui's Programmable Transaction Blocks (PTBs).
 
 ```
 npm install s402

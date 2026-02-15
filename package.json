@@ -2,7 +2,7 @@
   "name": "s402",
   "version": "0.1.0",
   "type": "module",
-  "description": "s402 — Sui-native HTTP 402 protocol. Wire-compatible with x402, architecturally superior via atomic PTBs. Five payment schemes: exact, stream, escrow, seal, prepaid.",
+  "description": "s402 — Sui-native HTTP 402 protocol. Wire-compatible with x402. Atomic settlement via PTBs. Five payment schemes: exact, stream, escrow, seal, prepaid.",
   "license": "MIT",
   "author": "Danny Devs",
   "repository": {

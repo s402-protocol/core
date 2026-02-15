@@ -2,7 +2,7 @@
  * s402 Protocol Types — Sui-native HTTP 402 transport layer
  *
  * s402 (small s) is a Sui-native HTTP 402 protocol that is wire-compatible
- * with x402's JSON format but architecturally superior:
+ * with x402's JSON format, extended with Sui-native capabilities:
  *   - Atomic PTBs eliminate the verify/settle temporal gap
  *   - Five payment schemes: exact, stream, escrow, seal, prepaid
  *   - AP2 mandate support for agent spending authorization
