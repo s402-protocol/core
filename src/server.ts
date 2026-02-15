@@ -84,7 +84,7 @@ export class s402ResourceServer {
       settlementMode: config.settlementMode,
       stream: config.stream,
       escrow: config.escrow,
-      seal: config.seal,
+      unlock: config.unlock,
       prepaid: config.prepaid,
     };
   }

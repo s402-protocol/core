@@ -211,9 +211,9 @@ describe('s402 HTTP encode/decode', () => {
     });
 
     it('decodePaymentPayload accepts all five valid schemes', () => {
-      for (const scheme of ['exact', 'stream', 'escrow', 'seal', 'prepaid']) {
+      for (const scheme of ['exact', 'stream', 'escrow', 'unlock', 'prepaid']) {
         const extra: Record<string, string> = {};
-        if (scheme === 'seal') extra.encryptionId = 'enc123';
+        if (scheme === 'unlock') extra.encryptionId = 'enc123';
         if (scheme === 'prepaid') extra.ratePerCall = '100';
         const encoded = btoa(JSON.stringify({ scheme, payload: { transaction: 'tx', signature: 'sig', ...extra } }));
         const decoded = decodePaymentPayload(encoded);
@@ -233,10 +233,10 @@ describe('s402 HTTP encode/decode', () => {
       expect(() => decodePaymentPayload(bad)).toThrow('payload.signature must be a string');
     });
 
-    it('decodePaymentPayload rejects seal payload without encryptionId', () => {
-      const bad = btoa(JSON.stringify({ scheme: 'seal', payload: { transaction: 'tx', signature: 'sig' } }));
+    it('decodePaymentPayload rejects unlock payload without encryptionId', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'unlock', payload: { transaction: 'tx', signature: 'sig' } }));
       expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
-      expect(() => decodePaymentPayload(bad)).toThrow('seal payload requires encryptionId');
+      expect(() => decodePaymentPayload(bad)).toThrow('unlock payload requires encryptionId');
     });
 
     it('decodePaymentPayload rejects prepaid payload without ratePerCall', () => {

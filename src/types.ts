@@ -4,7 +4,7 @@
  * s402 (small s) is a Sui-native HTTP 402 protocol that is wire-compatible
  * with x402's JSON format, extended with Sui-native capabilities:
  *   - Atomic PTBs eliminate the verify/settle temporal gap
- *   - Five payment schemes: exact, stream, escrow, seal, prepaid
+ *   - Five payment schemes: exact, stream, escrow, unlock, prepaid
  *   - AP2 mandate support for agent spending authorization
  *   - Direct settlement mode (no facilitator needed)
  *   - On-chain receipts as NFT proofs
@@ -27,7 +27,7 @@ export const S402_VERSION = '1' as const;
 // ══════════════════════════════════════════════════════════════
 
 /** The five s402 payment schemes */
-export type s402Scheme = 'exact' | 'stream' | 'escrow' | 'seal' | 'prepaid';
+export type s402Scheme = 'exact' | 'stream' | 'escrow' | 'unlock' | 'prepaid';
 
 /** Settlement mode: facilitator-mediated or direct on-chain */
 export type s402SettlementMode = 'facilitator' | 'direct';
@@ -77,8 +77,8 @@ export interface s402PaymentRequirements {
   stream?: s402StreamExtra;
   /** Extra fields for escrow scheme */
   escrow?: s402EscrowExtra;
-  /** Extra fields for seal scheme */
-  seal?: s402SealExtra;
+  /** Extra fields for unlock scheme (pay-to-decrypt encrypted content) */
+  unlock?: s402UnlockExtra;
   /** Extra fields for prepaid scheme */
   prepaid?: s402PrepaidExtra;
 
@@ -108,14 +108,14 @@ export interface s402EscrowExtra {
   deadlineMs: string;
 }
 
-/** SEAL-specific requirements */
-export interface s402SealExtra {
-  /** Encryption ID for SEAL key servers */
+/** Unlock-specific requirements (pay-to-decrypt encrypted content) */
+export interface s402UnlockExtra {
+  /** Encryption ID for key servers */
   encryptionId: string;
   /** Walrus blob ID containing the encrypted content */
   walrusBlobId: string;
-  /** SEAL package ID on Sui */
-  sealPackageId: string;
+  /** Encryption package ID on Sui */
+  encryptionPackageId: string;
 }
 
 /**
@@ -210,21 +210,21 @@ export interface s402EscrowPayload extends s402PaymentPayloadBase {
 }
 
 /**
- * SEAL payment: escrow creation + seal-gated decryption.
+ * Unlock payment: escrow creation + encryption-gated decryption.
  *
- * Implementation note: Sui's `seal_approve` requires all arguments to be
- * `Argument::Input` (not results of prior commands), so the seal flow is
+ * Implementation note: The encryption key release function requires all arguments
+ * to be `Argument::Input` (not results of prior commands), so the unlock flow is
  * two-stage: TX1 creates the escrow receipt, TX2 passes that receipt as
- * input to `seal_approve` for decryption. The `transaction` field here is
+ * input to the key release for decryption. The `transaction` field here is
  * TX1 (escrow creation). TX2 is built by the facilitator after TX1 settles.
  */
-export interface s402SealPayload extends s402PaymentPayloadBase {
-  scheme: 'seal';
+export interface s402UnlockPayload extends s402PaymentPayloadBase {
+  scheme: 'unlock';
   payload: {
-    /** Escrow creation transaction (TX1 of two-stage seal flow) */
+    /** Escrow creation transaction (TX1 of two-stage unlock flow) */
     transaction: string;
     signature: string;
-    /** SEAL encryption ID */
+    /** Encryption ID for key servers */
     encryptionId: string;
   };
 }
@@ -252,7 +252,7 @@ export type s402PaymentPayload =
   | s402ExactPayload
   | s402StreamPayload
   | s402EscrowPayload
-  | s402SealPayload
+  | s402UnlockPayload
   | s402PrepaidPayload;
 
 // ══════════════════════════════════════════════════════════════

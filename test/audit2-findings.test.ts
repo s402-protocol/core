@@ -250,12 +250,12 @@ describe('FINDING 7: Scheme-specific sub-objects now validated (FIXED)', () => {
     } as any)).toThrow('escrow.seller must be a string');
   });
 
-  it('rejects seal as non-object', () => {
+  it('rejects unlock as non-object', () => {
     expect(() => normalizeRequirements({
-      s402Version: '1', accepts: ['seal'], network: 'sui:testnet',
+      s402Version: '1', accepts: ['unlock'], network: 'sui:testnet',
       asset: '0x2::sui::SUI', amount: '1000', payTo: '0x1',
-      seal: 'not-even-an-object',
-    } as any)).toThrow('seal must be a plain object');
+      unlock: 'not-even-an-object',
+    } as any)).toThrow('unlock must be a plain object');
   });
 
   it('rejects mandate with non-boolean required', () => {

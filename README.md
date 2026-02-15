@@ -18,7 +18,7 @@ HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a pay
 |---|---|---|
 | **Settlement** | Two-step: verify then settle (temporal gap) | Atomic: verify + settle in one PTB |
 | **Finality** | 12+ second blocks (EVM L1) | ~400ms (Sui) |
-| **Payment models** | Exact (one-shot) only | Exact, Prepaid, Escrow (v0.1) + Seal, Stream (v0.2) |
+| **Payment models** | Exact (one-shot) only | Exact, Prepaid, Escrow (v0.1) + Unlock, Stream (v0.2) |
 | **Micro-payments** | $7.00 gas per 1K calls (broken) | $0.014 gas per 1K calls (prepaid) |
 | **Coin handling** | approve + transferFrom | Native `coinWithBalance` + `splitCoins` |
 | **Agent auth** | None | AP2 mandate delegation |
@@ -100,11 +100,11 @@ Time-locked vault with arbiter dispute resolution. Full state machine: `ACTIVE -
 
 Use cases: digital goods delivery, freelance payments, trustless commerce.
 
-### Seal (v0.2)
+### Unlock (v0.2)
 
-Pay-to-decrypt via [Sui SEAL](https://docs.sui.io/concepts/cryptography/seal). Escrow + encrypted content delivery. The buyer pays into escrow; on release, the `EscrowReceipt` unlocks SEAL-encrypted content stored on [Walrus](https://docs.walrus.site).
+Pay-to-decrypt encrypted content. Escrow + encrypted content delivery. The buyer pays into escrow; on release, the `EscrowReceipt` unlocks encrypted content stored on [Walrus](https://docs.walrus.site). Currently powered by [Sui SEAL](https://docs.sui.io/concepts/cryptography/seal).
 
-This scheme depends on SEAL key server infrastructure and is under active development.
+This scheme depends on encryption key server infrastructure and is under active development.
 
 ### Stream (v0.2)
 
@@ -275,7 +275,7 @@ Servers can advertise s402 support at `/.well-known/s402.json`:
 ```json
 {
   "s402Version": "1",
-  "schemes": ["exact", "stream", "escrow", "seal", "prepaid"],
+  "schemes": ["exact", "stream", "escrow", "unlock", "prepaid"],
   "networks": ["sui:mainnet"],
   "assets": ["0x2::sui::SUI", "0xdba...::usdc::USDC"],
   "directSettlement": true,

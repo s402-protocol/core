@@ -1,7 +1,7 @@
 /**
  * s402 Scheme Interfaces
  *
- * Each payment scheme (exact, stream, escrow, seal) implements these
+ * Each payment scheme (exact, stream, escrow, unlock, prepaid) implements these
  * interfaces. The key insight: each scheme has its OWN verify logic.
  * Exact verify ≠ stream verify ≠ escrow verify.
  */
@@ -53,7 +53,7 @@ export interface s402ServerScheme {
  * - Exact: signature recovery + dry-run simulation + balance check
  * - Stream: stream creation PTB validation + deposit check
  * - Escrow: escrow creation PTB validation + arbiter/deadline check
- * - Seal: escrow validation (seal_approve is separate PTB)
+ * - Unlock: escrow validation (key release is separate PTB)
  */
 export interface s402FacilitatorScheme {
   readonly scheme: s402Scheme;
@@ -139,11 +139,11 @@ export interface s402RouteConfig {
     deadlineMs: string;
   };
 
-  // ── Seal config ──
-  seal?: {
+  // ── Unlock config (pay-to-decrypt) ──
+  unlock?: {
     encryptionId: string;
     walrusBlobId: string;
-    sealPackageId: string;
+    encryptionPackageId: string;
   };
 
   // ── Prepaid config ──

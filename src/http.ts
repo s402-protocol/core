@@ -77,7 +77,7 @@ const S402_REQUIREMENTS_KEYS = new Set([
   's402Version', 'accepts', 'network', 'asset', 'amount', 'payTo',
   'facilitatorUrl', 'mandate', 'protocolFeeBps', 'protocolFeeAddress',
   'receiptRequired', 'settlementMode', 'expiresAt',
-  'stream', 'escrow', 'seal', 'prepaid', 'extensions',
+  'stream', 'escrow', 'unlock', 'prepaid', 'extensions',
 ]);
 
 /** Return a clean object with only known s402 requirement fields. */
@@ -147,7 +147,7 @@ export function decodeSettleResponse(header: string): s402SettleResponse {
 // ══════════════════════════════════════════════════════════════
 
 /** Valid s402 payment scheme values */
-const VALID_SCHEMES = new Set<string>(['exact', 'stream', 'escrow', 'seal', 'prepaid']);
+const VALID_SCHEMES = new Set<string>(['exact', 'stream', 'escrow', 'unlock', 'prepaid']);
 
 /**
  * Check that a string represents a canonical non-negative integer (valid for Sui MIST amounts).
@@ -226,14 +226,14 @@ export function validateEscrowShape(value: unknown): void {
 }
 
 /**
- * Validate seal sub-object.
+ * Validate unlock sub-object (pay-to-decrypt encrypted content).
  */
-export function validateSealShape(value: unknown): void {
-  assertPlainObject(value, 'seal');
+export function validateUnlockShape(value: unknown): void {
+  assertPlainObject(value, 'unlock');
   const obj = value as Record<string, unknown>;
-  assertString(obj, 'encryptionId', 'seal');
-  assertString(obj, 'walrusBlobId', 'seal');
-  assertString(obj, 'sealPackageId', 'seal');
+  assertString(obj, 'encryptionId', 'unlock');
+  assertString(obj, 'walrusBlobId', 'unlock');
+  assertString(obj, 'encryptionPackageId', 'unlock');
 }
 
 /**
@@ -256,7 +256,7 @@ export function validateSubObjects(record: Record<string, unknown>): void {
   if (record.mandate !== undefined) validateMandateShape(record.mandate);
   if (record.stream !== undefined) validateStreamShape(record.stream);
   if (record.escrow !== undefined) validateEscrowShape(record.escrow);
-  if (record.seal !== undefined) validateSealShape(record.seal);
+  if (record.unlock !== undefined) validateUnlockShape(record.unlock);
   if (record.prepaid !== undefined) validatePrepaidShape(record.prepaid);
 }
 
@@ -369,9 +369,9 @@ function validatePayloadShape(obj: unknown): void {
   }
 
   // Scheme-specific inner fields
-  if (record.scheme === 'seal' && typeof inner.encryptionId !== 'string') {
+  if (record.scheme === 'unlock' && typeof inner.encryptionId !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
-      `seal payload requires encryptionId (string), got ${typeof inner.encryptionId}`);
+      `unlock payload requires encryptionId (string), got ${typeof inner.encryptionId}`);
   }
   if (record.scheme === 'prepaid' && typeof inner.ratePerCall !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',

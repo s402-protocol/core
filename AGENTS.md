@@ -56,11 +56,11 @@ s402 defines exactly five payment schemes. Each has a **unique on-chain lifecycl
 | `prepaid` | `PrepaidBalance` shared object | deposit → claim → claim → withdraw | Deposit-then-claim pattern. Provider-initiated claims invert the flow. |
 | `stream` | `Stream` shared object | open → tick → tick → close | Time-based. On-chain clock drives payments autonomously. |
 | `escrow` | `Escrow` shared object | lock → condition → release/refund | Conditional. Money locked until delivery confirmed or deadline passes. |
-| `seal` | SEAL receipt + encrypted blob | pay → receipt → decrypt (two-stage) | Entangled with SEAL key servers. Decryption is atomic with payment. |
+| `unlock` | Encryption receipt + encrypted blob | pay → receipt → decrypt (two-stage) | Entangled with encryption key servers. Decryption is atomic with payment. |
 
 **Why not six?** Auction (agent-to-agent bidding) was considered. Auction decomposes into two phases: price **discovery** (coordination problem) and **settlement** (one of the five existing schemes). The settlement of an auction is just `exact` (or `prepaid`, or `stream`) at the discovered price. Discovery is not a payment primitive — it's a coordination service.
 
-**Why not four?** Every scheme was tested for reducibility. Escrow cannot be expressed as "exact now + refund later" (the atomic lock is the point). Seal cannot be expressed as escrow (SEAL key server integration is entangled with payment). Stream cannot be expressed as repeated exact (on-chain clock autonomy is the point).
+**Why not four?** Every scheme was tested for reducibility. Escrow cannot be expressed as "exact now + refund later" (the atomic lock is the point). Unlock cannot be expressed as escrow (encryption key server integration is entangled with payment). Stream cannot be expressed as repeated exact (on-chain clock autonomy is the point).
 
 ### Auction via the `extensions` Field
 

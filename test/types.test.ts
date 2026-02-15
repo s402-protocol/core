@@ -95,7 +95,7 @@ describe('s402 types', () => {
   it('discovery type satisfies shape', () => {
     const discovery: s402Discovery = {
       s402Version: S402_VERSION,
-      schemes: ['exact', 'stream', 'escrow', 'seal'],
+      schemes: ['exact', 'stream', 'escrow', 'unlock'],
       networks: ['sui:testnet', 'sui:mainnet'],
       assets: ['0x2::sui::SUI'],
       directSettlement: true,
