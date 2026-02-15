@@ -11,11 +11,6 @@ hero:
     - theme: alt
       text: View on GitHub
       link: https://github.com/s402-protocol/core
-  image:
-    light: /logo-light.svg
-    dark: /logo-dark.svg
-    alt: s402
-
 features:
   - icon: ⚡
     title: Zero Runtime Dependencies
