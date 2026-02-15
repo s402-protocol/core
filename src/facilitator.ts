@@ -66,13 +66,24 @@ export class s402Facilitator {
     payload: s402PaymentPayload,
     requirements: s402PaymentRequirements,
   ): Promise<s402SettleResponse> {
-    // Reject expired requirements before doing any work
-    if (requirements.expiresAt != null && Date.now() > requirements.expiresAt) {
-      return {
-        success: false,
-        error: `Payment requirements expired at ${new Date(requirements.expiresAt).toISOString()}`,
-        errorCode: 'REQUIREMENTS_EXPIRED',
-      };
+    // Reject expired requirements before doing any work.
+    // Type check defends against string/NaN expiresAt from untrusted JSON
+    // (Date.now() > "never" is false in JS, silently bypassing the check).
+    if (requirements.expiresAt != null) {
+      if (typeof requirements.expiresAt !== 'number' || !Number.isFinite(requirements.expiresAt)) {
+        return {
+          success: false,
+          error: `Invalid expiresAt value: expected finite number, got ${typeof requirements.expiresAt}`,
+          errorCode: 'INVALID_PAYLOAD',
+        };
+      }
+      if (Date.now() > requirements.expiresAt) {
+        return {
+          success: false,
+          error: `Payment requirements expired at ${new Date(requirements.expiresAt).toISOString()}`,
+          errorCode: 'REQUIREMENTS_EXPIRED',
+        };
+      }
     }
 
     const scheme = this.resolveScheme(payload.scheme, requirements.network);
@@ -84,6 +95,18 @@ export class s402Facilitator {
         success: false,
         error: verifyResult.invalidReason ?? 'Payment verification failed',
         errorCode: 'VERIFICATION_FAILED',
+      };
+    }
+
+    // Latency guard: if the dry-run took a long time, don't waste gas on stale requirements.
+    // Note: this is NOT a TOCTOU fix — Sui PTBs are atomic. This just avoids broadcasting
+    // a transaction for requirements the server has already expired.
+    // Type already validated above, so only check expiration here.
+    if (typeof requirements.expiresAt === 'number' && Date.now() > requirements.expiresAt) {
+      return {
+        success: false,
+        error: `Payment requirements expired during verification at ${new Date(requirements.expiresAt).toISOString()}`,
+        errorCode: 'REQUIREMENTS_EXPIRED',
       };
     }
 

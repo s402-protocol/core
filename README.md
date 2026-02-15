@@ -1,6 +1,6 @@
 # s402
 
-**Sui-native HTTP 402 protocol.** Interoperable with [x402](https://github.com/coinbase/x402) via the `exact` scheme and compat layer. Atomic settlement via Sui's Programmable Transaction Blocks (PTBs).
+**Sui-native HTTP 402 protocol.** Atomic settlement via Sui's Programmable Transaction Blocks (PTBs). Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
 ```
 npm install s402
@@ -24,7 +24,7 @@ HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a pay
 | **Agent auth** | None | AP2 mandate delegation |
 | **Direct mode** | No | Yes (no facilitator needed) |
 | **Receipts** | Off-chain | On-chain NFT proofs |
-| **Compatibility** | n/a | x402 V1 wire-compat; V2 via compat layer |
+| **Compatibility** | n/a | Optional x402 compat layer (`s402/compat`) |
 
 **s402 is Sui-native by design.** These advantages come from Sui's object model, PTBs, and sub-second finality. They can't be replicated on EVM — and they don't need to be. x402 already handles EVM well. s402 handles Sui better.
 
@@ -36,7 +36,7 @@ s402          <-- You are here. Protocol spec. Zero runtime deps.
   |-- Types         Payment requirements, payloads, responses
   |-- Schemes       Client/Server/Facilitator interfaces per scheme
   |-- HTTP          Encode/decode for HTTP headers (base64 JSON)
-  |-- Compat        Bidirectional x402 conversion
+  |-- Compat        Optional x402 migration aid
   |-- Errors        Typed error codes with recovery hints
   |
 @sweepay/sui        <-- Sui-specific implementations (PTB builders, signers)
@@ -57,7 +57,7 @@ Client                    Server                  Facilitator
   |<-- 402 + requirements ---|                         |
   |                          |                         |
   |  (build PTB, sign)       |                         |
-  |--- GET + X-PAYMENT ----->|--- verify + settle ---->|
+  |--- GET + x-payment ----->|--- verify + settle ---->|
   |                          |<--- { success, tx } ----|
   |<-- 200 + data -----------|                         |
 ```
@@ -116,7 +116,7 @@ Phase 1 (402 exchange):
   Result: StreamingMeter shared object on-chain
 
 Phase 2 (ongoing access):
-  Client includes X-STREAM-ID header --> server checks on-chain balance
+  Client includes x-stream-id header --> server checks on-chain balance
   Server grants access as long as stream has funds
 ```
 
@@ -165,23 +165,19 @@ console.log(reqs.accepts); // ['exact', 'stream']
 console.log(reqs.amount);  // '1000000'
 ```
 
-### x402 interop
+### x402 compat (opt-in)
 
 ```typescript
 import {
   normalizeRequirements,
-  decodePaymentRequired,
   isS402,
   isX402,
   toX402Requirements,
   fromX402Requirements,
-} from 's402';
+} from 's402/compat';
 
-// Decode and auto-normalize incoming requirements
-// Works whether the server sent s402 or x402 (V1 or V2) format
-const decoded = decodePaymentRequired(header);
-// Or normalize raw JSON from any source:
-// const requirements = normalizeRequirements(rawJsonObject);
+// Normalize x402 JSON (V1 or V2) to s402 format
+const requirements = normalizeRequirements(rawJsonObject);
 
 // Convert s402 -> x402 V1 for legacy clients
 const x402Reqs = toX402Requirements(requirements);
@@ -256,7 +252,7 @@ import type {
 } from 's402';
 ```
 
-See `@sweepay/sui` for the reference Sui implementation of all four schemes.
+See `@sweepay/sui` for the reference Sui implementation of all five schemes.
 
 ## Wire Format
 
@@ -265,10 +261,10 @@ s402 uses the same HTTP headers as x402 V1:
 | Header | Direction | Content |
 |--------|-----------|---------|
 | `payment-required` | Server -> Client | Base64-encoded `s402PaymentRequirements` JSON |
-| `X-PAYMENT` | Client -> Server | Base64-encoded `s402PaymentPayload` JSON |
+| `x-payment` | Client -> Server | Base64-encoded `s402PaymentPayload` JSON |
 | `payment-response` | Server -> Client | Base64-encoded `s402SettleResponse` JSON |
 
-> **Note:** x402 V2 renamed the client payment header to `PAYMENT-SIGNATURE`. s402 uses `X-PAYMENT` (matching x402 V1). x402 V2 servers accept both headers, so s402 clients work with both versions. If your server needs to accept x402 V2 clients, also check `PAYMENT-SIGNATURE`.
+> **Note:** x402 V2 renamed the client payment header to `payment-signature`. s402 uses `x-payment` (matching x402 V1). All header names are lowercase per HTTP/2 (RFC 9113 §8.2.1). x402 V2 servers accept both headers, so s402 clients work with both versions. If your server needs to accept x402 V2 clients, also check `payment-signature`.
 
 The presence of `s402Version` in the decoded JSON distinguishes s402 from x402. Clients and servers can auto-detect the protocol using `detectProtocol()`.
 
@@ -279,7 +275,7 @@ Servers can advertise s402 support at `/.well-known/s402.json`:
 ```json
 {
   "s402Version": "1",
-  "schemes": ["exact", "stream", "escrow"],
+  "schemes": ["exact", "stream", "escrow", "seal", "prepaid"],
   "networks": ["sui:mainnet"],
   "assets": ["0x2::sui::SUI", "0xdba...::usdc::USDC"],
   "directSettlement": true,
@@ -310,7 +306,7 @@ const requirements: s402PaymentRequirements = {
 
 1. **Protocol-agnostic core, Sui-native reference.** `s402` defines chain-agnostic protocol types and HTTP encoding. The reference implementation (`@sweepay/sui`) exploits Sui's unique properties — PTBs, object model, sub-second finality. Other chains can implement s402 schemes using their own primitives.
 
-2. **Wire-compatible with x402.** The `exact` scheme uses the same headers and encoding as x402 V1, and the compat layer handles both V1 (`maxAmountRequired`) and V2 (`amount`) field names. An x402 facilitator can settle s402 exact payments and vice versa.
+2. **Optional x402 compat.** The `s402/compat` subpath provides a migration aid for codebases with x402-formatted JSON. It normalizes x402 V1 (`maxAmountRequired`) and V2 (`amount`) to s402 format. This is opt-in — the core protocol has no x402 dependency.
 
 3. **Scheme-specific verification.** Each scheme has its own verify logic. Exact verify (signature recovery + dry-run) is fundamentally different from stream verify (deposit check + rate validation). The facilitator dispatches — it doesn't share logic.
 

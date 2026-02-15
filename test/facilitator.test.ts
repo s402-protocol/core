@@ -6,6 +6,7 @@ import {
   type s402PaymentRequirements,
   type s402ExactPayload,
   type s402FacilitatorScheme,
+  type s402ServerScheme,
 } from '../src/index.js';
 
 const REQUIREMENTS: s402PaymentRequirements = {
@@ -124,6 +125,38 @@ describe('s402Facilitator', () => {
     ).rejects.toThrow('eth:mainnet');
   });
 
+  it('process() rejects non-numeric expiresAt (type-safety)', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    // String expiresAt would silently bypass: Date.now() > "never" === false
+    const badReqs = {
+      ...REQUIREMENTS,
+      expiresAt: 'never' as unknown as number,
+    };
+
+    const result = await facilitator.process(PAYLOAD, badReqs);
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('INVALID_PAYLOAD');
+    expect(result.error).toContain('Invalid expiresAt');
+  });
+
+  it('process() rejects NaN expiresAt', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const badReqs = {
+      ...REQUIREMENTS,
+      expiresAt: NaN,
+    };
+
+    const result = await facilitator.process(PAYLOAD, badReqs);
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('INVALID_PAYLOAD');
+  });
+
   it('throws on unsupported scheme', async () => {
     const facilitator = new s402Facilitator();
     facilitator.register('sui:testnet', createMockScheme());
@@ -203,6 +236,54 @@ describe('s402ResourceServer.buildRequirements()', () => {
     });
 
     expect(reqs.stream?.ratePerSecond).toBe('100');
+  });
+
+  it('enforces exact in accepts when scheme impl omits it', () => {
+    const server = new s402ResourceServer();
+    const streamServerScheme: s402ServerScheme = {
+      scheme: 'stream',
+      buildRequirements(config) {
+        return {
+          s402Version: S402_VERSION,
+          accepts: ['stream'], // deliberately omits 'exact'
+          network: config.network,
+          asset: config.asset ?? '0x2::sui::SUI',
+          amount: config.price,
+          payTo: config.payTo,
+        };
+      },
+    };
+    server.register('sui:testnet', streamServerScheme);
+
+    const reqs = server.buildRequirements({
+      schemes: ['stream'],
+      price: '1000',
+      network: 'sui:testnet',
+      payTo: '0x1',
+    });
+
+    expect(reqs.accepts).toContain('exact');
+    expect(reqs.accepts).toContain('stream');
+  });
+
+  it('buildRequirements rejects invalid price', () => {
+    const server = new s402ResourceServer();
+    expect(() => server.buildRequirements({
+      schemes: ['exact'],
+      price: 'abc',
+      network: 'sui:testnet',
+      payTo: '0x1',
+    })).toThrow('Invalid price');
+  });
+
+  it('buildRequirements rejects negative price', () => {
+    const server = new s402ResourceServer();
+    expect(() => server.buildRequirements({
+      schemes: ['exact'],
+      price: '-100',
+      network: 'sui:testnet',
+      payTo: '0x1',
+    })).toThrow('Invalid price');
   });
 
   it('deduplicates exact in accepts', () => {

@@ -8,6 +8,7 @@ import {
   decodeSettleResponse,
   detectProtocol,
   extractRequirementsFromResponse,
+  isValidAmount,
   s402Error,
   S402_VERSION,
   type s402PaymentRequirements,
@@ -39,6 +40,23 @@ const SAMPLE_SETTLE: s402SettleResponse = {
   receiptId: '0xreceipt',
   finalityMs: 450,
 };
+
+describe('isValidAmount barrel export', () => {
+  it('is exported from the s402 barrel', () => {
+    expect(typeof isValidAmount).toBe('function');
+  });
+
+  it('validates canonical non-negative integers', () => {
+    expect(isValidAmount('0')).toBe(true);
+    expect(isValidAmount('1000000000')).toBe(true);
+    expect(isValidAmount('18446744073709551615')).toBe(true); // u64 max
+    expect(isValidAmount('-1')).toBe(false);
+    expect(isValidAmount('007')).toBe(false);
+    expect(isValidAmount('abc')).toBe(false);
+    expect(isValidAmount('')).toBe(false);
+    expect(isValidAmount('1.5')).toBe(false);
+  });
+});
 
 describe('s402 HTTP encode/decode', () => {
   describe('payment requirements roundtrip', () => {
@@ -80,14 +98,14 @@ describe('s402 HTTP encode/decode', () => {
   });
 
   describe('Unicode safety', () => {
-    it('handles CJK characters in extra field', () => {
+    it('handles CJK characters in extensions field', () => {
       const reqs: s402PaymentRequirements = {
         ...SAMPLE_REQUIREMENTS,
-        extra: { description: '東京での支払い' },
+        extensions: { description: '東京での支払い' },
       };
       const encoded = encodePaymentRequired(reqs);
       const decoded = decodePaymentRequired(encoded);
-      expect((decoded.extra as Record<string, string>).description).toBe('東京での支払い');
+      expect((decoded.extensions as Record<string, string>).description).toBe('東京での支払い');
     });
 
     it('handles emoji in settle response error', () => {
@@ -122,6 +140,22 @@ describe('s402 HTTP encode/decode', () => {
 
     it('decodeSettleResponse throws s402Error on garbage', () => {
       expect(() => decodeSettleResponse('corrupted')).toThrow(s402Error);
+    });
+
+    it('decodePaymentRequired rejects oversized header', () => {
+      const huge = 'A'.repeat(65 * 1024); // > 64KB
+      expect(() => decodePaymentRequired(huge)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(huge)).toThrow('exceeds maximum size');
+    });
+
+    it('decodePaymentPayload rejects oversized header', () => {
+      const huge = 'A'.repeat(65 * 1024);
+      expect(() => decodePaymentPayload(huge)).toThrow('exceeds maximum size');
+    });
+
+    it('decodeSettleResponse rejects oversized header', () => {
+      const huge = 'A'.repeat(65 * 1024);
+      expect(() => decodeSettleResponse(huge)).toThrow('exceeds maximum size');
     });
 
     it('thrown errors have INVALID_PAYLOAD code', () => {
@@ -176,16 +210,55 @@ describe('s402 HTTP encode/decode', () => {
       expect(() => decodePaymentPayload(bad)).toThrow('Unknown payment scheme');
     });
 
-    it('decodePaymentPayload accepts all four valid schemes', () => {
-      for (const scheme of ['exact', 'stream', 'escrow', 'seal']) {
-        const encoded = btoa(JSON.stringify({ scheme, payload: { transaction: 'tx', signature: 'sig' } }));
+    it('decodePaymentPayload accepts all five valid schemes', () => {
+      for (const scheme of ['exact', 'stream', 'escrow', 'seal', 'prepaid']) {
+        const extra: Record<string, string> = {};
+        if (scheme === 'seal') extra.encryptionId = 'enc123';
+        if (scheme === 'prepaid') extra.ratePerCall = '100';
+        const encoded = btoa(JSON.stringify({ scheme, payload: { transaction: 'tx', signature: 'sig', ...extra } }));
         const decoded = decodePaymentPayload(encoded);
         expect(decoded.scheme).toBe(scheme);
       }
     });
 
+    it('decodePaymentPayload rejects non-string transaction', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'exact', payload: { transaction: 42, signature: 'sig' } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('payload.transaction must be a string');
+    });
+
+    it('decodePaymentPayload rejects non-string signature', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'exact', payload: { transaction: 'tx', signature: null } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('payload.signature must be a string');
+    });
+
+    it('decodePaymentPayload rejects seal payload without encryptionId', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'seal', payload: { transaction: 'tx', signature: 'sig' } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('seal payload requires encryptionId');
+    });
+
+    it('decodePaymentPayload rejects prepaid payload without ratePerCall', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig' } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('prepaid payload requires ratePerCall');
+    });
+
     it('decodePaymentPayload accepts valid payload', () => {
       const encoded = encodePaymentPayload(SAMPLE_PAYLOAD);
+      const decoded = decodePaymentPayload(encoded);
+      expect(decoded.scheme).toBe('exact');
+    });
+
+    it('decodePaymentPayload rejects unsupported s402Version', () => {
+      const bad = btoa(JSON.stringify({ s402Version: '99', scheme: 'exact', payload: { transaction: 'tx', signature: 'sig' } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('Unsupported s402 version');
+    });
+
+    it('decodePaymentPayload accepts payload without s402Version (x402 compat)', () => {
+      const encoded = btoa(JSON.stringify({ scheme: 'exact', payload: { transaction: 'tx', signature: 'sig' } }));
       const decoded = decodePaymentPayload(encoded);
       expect(decoded.scheme).toBe('exact');
     });
@@ -250,11 +323,184 @@ describe('s402 HTTP encode/decode', () => {
       }
     });
 
+    it('decodePaymentRequired rejects unsupported s402Version', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '99',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('Unsupported s402 version');
+    });
+
+    it('decodePaymentRequired rejects non-numeric amount', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: 'hello',
+        payTo: '0xabc',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
+    });
+
+    it('decodePaymentRequired rejects negative amount', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '-100',
+        payTo: '0xabc',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
+    });
+
+    it('decodePaymentRequired rejects leading zeros in amount', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '007',
+        payTo: '0xabc',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
+    });
+
+    it('decodePaymentRequired accepts zero amount', () => {
+      const encoded = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '0',
+        payTo: '0xabc',
+      }));
+      const decoded = decodePaymentRequired(encoded);
+      expect(decoded.amount).toBe('0');
+    });
+
+    it('decodePaymentRequired accepts unknown scheme names in accepts (forward compat)', () => {
+      const encoded = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact', 'futureScheme'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+      }));
+      const decoded = decodePaymentRequired(encoded);
+      expect(decoded.accepts).toEqual(['exact', 'futureScheme']);
+    });
+
+    it('decodePaymentRequired rejects non-string entries in accepts array', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact', 42],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('expected string');
+    });
+
     it('decodePaymentRequired accepts valid requirements', () => {
       const encoded = encodePaymentRequired(SAMPLE_REQUIREMENTS);
       const decoded = decodePaymentRequired(encoded);
       expect(decoded.amount).toBe('1000000000');
       expect(decoded.network).toBe('sui:testnet');
+    });
+
+    it('decodePaymentRequired rejects object without s402Version', () => {
+      const bad = btoa(JSON.stringify({
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('Missing s402Version');
+    });
+
+    it('decodePaymentRequired rejects empty accepts array', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: [],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('at least one scheme');
+    });
+
+    it('decodePaymentRequired rejects protocolFeeBps > 10000', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+        protocolFeeBps: 50000,
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('protocolFeeBps');
+    });
+
+    it('decodePaymentRequired rejects negative protocolFeeBps', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+        protocolFeeBps: -1,
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow('protocolFeeBps');
+    });
+
+    it('decodePaymentRequired rejects non-numeric expiresAt', () => {
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+        expiresAt: 'never',
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('expiresAt must be a finite number');
+    });
+
+    it('decodePaymentRequired accepts valid protocolFeeBps and expiresAt', () => {
+      const encoded = btoa(JSON.stringify({
+        s402Version: '1',
+        accepts: ['exact'],
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: '0xabc',
+        protocolFeeBps: 50,
+        expiresAt: Date.now() + 60000,
+      }));
+      const decoded = decodePaymentRequired(encoded);
+      expect(decoded.protocolFeeBps).toBe(50);
+      expect(typeof decoded.expiresAt).toBe('number');
     });
   });
 

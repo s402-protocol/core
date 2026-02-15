@@ -13,11 +13,11 @@ describe('s402 types', () => {
     expect(S402_VERSION).toBe('1');
   });
 
-  it('S402_HEADERS uses x402-compatible header names', () => {
+  it('S402_HEADERS uses lowercase header names (HTTP/2 compliant)', () => {
     expect(S402_HEADERS.PAYMENT_REQUIRED).toBe('payment-required');
-    expect(S402_HEADERS.PAYMENT).toBe('X-PAYMENT');
+    expect(S402_HEADERS.PAYMENT).toBe('x-payment');
     expect(S402_HEADERS.PAYMENT_RESPONSE).toBe('payment-response');
-    expect(S402_HEADERS.STREAM_ID).toBe('X-STREAM-ID');
+    expect(S402_HEADERS.STREAM_ID).toBe('x-stream-id');
   });
 
   it('payment requirements type satisfies shape', () => {

@@ -82,8 +82,8 @@ export interface s402PaymentRequirements {
   /** Extra fields for prepaid scheme */
   prepaid?: s402PrepaidExtra;
 
-  /** Arbitrary extra data (forward-compatible) */
-  extra?: Record<string, unknown>;
+  /** Arbitrary extension data (forward-compatible extensibility) */
+  extensions?: Record<string, unknown>;
 }
 
 /** Stream-specific requirements */
@@ -318,14 +318,18 @@ export interface s402Discovery {
 // Wire format helpers
 // ══════════════════════════════════════════════════════════════
 
-/** HTTP headers used by s402 (same names as x402 for compatibility) */
+/**
+ * HTTP headers used by s402 (same names as x402 for compatibility).
+ * All lowercase per HTTP/2 spec (RFC 9113 §8.2.1). The Headers API
+ * normalizes casing for HTTP/1.1, so lowercase works everywhere.
+ */
 export const S402_HEADERS = {
   /** Server → client: payment requirements (base64 JSON in 402 response) */
   PAYMENT_REQUIRED: 'payment-required',
   /** Client → server: payment payload (base64 JSON) */
-  PAYMENT: 'X-PAYMENT',
+  PAYMENT: 'x-payment',
   /** Server → client: settlement result (base64 JSON) */
   PAYMENT_RESPONSE: 'payment-response',
   /** Client → server: active stream ID (phase 2 of stream protocol) */
-  STREAM_ID: 'X-STREAM-ID',
+  STREAM_ID: 'x-stream-id',
 } as const;

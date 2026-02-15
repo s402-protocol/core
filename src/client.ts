@@ -9,7 +9,6 @@
 import type { s402PaymentRequirements, s402PaymentPayload, s402Scheme } from './types.js';
 import type { s402ClientScheme } from './scheme.js';
 import { s402Error } from './errors.js';
-import { normalizeRequirements } from './compat.js';
 
 export class s402Client {
   private schemes = new Map<string, Map<s402Scheme, s402ClientScheme>>();
@@ -33,16 +32,13 @@ export class s402Client {
    *
    * Auto-selects the best scheme: prefers the first scheme in the server's
    * `accepts` array that we have a registered implementation for.
+   *
+   * Accepts typed s402PaymentRequirements only. For x402 input, normalize
+   * first via `normalizeRequirements()` from 's402/compat'.
    */
   async createPayment(
-    requirementsOrRaw: s402PaymentRequirements | Record<string, unknown>,
+    requirements: s402PaymentRequirements,
   ): Promise<s402PaymentPayload> {
-    // Always validate through normalizeRequirements — even typed s402 input
-    // could be from JSON.parse of untrusted network data at runtime.
-    const requirements = normalizeRequirements(
-      requirementsOrRaw as Record<string, unknown>,
-    );
-
     const networkSchemes = this.schemes.get(requirements.network);
     if (!networkSchemes) {
       throw new s402Error(

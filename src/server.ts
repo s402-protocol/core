@@ -16,6 +16,7 @@ import { S402_VERSION } from './types.js';
 import type { s402ServerScheme, s402RouteConfig } from './scheme.js';
 import type { s402Facilitator } from './facilitator.js';
 import { s402Error } from './errors.js';
+import { isValidAmount } from './http.js';
 
 export class s402ResourceServer {
   private schemes = new Map<string, Map<s402Scheme, s402ServerScheme>>();
@@ -46,13 +47,24 @@ export class s402ResourceServer {
    * Always includes "exact" in accepts for x402 compat.
    */
   buildRequirements(config: s402RouteConfig): s402PaymentRequirements {
+    // Validate price early — catch bad config before it reaches the wire
+    if (!isValidAmount(config.price)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `Invalid price "${config.price}": must be a non-negative integer string`);
+    }
+
     const networkSchemes = this.schemes.get(config.network);
     const primaryScheme = config.schemes[0] ?? 'exact';
 
     // Try scheme-specific builder if available
     const schemeImpl = networkSchemes?.get(primaryScheme);
     if (schemeImpl) {
-      return schemeImpl.buildRequirements(config);
+      const requirements = schemeImpl.buildRequirements(config);
+      // Enforce protocol invariant: always include 'exact' for x402 compat
+      if (!requirements.accepts.includes('exact')) {
+        requirements.accepts = [...requirements.accepts, 'exact'];
+      }
+      return requirements;
     }
 
     // Fallback: build generic requirements

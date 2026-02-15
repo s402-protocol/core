@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
   s402Client,
-  s402Error,
   S402_VERSION,
   type s402PaymentRequirements,
   type s402PaymentPayload,
@@ -160,51 +159,5 @@ describe('s402Client', () => {
         .rejects.toThrow('No registered scheme matches');
     });
 
-    it('accepts raw x402 V1 input (normalizes through compat)', async () => {
-      const client = new s402Client();
-      client.register('sui:testnet', mockExactScheme());
-
-      // Pass raw x402 V1 format (maxAmountRequired, no s402Version)
-      const rawX402 = {
-        x402Version: 1,
-        scheme: 'exact',
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        maxAmountRequired: '500',
-        payTo: '0xrecipient',
-      };
-      const payload = await client.createPayment(rawX402 as any);
-      expect(payload.scheme).toBe('exact');
-      if (payload.scheme === 'exact') {
-        expect(payload.payload.transaction).toBe('tx-for-500');
-      }
-    });
-
-    it('accepts raw x402 V2 input (normalizes through compat)', async () => {
-      const client = new s402Client();
-      client.register('sui:testnet', mockExactScheme());
-
-      const rawX402V2 = {
-        x402Version: 2,
-        scheme: 'exact',
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '750',
-        payTo: '0xrecipient',
-      };
-      const payload = await client.createPayment(rawX402V2 as any);
-      expect(payload.scheme).toBe('exact');
-      if (payload.scheme === 'exact') {
-        expect(payload.payload.transaction).toBe('tx-for-750');
-      }
-    });
-
-    it('rejects malformed input through normalizeRequirements', async () => {
-      const client = new s402Client();
-      client.register('sui:testnet', mockExactScheme());
-
-      await expect(client.createPayment({ garbage: true } as any))
-        .rejects.toThrow(s402Error);
-    });
   });
 });

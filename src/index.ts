@@ -1,9 +1,10 @@
 /**
  * s402 — Sui-native HTTP 402 protocol
  *
- * Wire-compatible with x402. Atomic settlement via Sui's PTBs.
+ * Atomic settlement via Sui's PTBs.
  * Five payment schemes: exact, stream, escrow, seal, prepaid.
  * AP2 mandate support. Direct settlement. On-chain receipts.
+ * Optional x402 compat layer available via 's402/compat'.
  *
  * @packageDocumentation
  */
@@ -60,6 +61,15 @@ export {
   decodeSettleResponse,
   detectProtocol,
   extractRequirementsFromResponse,
+  isValidAmount,
+  validateRequirementsShape,
+  pickRequirementsFields,
+  validateSubObjects,
+  validateMandateShape,
+  validateStreamShape,
+  validateEscrowShape,
+  validateSealShape,
+  validatePrepaidShape,
 } from './http.js';
 
 // Compatibility
