@@ -25,7 +25,7 @@ A joke API that requires payment. The client gets a 402, builds a payment, retri
 ```bash
 mkdir s402-demo && cd s402-demo
 npm init -y
-npm install s402
+npm install s402        # or: pnpm add s402 / bun add s402 / deno add npm:s402
 ```
 
 > **Node.js >= 18 required** (for native `fetch` and `Headers`).

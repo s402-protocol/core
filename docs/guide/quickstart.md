@@ -4,6 +4,9 @@
 
 ```bash
 npm install s402
+pnpm add s402
+bun add s402
+deno add npm:s402
 ```
 
 > **ESM-only.** Requires Node.js >= 18. CommonJS `require()` is not supported.

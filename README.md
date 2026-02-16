@@ -2,8 +2,11 @@
 
 **Sui-native HTTP 402 protocol.** Atomic settlement via Sui's Programmable Transaction Blocks (PTBs). Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
-```
+```bash
 npm install s402
+pnpm add s402
+bun add s402
+deno add npm:s402
 ```
 
 > **ESM-only.** This package ships ES modules only (`"type": "module"`). Requires Node.js >= 18. CommonJS `require()` is not supported.
