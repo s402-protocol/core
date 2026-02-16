@@ -124,6 +124,11 @@ export interface s402UnlockExtra {
  * NOTE: Prepaid inverts the normal s402 flow — the PROVIDER signs claims,
  * not the CLIENT. The deposit phase uses the standard client→facilitator flow,
  * but claims are provider-initiated. Full HTTP flow integration is Phase 2+.
+ *
+ * TRUST MODEL: Trust-bounded, not trustless. The provider submits call_count —
+ * Move cannot verify calls actually happened. Agent's protection: rate cap,
+ * max_calls, deposit ceiling, small deposits + short refill cycles, reputation.
+ * v0.2 adds signed usage receipts for cryptographic fraud proofs. See ADR-007.
  */
 export interface s402PrepaidExtra {
   /** Maximum base units per API call (rate cap) */
