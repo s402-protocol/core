@@ -44,6 +44,37 @@ import { ... } from 's402/compat';   // Optional x402 migration aid
 import { ... } from 's402/errors';   // Error types
 ```
 
+## Documentation (VitePress)
+
+The `/docs` directory contains the full documentation site deployed to https://s402-protocol.org.
+
+```
+docs/
+  .vitepress/config.ts   — VitePress configuration (nav, sidebar, editLink)
+  index.md                — Landing page
+  guide/                  — Getting started guides
+  schemes/                — Per-scheme reference pages
+  api/                    — API reference pages
+  public/                 — Static assets (favicon, images)
+  architecture.md         — Design principles
+  comparison.md           — s402 vs x402
+  security.md             — Security model
+  faq.md                  — Frequently asked questions
+```
+
+```bash
+pnpm run docs:dev       # Start dev server (localhost:5173)
+pnpm run docs:build     # Build static site
+pnpm run docs:preview   # Preview production build (localhost:4173)
+```
+
+**Key rules:**
+- **Docs don't ship to npm.** The `files` field in `package.json` is an allowlist — only `dist/`, `README.md`, and `LICENSE` are published.
+- **Images go in `docs/public/images/`.** VitePress serves them at `/images/` in the built site.
+- **Edit the config for nav/sidebar changes.** `docs/.vitepress/config.ts` defines all navigation.
+- **VitePress cache/dist are gitignored.** Never commit `.vitepress/dist/` or `.vitepress/cache/`.
+- **Deployment:** Auto-deploys on push to `main` via Vercel. The Vercel project `s402-docs` points to this repo with Root Directory set to `docs`.
+
 ## Design Decisions
 
 ### The Five Irreducible Payment Primitives

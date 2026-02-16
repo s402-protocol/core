@@ -4,3 +4,7 @@ coverage/
 *.tgz
 .DS_Store
 .vercel
+
+# VitePress
+docs/.vitepress/dist/
+docs/.vitepress/cache/
