@@ -109,4 +109,4 @@ Without the finality wait, a client could report success for a transaction that 
 
 ## Reporting Vulnerabilities
 
-If you find a security issue, email **security@pixeldrift.co** (or open a private GitHub advisory on `s402-protocol/core`). We take security seriously and will respond within 48 hours.
+If you find a security issue, please [open a private security advisory](https://github.com/s402-protocol/core/security/advisories/new) on the `s402-protocol/core` repository. We take security seriously and will respond within 48 hours.

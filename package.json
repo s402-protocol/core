@@ -4,12 +4,12 @@
   "type": "module",
   "description": "s402 — Sui-native HTTP 402 wire format. Types, HTTP encoding, and scheme registry for five payment schemes. Wire-compatible with x402. Zero runtime dependencies.",
   "license": "MIT",
-  "author": "Pixel Drift Co",
+  "author": "Pixel Drift Co <dannydevs@proton.me> (https://s402-protocol.org)",
   "repository": {
     "type": "git",
     "url": "https://github.com/s402-protocol/core.git"
   },
-  "homepage": "https://github.com/s402-protocol/core#readme",
+  "homepage": "https://s402-protocol.org",
   "bugs": {
     "url": "https://github.com/s402-protocol/core/issues"
   },
@@ -34,7 +34,9 @@
   "files": [
     "dist",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "CHANGELOG.md",
+    "SECURITY.md"
   ],
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",

@@ -129,7 +129,7 @@ import {
   isX402,
   toX402Requirements,
   fromX402Requirements,
-} from 's402';
+} from 's402/compat';
 
 // Auto-normalize: works with s402 or x402 (V1 or V2) format
 const requirements = normalizeRequirements(rawJsonFromAnySource);

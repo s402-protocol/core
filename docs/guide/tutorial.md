@@ -63,57 +63,53 @@ const jokes = [
   'A SQL query walks into a bar, sees two tables, and asks: "Can I JOIN you?"',
 ];
 
-const server = Bun.serve({
-  port: PORT,
-  async fetch(req) {
-    if (new URL(req.url).pathname !== '/joke') {
-      return new Response('Not found', { status: 404 });
-    }
+// Minimal HTTP server using Node.js built-in module
+import { createServer } from 'node:http';
 
-    // Check for payment header
-    const paymentHeader = req.headers.get(S402_HEADERS.PAYMENT);
-    if (!paymentHeader) {
-      // No payment — send 402
-      return new Response('Payment Required', {
-        status: 402,
-        headers: {
-          [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
-        },
-      });
-    }
+const server = createServer(async (req, res) => {
+  if (req.url !== '/joke') {
+    res.writeHead(404).end('Not found');
+    return;
+  }
 
-    // Verify payment (in production, forward to a facilitator)
-    try {
-      const payload = decodePaymentPayload(paymentHeader);
+  // Check for payment header
+  const paymentHeader = req.headers[S402_HEADERS.PAYMENT] as string | undefined;
+  if (!paymentHeader) {
+    // No payment — send 402
+    res.writeHead(402, {
+      [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
+    }).end('Payment Required');
+    return;
+  }
 
-      // In production: facilitator.process(payload, requirements)
-      // For this demo, we accept any valid-shaped payload
-      const settlement: s402SettleResponse = {
-        success: true,
-        txDigest: '0x' + 'f'.repeat(64),
-        finalityMs: 390,
-      };
+  // Verify payment (in production, forward to a facilitator)
+  try {
+    const payload = decodePaymentPayload(paymentHeader);
 
-      const joke = jokes[Math.floor(Math.random() * jokes.length)];
+    // In production: facilitator.process(payload, requirements)
+    // For this demo, we accept any valid-shaped payload
+    const settlement: s402SettleResponse = {
+      success: true,
+      txDigest: '0x' + 'f'.repeat(64),
+      finalityMs: 390,
+    };
 
-      return new Response(JSON.stringify({ joke }), {
-        status: 200,
-        headers: {
-          'content-type': 'application/json',
-          [S402_HEADERS.PAYMENT_RESPONSE]: encodeSettleResponse(settlement),
-        },
-      });
-    } catch (e) {
-      return new Response(JSON.stringify({ error: String(e) }), {
-        status: 400,
-        headers: { 'content-type': 'application/json' },
-      });
-    }
-  },
+    const joke = jokes[Math.floor(Math.random() * jokes.length)];
+
+    res.writeHead(200, {
+      'content-type': 'application/json',
+      [S402_HEADERS.PAYMENT_RESPONSE]: encodeSettleResponse(settlement),
+    }).end(JSON.stringify({ joke }));
+  } catch (e) {
+    res.writeHead(400, { 'content-type': 'application/json' })
+      .end(JSON.stringify({ error: String(e) }));
+  }
 });
 
-console.log(`Joke API running on http://localhost:${PORT}/joke`);
-console.log(`Price: ${PRICE} MIST (0.001 SUI)`);
+server.listen(PORT, () => {
+  console.log(`Joke API running on http://localhost:${PORT}/joke`);
+  console.log(`Price: ${PRICE} MIST (0.001 SUI)`);
+});
 ```
 
 ## Step 2: The Client
@@ -249,16 +245,17 @@ const tx = new Transaction();
 const [coin] = tx.splitCoins(tx.gas, [requirements.amount]);
 tx.transferObjects([coin], requirements.payTo);
 
-const keypair = /* your keypair */;
-const client = new SuiClient({ url: 'https://fullnode.testnet.sui.io' });
-const signed = await client.signTransaction({ transaction: tx, signer: keypair });
+const keypair = new Ed25519Keypair(); // or load from keystore
+const suiClient = new SuiClient({ url: 'https://fullnode.testnet.sui.io' });
+const txBytes = await tx.build({ client: suiClient });
+const { bytes, signature } = await keypair.signTransaction(txBytes);
 
 const payment: s402ExactPayload = {
   s402Version: '1',
   scheme: 'exact',
   payload: {
-    transaction: signed.bytes,   // base64 TX bytes
-    signature: signed.signature,  // base64 signature
+    transaction: bytes,     // base64 TX bytes
+    signature: signature,   // base64 signature
   },
 };
 ```

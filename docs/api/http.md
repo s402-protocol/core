@@ -162,3 +162,13 @@ if (response.status === 402) {
   }
 }
 ```
+
+## Validation
+
+### `validateRequirementsShape(obj)`
+
+Validate that an unknown object has the shape of `s402PaymentRequirements`. Throws `s402Error` with code `INVALID_PAYLOAD` if required fields are missing or have wrong types. Used internally by `decodePaymentRequired()` — call directly when you have a pre-parsed JSON object.
+
+```typescript
+function validateRequirementsShape(obj: unknown): void;
+```

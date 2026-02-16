@@ -48,7 +48,8 @@ s402 uses the same HTTP headers as x402 V1:
 An x402 client sending an `exact` payment can interact with an s402 server. The `detectProtocol()` function auto-detects which protocol a server is using by checking for `s402Version` in the decoded requirements.
 
 ```typescript
-import { detectProtocol, normalizeRequirements } from 's402';
+import { detectProtocol } from 's402';
+import { normalizeRequirements } from 's402/compat';
 
 // Works whether the server sent s402 or x402
 const protocol = detectProtocol(response.headers);

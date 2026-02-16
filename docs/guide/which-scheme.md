@@ -34,7 +34,7 @@ What are you building?
 ## Quick Recommendations
 
 **"I am building an AI agent that calls APIs."**
-Start with **Exact** for prototyping. Switch to **Prepaid** when you need to make more than ~10 calls per session — you will save 500x on gas.
+Start with **Exact** for prototyping. Switch to **Prepaid** for high-frequency usage — at 1,000 calls per session, Prepaid saves 500x on gas ($0.014 vs $7.00).
 
 **"I am selling digital goods."**
 Use **Escrow**. The buyer's funds are locked until they confirm delivery. If the seller disappears, the deadline triggers an automatic refund.

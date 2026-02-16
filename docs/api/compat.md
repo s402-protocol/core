@@ -48,7 +48,7 @@ const requirements = normalizeRequirements(decodedJson);
 ```
 
 ::: warning
-Do not use `JSON.parse(atob(...))` for decoding. The protocol uses Unicode-safe base64 (UTF-8 → base64), so plain `atob()` will break on non-ASCII content in the `extra` field. Use `decodePaymentRequired()` or `normalizeRequirements()` instead.
+Do not use `JSON.parse(atob(...))` for decoding. The protocol uses Unicode-safe base64 (UTF-8 → base64), so plain `atob()` will break on non-ASCII content in the `extensions` field. Use `decodePaymentRequired()` or `normalizeRequirements()` instead.
 :::
 
 ### `isS402(obj)` / `isX402(obj)`
@@ -82,7 +82,7 @@ function fromX402Requirements(
 
 - Maps `scheme` → `accepts: ['exact']`
 - Handles both V1 (`maxAmountRequired`) and V2 (`amount`) wire formats
-- Preserves `extra` field for forward compatibility
+- Preserves `extensions` field for forward compatibility
 
 ### `fromX402Payload(x402)`
 
@@ -160,7 +160,7 @@ interface x402PaymentRequirements {
   resource?: string;            // V1 only
   description?: string;         // V1 only
   facilitatorUrl?: string;
-  extra?: Record<string, unknown>;
+  extensions?: Record<string, unknown>;
 }
 ```
 

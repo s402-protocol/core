@@ -16,7 +16,7 @@ import type { s402PaymentRequirements } from 's402/types';
 const S402_VERSION = '1' as const;
 ```
 
-Current protocol version. Always `"1"`. Present in every requirements and payload object.
+Current protocol version. Always `"1"`. Required in every requirements object. Optional in payloads (x402 payloads omit it).
 
 ### `S402_HEADERS`
 

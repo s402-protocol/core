@@ -32,11 +32,11 @@ Build a payment payload for the given requirements. Auto-selects the best scheme
 
 ```typescript
 async createPayment(
-  requirements: s402PaymentRequirements | Record<string, unknown>,
+  requirements: s402PaymentRequirements,
 ): Promise<s402PaymentPayload>;
 ```
 
-Accepts both typed `s402PaymentRequirements` and raw `Record<string, unknown>` (from JSON.parse of untrusted network data). Always runs through `normalizeRequirements()` for validation.
+Accepts typed `s402PaymentRequirements`. For x402 input, normalize first via `normalizeRequirements()` from `s402/compat`.
 
 **Throws:**
 - `NETWORK_MISMATCH` — no schemes registered for the requirements' network
@@ -190,7 +190,8 @@ async process(
 Sequence:
 1. Check `requirements.expiresAt` — reject if expired (`REQUIREMENTS_EXPIRED`)
 2. Call `scheme.verify()` — reject if invalid (`VERIFICATION_FAILED`)
-3. Call `scheme.settle()` — return the settlement result
+3. Re-check `requirements.expiresAt` — latency guard (verification may be slow; reject stale requirements before spending gas)
+4. Call `scheme.settle()` — return the settlement result
 
 Atomicity comes from Sui PTBs in the scheme implementation, not from this method. This method provides the temporal guard.
 
