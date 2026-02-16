@@ -13,7 +13,7 @@ export const s402ErrorCode = {
   MANDATE_LIMIT_EXCEEDED: 'MANDATE_LIMIT_EXCEEDED',
   STREAM_DEPLETED: 'STREAM_DEPLETED',
   ESCROW_DEADLINE_PASSED: 'ESCROW_DEADLINE_PASSED',
-  SEAL_DECRYPTION_FAILED: 'SEAL_DECRYPTION_FAILED',
+  UNLOCK_DECRYPTION_FAILED: 'UNLOCK_DECRYPTION_FAILED',
   FINALITY_TIMEOUT: 'FINALITY_TIMEOUT',
   FACILITATOR_UNAVAILABLE: 'FACILITATOR_UNAVAILABLE',
   INVALID_PAYLOAD: 'INVALID_PAYLOAD',
@@ -55,9 +55,9 @@ const ERROR_HINTS: Record<s402ErrorCodeType, { retryable: boolean; suggestedActi
     retryable: false,
     suggestedAction: 'Create a new escrow with a later deadline',
   },
-  SEAL_DECRYPTION_FAILED: {
+  UNLOCK_DECRYPTION_FAILED: {
     retryable: true,
-    suggestedAction: 'Re-request SEAL key with a fresh session key',
+    suggestedAction: 'Re-request decryption key with a fresh session key',
   },
   FINALITY_TIMEOUT: {
     retryable: true,

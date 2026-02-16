@@ -47,7 +47,7 @@ export function encodePaymentRequired(requirements: s402PaymentRequirements): st
   return toBase64(JSON.stringify(requirements));
 }
 
-/** Encode payment payload for the `X-PAYMENT` header */
+/** Encode payment payload for the `x-payment` header */
 export function encodePaymentPayload(payload: s402PaymentPayload): string {
   return toBase64(JSON.stringify(payload));
 }
@@ -70,7 +70,7 @@ const MAX_HEADER_BYTES = 64 * 1024;
 
 /**
  * Known top-level keys on s402PaymentRequirements.
- * Mirrors the set in compat.ts — duplicated here to avoid circular imports.
+ * Single source of truth — compat.ts imports pickRequirementsFields from here.
  * Used by decodePaymentRequired to strip unknown keys at the HTTP trust boundary.
  */
 const S402_REQUIREMENTS_KEYS = new Set([
@@ -108,18 +108,18 @@ export function decodePaymentRequired(header: string): s402PaymentRequirements {
   return pickRequirementsFields(parsed as Record<string, unknown>);
 }
 
-/** Decode payment payload from the `X-PAYMENT` header */
+/** Decode payment payload from the `x-payment` header */
 export function decodePaymentPayload(header: string): s402PaymentPayload {
   if (header.length > MAX_HEADER_BYTES) {
     throw new s402Error('INVALID_PAYLOAD',
-      `X-PAYMENT header exceeds maximum size (${header.length} > ${MAX_HEADER_BYTES})`);
+      `x-payment header exceeds maximum size (${header.length} > ${MAX_HEADER_BYTES})`);
   }
   let parsed: unknown;
   try {
     parsed = JSON.parse(fromBase64(header));
   } catch (e) {
     throw new s402Error('INVALID_PAYLOAD',
-      `Failed to decode X-PAYMENT header: ${e instanceof Error ? e.message : 'invalid base64 or JSON'}`);
+      `Failed to decode x-payment header: ${e instanceof Error ? e.message : 'invalid base64 or JSON'}`);
   }
   validatePayloadShape(parsed);
   return parsed as s402PaymentPayload;
@@ -250,7 +250,7 @@ export function validatePrepaidShape(value: unknown): void {
 
 /**
  * Validate all optional sub-objects on a requirements record.
- * Called from both validateRequirementsShape (http.ts) and validateS402Shape (compat.ts).
+ * Called from validateRequirementsShape during wire decode and compat normalization.
  */
 export function validateSubObjects(record: Record<string, unknown>): void {
   if (record.mandate !== undefined) validateMandateShape(record.mandate);

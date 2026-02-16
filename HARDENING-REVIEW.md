@@ -40,7 +40,7 @@ The exports only have `"import"` and `"default"` conditions. The `"default"` poi
 
 ### H2. ~~No validation of payload inner fields (transaction, signature)~~ RESOLVED
 
-**Fixed**: `validatePayloadShape` now validates `payload.transaction` and `payload.signature` are strings, plus scheme-specific fields (seal `encryptionId`, prepaid `ratePerCall`).
+**Fixed**: `validatePayloadShape` now validates `payload.transaction` and `payload.signature` are strings, plus scheme-specific fields (unlock `encryptionId`, prepaid `ratePerCall`).
 
 ### H3. ~~`buildRequirements` does not validate `price`~~ RESOLVED
 
@@ -85,7 +85,7 @@ Only validates amount; `network`, `asset`, `payTo` could be undefined.
 `createPayment()` now accepts typed `s402PaymentRequirements` only — no more `normalizeRequirements()` on every call. Compat is opt-in.
 
 ### M7. README discovery example missing `"prepaid"`
-Shows `["exact", "stream", "escrow"]` — should include `"prepaid"` and `"seal"`.
+Shows `["exact", "stream", "escrow"]` — should include `"prepaid"` and `"unlock"`.
 
 ---
 
@@ -104,7 +104,7 @@ Shows `["exact", "stream", "escrow"]` — should include `"prepaid"` and `"seal"
 | ID | Gap | Priority |
 |----|-----|----------|
 | T1 | No test for `verify()` / `settle()` individually on `s402ResourceServer` | Medium |
-| T2 | No test for scheme-specific inner payload fields (seal `encryptionId`, prepaid `ratePerCall`) | High (after H2 fix) |
+| T2 | No test for scheme-specific inner payload fields (unlock `encryptionId`, prepaid `ratePerCall`) | High (after H2 fix) |
 | T3 | No test for double-registering same scheme | Low |
 | T4 | No test for `decodePaymentPayload` with `payload: null` | Low |
 | T5 | No test for u64 max boundary amounts (`18446744073709551615`) | Medium |

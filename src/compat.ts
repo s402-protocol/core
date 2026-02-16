@@ -12,7 +12,7 @@
 import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload } from './types.js';
 import { S402_VERSION } from './types.js';
 import { s402Error } from './errors.js';
-import { isValidAmount, validateSubObjects, validateRequirementsShape, pickRequirementsFields } from './http.js';
+import { isValidAmount, validateRequirementsShape, pickRequirementsFields } from './http.js';
 
 // ══════════════════════════════════════════════════════════════
 // x402 types (minimal — just what we need for conversion)

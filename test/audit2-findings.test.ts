@@ -161,7 +161,7 @@ describe('FINDING 4: x402 conversion path bypasses pickS402Fields allowlist', ()
 // FINDING 5: accepts array entries not validated in s402 path
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 5: accepts array content validation gaps', () => {
-  it('validateS402Shape accepts empty strings in accepts array', () => {
+  it('validateRequirementsShape accepts empty strings in accepts array', () => {
     // Empty string passes typeof === 'string' check
     const result = normalizeRequirements({
       s402Version: '1',
@@ -174,7 +174,7 @@ describe('FINDING 5: accepts array content validation gaps', () => {
     expect(result.accepts).toContain('');
   });
 
-  it('validateS402Shape accepts extremely long strings in accepts array', () => {
+  it('validateRequirementsShape accepts extremely long strings in accepts array', () => {
     const longScheme = 'a'.repeat(10000);
     const result = normalizeRequirements({
       s402Version: '1',
