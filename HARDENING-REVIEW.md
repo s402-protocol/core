@@ -4,31 +4,23 @@
 **Reviewer**: Bug-hunter agent (automated code review)
 **Scope**: All 9 source files, 7 test files, package.json, tsconfig, dist/ output, README, AGENTS.md, LICENSE
 **Tests**: 207/207 passing, typecheck clean
-**Updated**: 2026-02-15 — marked resolved items after hardening pass
+**Updated**: 2026-02-15 — post-C3 council review, all criticals resolved
 
 ---
 
 ## CRITICAL (must fix before publish)
 
-### C1. `isValidAmount` export inconsistency
+### C1. ~~`isValidAmount` export inconsistency~~ RESOLVED
 
-**File**: `src/index.ts` + `src/http.ts` (line 134)
-
-`isValidAmount` is exported from `http.ts`, so it shows up in the `s402/http` sub-path export. But it is NOT re-exported from `index.ts`. Users who import from `s402/http` see it; users who import from `s402` do not.
-
-**Fix**: Either explicitly export from `index.ts`, or un-export from `http.ts` and keep it internal.
+**Fixed**: `isValidAmount` is now exported from both `src/http.ts` (via `s402/http` sub-path) and re-exported from `src/index.ts` (line 64, main barrel). Available from both `s402` and `s402/http`.
 
 ### C2. ~~`normalizeRequirements` returns raw untrusted object~~ RESOLVED
 
 **Fixed**: `normalizeRequirements` now calls `pickRequirementsFields()` from `http.ts` (canonical key allowlist). Additionally, `normalizeRequirements` is no longer in the client hot path — `createPayment()` accepts typed `s402PaymentRequirements` only. Compat is opt-in via `s402/compat`.
 
-### C3. Missing CJS `require` export condition in package.json
+### C3. ~~Missing CJS `require` export condition in package.json~~ ACCEPTED (ESM-only by design)
 
-**File**: `package.json` (exports map)
-
-The exports only have `"import"` and `"default"` conditions. The `"default"` points to `.mjs`. Some toolchains (Jest default, older bundlers, ts-node without ESM) try `"require"` first, fail, fall back to `"default"` `.mjs`, and choke.
-
-**Fix**: Either add `"require": null` for clarity, or accept ESM-only (already documented in README). The ambiguity with `"default"` is the concern.
+**Decision**: Package is ESM-only (`"type": "module"`). No `"require"` condition needed. The `"default"` fallback points to `.mjs` which Node resolves correctly for dynamic `import()` from CJS callers. Jest 30+, Bun, Deno, and modern Node all handle ESM-only packages. Acceptable for 2026 ecosystem.
 
 ---
 
@@ -69,8 +61,8 @@ The exports only have `"import"` and `"default"` conditions. The `"default"` poi
 ### M1. `accepts` type/runtime mismatch
 Type is `s402Scheme[]` but runtime allows unknown strings (Postel's Law). Consider `(s402Scheme | string)[]`.
 
-### M2. `toBase64` O(n^2) string concatenation
-Loop concat in `http.ts`. Use `Array.from(bytes, b => String.fromCharCode(b)).join('')` for O(n).
+### M2. ~~`toBase64` O(n^2) string concatenation~~ RESOLVED
+**Fixed**: `toBase64` now uses `Array.from(bytes, b => String.fromCharCode(b)).join('')` for O(n).
 
 ### M3. `MAX_HEADER_BYTES` checks char count, not bytes
 Fine for base64 ASCII, but variable name is misleading.
@@ -91,10 +83,10 @@ Shows `["exact", "stream", "escrow"]` — should include `"prepaid"` and `"unloc
 
 ## LOW (cosmetic)
 
-- **L1**: AGENTS.md says 112 tests, should be 135
+- **L1**: AGENTS.md test count stale — actual count is 207
 - **L2**: `"files"` whitelist is correct (no `.npmignore` needed)
 - **L3**: `skipLibCheck: true` — fine with zero deps
-- **L4**: LICENSE says "Pixel Drift Co" — confirm intended for public protocol
+- **L4**: ~~LICENSE says "Pixel Drift Co" — confirm intended for public protocol~~ Confirmed: author field updated to match
 - **L5**: README shows `Date.now()` without noting it's ms (Sui uses ms)
 
 ---
@@ -135,9 +127,9 @@ Shows `["exact", "stream", "escrow"]` — should include `"prepaid"` and `"unloc
 
 | Priority | Total | Resolved | Remaining | Key remaining items |
 |----------|-------|----------|-----------|---------------------|
-| CRITICAL | 3 | 1 (C2) | 2 | C1 export inconsistency, C3 CJS ambiguity |
+| CRITICAL | 3 | 3 (C1, C2, C3) | 0 | All resolved or accepted |
 | HIGH | 7 | 6 (H1-H6) | 1 | H7 bundle size (acceptable for v0.1) |
-| MEDIUM | 7 | 1 (M6) | 6 | Type/runtime mismatch, base64 perf, naming, Error.cause, direct-call validation, README |
-| LOW | 5 | 0 | 5 | Cosmetic items |
+| MEDIUM | 7 | 2 (M2, M6) | 5 | Type/runtime mismatch, naming, Error.cause, direct-call validation, README |
+| LOW | 5 | 1 (L4) | 4 | Cosmetic items |
 
-**Overall**: Well-structured code with strong separation of concerns. Error handling is excellent (recovery hints for agents is great design). Trust boundary hardening complete (C2, H2, H3, H4, H5, H6 all resolved). Compat layer moved to opt-in (M6 resolved). Remaining items are low-risk.
+**Overall**: All critical items resolved. C3 council (7 experts, 2026-02-15) verdict: **SHIP**. Zero blocking issues. Trust boundary hardening complete. Error recovery hints excellent. Remaining items are low-risk improvements for v0.2.

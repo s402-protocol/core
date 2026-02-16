@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import {
+  s402Error,
+  S402_VERSION,
+  type s402PaymentRequirements,
+  type s402ExactPayload,
+} from '../src/index.js';
+import {
   fromX402Requirements,
   fromX402Payload,
   fromX402Envelope,
@@ -9,13 +15,9 @@ import {
   isX402,
   isX402Envelope,
   normalizeRequirements,
-  s402Error,
-  S402_VERSION,
-  type s402PaymentRequirements,
-  type s402ExactPayload,
   type x402PaymentRequirements,
   type x402PaymentRequiredEnvelope,
-} from '../src/index.js';
+} from '../src/compat.js';
 
 // x402 V2 format (uses `amount`)
 const SAMPLE_X402_V2: x402PaymentRequirements = {

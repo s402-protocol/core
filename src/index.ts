@@ -63,28 +63,13 @@ export {
   extractRequirementsFromResponse,
   isValidAmount,
   validateRequirementsShape,
-  pickRequirementsFields,
-  validateSubObjects,
-  validateMandateShape,
-  validateStreamShape,
-  validateEscrowShape,
-  validateUnlockShape,
-  validatePrepaidShape,
 } from './http.js';
+// Internal validators (validateSubObjects, validateMandateShape, validate*Shape,
+// pickRequirementsFields) are available via 's402/http' for advanced use cases.
 
-// Compatibility
-export {
-  fromX402Requirements,
-  fromX402Payload,
-  fromX402Envelope,
-  toX402Requirements,
-  toX402Payload,
-  isS402,
-  isX402,
-  isX402Envelope,
-  normalizeRequirements,
-} from './compat.js';
-export type { x402PaymentRequirements, x402PaymentRequiredEnvelope, x402PaymentPayload } from './compat.js';
+// Compatibility — available via 's402/compat' sub-path import.
+// Not re-exported here to keep the main barrel focused on s402-native APIs.
+// import { normalizeRequirements, fromX402Requirements } from 's402/compat';
 
 // Errors
 export {

@@ -12,12 +12,6 @@
 import { describe, it, expect } from 'vitest';
 import fc from 'fast-check';
 import {
-  normalizeRequirements,
-  fromX402Requirements,
-  fromX402Envelope,
-  isS402,
-  isX402,
-  isX402Envelope,
   encodePaymentRequired,
   decodePaymentRequired,
   encodePaymentPayload,
@@ -30,6 +24,14 @@ import {
   type s402ExactPayload,
   type s402SettleResponse,
 } from '../src/index.js';
+import {
+  normalizeRequirements,
+  fromX402Requirements,
+  fromX402Envelope,
+  isS402,
+  isX402,
+  isX402Envelope,
+} from '../src/compat.js';
 
 // ══════════════════════════════════════════════════════════════
 // Arbitraries — structured generators for protocol objects

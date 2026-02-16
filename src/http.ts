@@ -24,11 +24,7 @@ import { s402Error } from './errors.js';
 /** Encode a UTF-8 string to base64. Safe for any Unicode content. */
 function toBase64(str: string): string {
   const bytes = new TextEncoder().encode(str);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
+  return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
 }
 
 /** Decode base64 to a UTF-8 string. Safe for any Unicode content. */

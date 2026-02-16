@@ -6,6 +6,11 @@
  */
 import { describe, it, expect } from 'vitest';
 import {
+  decodePaymentRequired,
+  detectProtocol,
+  s402Error,
+} from '../src/index.js';
+import {
   fromX402Requirements,
   fromX402Payload,
   fromX402Envelope,
@@ -14,11 +19,8 @@ import {
   isX402,
   isX402Envelope,
   normalizeRequirements,
-  decodePaymentRequired,
-  detectProtocol,
-  s402Error,
   type x402PaymentRequiredEnvelope,
-} from '../src/index.js';
+} from '../src/compat.js';
 
 // ════════════════════════════════════════════════════════════════
 // FINDING 1: fromX402Payload has zero input validation
