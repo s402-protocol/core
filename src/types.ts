@@ -82,7 +82,15 @@ export interface s402PaymentRequirements {
   /** Extra fields for prepaid scheme */
   prepaid?: s402PrepaidExtra;
 
-  /** Arbitrary extension data (forward-compatible extensibility) */
+  /**
+   * Arbitrary extension data (forward-compatible extensibility).
+   *
+   * D-10 (Trust boundary): extensions is an opaque bag — the s402 library
+   * passes it through without validation. Consumers MUST treat extension values
+   * as untrusted input. Do not use extensions for security-critical fields
+   * (use first-class typed fields instead). Scheme implementations should
+   * validate any extension keys they consume.
+   */
   extensions?: Record<string, unknown>;
 }
 
@@ -317,6 +325,72 @@ export interface s402Discovery {
   protocolFeeBps: number;
   /** Address that receives the protocol fee */
   protocolFeeAddress?: string;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Payment session (client-side state tracking)
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Tracks the lifecycle of a single payment exchange.
+ * Used by s402 clients (SDK fetch wrapper, MCP tools) to correlate
+ * the 402 response → payment creation → settlement result.
+ */
+export interface s402PaymentSession {
+  /** Unique session ID (client-generated, e.g., crypto.randomUUID()) */
+  id: string;
+  /** When the session started (Date.now()) */
+  startedAt: number;
+  /** The payment requirements from the 402 response */
+  requirements: s402PaymentRequirements;
+  /** The payment payload sent to the facilitator/server (null until created) */
+  payload: s402PaymentPayload | null;
+  /** Settlement result (null until settled) */
+  result: s402SettleResponse | null;
+  /** Current session state */
+  state: 'pending' | 'paying' | 'settled' | 'failed';
+  /** Number of retry attempts */
+  retries: number;
+  /** Error message if state is 'failed' */
+  error?: string;
+}
+
+// ══════════════════════════════════════════════════════════════
+// Service registry (multi-service discovery)
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * A single s402-enabled service endpoint in a registry.
+ * Supports multi-service discovery (e.g., an API gateway advertising
+ * multiple endpoints with different payment requirements).
+ */
+export interface s402ServiceEntry {
+  /** Service name (human-readable) */
+  name: string;
+  /** Service endpoint URL */
+  url: string;
+  /** Payment schemes this service accepts */
+  accepts: s402Scheme[];
+  /** Supported coin types */
+  assets: string[];
+  /** Base price in smallest unit (MIST for SUI, micro for USDC) */
+  baseAmount: string;
+  /** Facilitator URL (if not direct settlement) */
+  facilitatorUrl?: string;
+}
+
+/**
+ * Query parameters for service registry lookups.
+ */
+export interface s402RegistryQuery {
+  /** Filter by supported scheme */
+  scheme?: s402Scheme;
+  /** Filter by coin type */
+  asset?: string;
+  /** Filter by network */
+  network?: string;
+  /** Maximum number of results */
+  limit?: number;
 }
 
 // ══════════════════════════════════════════════════════════════

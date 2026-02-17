@@ -30,6 +30,9 @@ export type {
   s402SettleResponse,
   s402VerifyResponse,
   s402Discovery,
+  s402PaymentSession,
+  s402ServiceEntry,
+  s402RegistryQuery,
 } from './types.js';
 export { S402_VERSION, S402_HEADERS } from './types.js';
 

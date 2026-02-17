@@ -157,15 +157,69 @@ describe('s402Facilitator', () => {
     expect(result.errorCode).toBe('INVALID_PAYLOAD');
   });
 
-  it('throws on unsupported scheme', async () => {
+  it('returns error when payload scheme not in requirements.accepts', async () => {
     const facilitator = new s402Facilitator();
     facilitator.register('sui:testnet', createMockScheme());
 
     const streamPayload = { ...PAYLOAD, scheme: 'stream' as const, payload: PAYLOAD.payload };
 
-    await expect(
-      facilitator.process(streamPayload, REQUIREMENTS),
-    ).rejects.toThrow('stream');
+    const result = await facilitator.process(streamPayload, REQUIREMENTS);
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('SCHEME_NOT_SUPPORTED');
+    expect(result.error).toContain('stream');
+    expect(result.error).toContain('exact');
+  });
+});
+
+describe('s402Facilitator verify/settle expiration (A-25)', () => {
+  it('verify() rejects expired requirements', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const expiredReqs: s402PaymentRequirements = {
+      ...REQUIREMENTS,
+      expiresAt: Date.now() - 1000,
+    };
+
+    const result = await facilitator.verify(PAYLOAD, expiredReqs);
+    expect(result.valid).toBe(false);
+    expect(result.invalidReason).toContain('expired');
+  });
+
+  it('verify() allows non-expired requirements', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const futureReqs: s402PaymentRequirements = {
+      ...REQUIREMENTS,
+      expiresAt: Date.now() + 60_000,
+    };
+
+    const result = await facilitator.verify(PAYLOAD, futureReqs);
+    expect(result.valid).toBe(true);
+  });
+
+  it('settle() rejects expired requirements', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const expiredReqs: s402PaymentRequirements = {
+      ...REQUIREMENTS,
+      expiresAt: Date.now() - 1000,
+    };
+
+    const result = await facilitator.settle(PAYLOAD, expiredReqs);
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('expired');
+    expect(result.errorCode).toBe('REQUIREMENTS_EXPIRED');
+  });
+
+  it('settle() allows non-expired requirements', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const result = await facilitator.settle(PAYLOAD, REQUIREMENTS);
+    expect(result.success).toBe(true);
   });
 });
 

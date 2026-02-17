@@ -104,6 +104,45 @@ export function decodePaymentRequired(header: string): s402PaymentRequirements {
   return pickRequirementsFields(parsed as Record<string, unknown>);
 }
 
+/**
+ * Known top-level keys on s402PaymentPayload.
+ * Used by decodePaymentPayload to strip unknown keys at the HTTP trust boundary.
+ */
+const S402_PAYLOAD_TOP_KEYS = new Set(['s402Version', 'scheme', 'payload']);
+
+/**
+ * Known inner payload keys per scheme. All schemes share transaction + signature;
+ * unlock adds encryptionId, prepaid adds ratePerCall + maxCalls.
+ */
+const S402_PAYLOAD_INNER_KEYS: Record<string, Set<string>> = {
+  exact: new Set(['transaction', 'signature']),
+  stream: new Set(['transaction', 'signature']),
+  escrow: new Set(['transaction', 'signature']),
+  unlock: new Set(['transaction', 'signature', 'encryptionId']),
+  prepaid: new Set(['transaction', 'signature', 'ratePerCall', 'maxCalls']),
+};
+
+/** Return a clean payload object with only known s402 payload fields. */
+export function pickPayloadFields(obj: Record<string, unknown>): s402PaymentPayload {
+  const result: Record<string, unknown> = {};
+  for (const key of S402_PAYLOAD_TOP_KEYS) {
+    if (key in obj) result[key] = obj[key];
+  }
+  // Strip unknown inner payload fields based on scheme
+  if (result.payload && typeof result.payload === 'object' && typeof result.scheme === 'string') {
+    const allowedInner = S402_PAYLOAD_INNER_KEYS[result.scheme];
+    if (allowedInner) {
+      const inner = result.payload as Record<string, unknown>;
+      const cleanInner: Record<string, unknown> = {};
+      for (const key of allowedInner) {
+        if (key in inner) cleanInner[key] = inner[key];
+      }
+      result.payload = cleanInner;
+    }
+  }
+  return result as unknown as s402PaymentPayload;
+}
+
 /** Decode payment payload from the `x-payment` header */
 export function decodePaymentPayload(header: string): s402PaymentPayload {
   if (header.length > MAX_HEADER_BYTES) {
@@ -118,7 +157,25 @@ export function decodePaymentPayload(header: string): s402PaymentPayload {
       `Failed to decode x-payment header: ${e instanceof Error ? e.message : 'invalid base64 or JSON'}`);
   }
   validatePayloadShape(parsed);
-  return parsed as s402PaymentPayload;
+  return pickPayloadFields(parsed as Record<string, unknown>);
+}
+
+/**
+ * Known top-level keys on s402SettleResponse.
+ * Used by decodeSettleResponse to strip unknown keys at the HTTP trust boundary.
+ */
+const S402_SETTLE_RESPONSE_KEYS = new Set([
+  'success', 'txDigest', 'receiptId', 'finalityMs',
+  'streamId', 'escrowId', 'balanceId', 'error', 'errorCode',
+]);
+
+/** Return a clean settle response with only known s402 fields. */
+export function pickSettleResponseFields(obj: Record<string, unknown>): s402SettleResponse {
+  const result: Record<string, unknown> = {};
+  for (const key of S402_SETTLE_RESPONSE_KEYS) {
+    if (key in obj) result[key] = obj[key];
+  }
+  return result as unknown as s402SettleResponse;
 }
 
 /** Decode settlement response from the `payment-response` header */
@@ -135,7 +192,7 @@ export function decodeSettleResponse(header: string): s402SettleResponse {
       `Failed to decode payment-response header: ${e instanceof Error ? e.message : 'invalid base64 or JSON'}`);
   }
   validateSettleShape(parsed);
-  return parsed as s402SettleResponse;
+  return pickSettleResponseFields(parsed as Record<string, unknown>);
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -149,6 +206,13 @@ const VALID_SCHEMES = new Set<string>(['exact', 'stream', 'escrow', 'unlock', 'p
  * Check that a string represents a canonical non-negative integer (valid for Sui MIST amounts).
  * Rejects leading zeros ("007"), empty strings, negatives, decimals.
  * Accepts "0" as the only zero representation.
+ *
+ * A-13 (Semantic gap): "0" passes validation because it's a valid u64 on-chain.
+ * However, amount="0" in payment requirements is semantically ambiguous — it could
+ * mean "free" or be a misconfiguration. The s402 wire format intentionally allows it
+ * (some schemes like prepaid use amount="0" for deposit-based flows). Resource servers
+ * that want to reject zero-amount payments should check this in their business logic,
+ * not at the protocol level.
  */
 export function isValidAmount(s: string): boolean {
   return /^(0|[1-9][0-9]*)$/.test(s);
@@ -205,8 +269,20 @@ export function validateStreamShape(value: unknown): void {
   assertPlainObject(value, 'stream');
   const obj = value as Record<string, unknown>;
   assertString(obj, 'ratePerSecond', 'stream');
+  if (typeof obj.ratePerSecond === 'string' && !isValidAmount(obj.ratePerSecond)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `stream.ratePerSecond must be a non-negative integer string, got "${obj.ratePerSecond}"`);
+  }
   assertString(obj, 'budgetCap', 'stream');
+  if (typeof obj.budgetCap === 'string' && !isValidAmount(obj.budgetCap)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `stream.budgetCap must be a non-negative integer string, got "${obj.budgetCap}"`);
+  }
   assertString(obj, 'minDeposit', 'stream');
+  if (typeof obj.minDeposit === 'string' && !isValidAmount(obj.minDeposit)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `stream.minDeposit must be a non-negative integer string, got "${obj.minDeposit}"`);
+  }
   assertOptionalString(obj, 'streamSetupUrl', 'stream');
 }
 
@@ -218,6 +294,12 @@ export function validateEscrowShape(value: unknown): void {
   const obj = value as Record<string, unknown>;
   assertString(obj, 'seller', 'escrow');
   assertString(obj, 'deadlineMs', 'escrow');
+  // A-09: Validate deadlineMs is a non-negative integer string (same as amount format).
+  // A bare "must be a string" error for a deadline field is confusing — make it specific.
+  if (typeof obj.deadlineMs === 'string' && !isValidAmount(obj.deadlineMs)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `escrow.deadlineMs must be a non-negative integer string (Unix timestamp ms), got "${obj.deadlineMs}"`);
+  }
   assertOptionalString(obj, 'arbiter', 'escrow');
 }
 
@@ -239,8 +321,20 @@ export function validatePrepaidShape(value: unknown): void {
   assertPlainObject(value, 'prepaid');
   const obj = value as Record<string, unknown>;
   assertString(obj, 'ratePerCall', 'prepaid');
+  if (typeof obj.ratePerCall === 'string' && !isValidAmount(obj.ratePerCall)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `prepaid.ratePerCall must be a non-negative integer string, got "${obj.ratePerCall}"`);
+  }
   assertString(obj, 'minDeposit', 'prepaid');
+  if (typeof obj.minDeposit === 'string' && !isValidAmount(obj.minDeposit)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `prepaid.minDeposit must be a non-negative integer string, got "${obj.minDeposit}"`);
+  }
   assertString(obj, 'withdrawalDelayMs', 'prepaid');
+  if (typeof obj.withdrawalDelayMs === 'string' && !isValidAmount(obj.withdrawalDelayMs)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `prepaid.withdrawalDelayMs must be a non-negative integer string (milliseconds), got "${obj.withdrawalDelayMs}"`);
+  }
   assertOptionalString(obj, 'maxCalls', 'prepaid');
 }
 
@@ -284,7 +378,15 @@ export function validateRequirementsShape(obj: unknown): void {
     throw new s402Error('INVALID_PAYLOAD',
       `Invalid amount "${record.amount}": must be a non-negative integer string`);
   }
-  if (typeof record.payTo !== 'string') missing.push('payTo (string)');
+  if (typeof record.payTo !== 'string') {
+    missing.push('payTo (string)');
+  } else if (!record.payTo.startsWith('0x')) {
+    // D-07: Basic address format validation — catch clearly malformed addresses.
+    // We don't enforce length or hex chars here (networks vary), just the 0x prefix
+    // which is universal for hex-encoded blockchain addresses.
+    throw new s402Error('INVALID_PAYLOAD',
+      `payTo must be a hex address starting with "0x", got "${record.payTo.substring(0, 20)}..."`);
+  }
   if (missing.length > 0) {
     throw new s402Error('INVALID_PAYLOAD',
       `Malformed payment requirements: missing ${missing.join(', ')}`);
@@ -400,6 +502,9 @@ function validateSettleShape(obj: unknown): void {
 export function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown' {
   const paymentRequired = headers.get(S402_HEADERS.PAYMENT_REQUIRED);
   if (!paymentRequired) return 'unknown';
+
+  // D-08: Reject oversized headers before parsing (defense-in-depth)
+  if (paymentRequired.length > MAX_HEADER_BYTES) return 'unknown';
 
   try {
     const decoded = JSON.parse(fromBase64(paymentRequired));

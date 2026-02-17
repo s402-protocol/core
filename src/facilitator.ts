@@ -34,22 +34,43 @@ export class s402Facilitator {
 
   /**
    * Verify a payment payload by dispatching to the correct scheme.
+   * Includes expiration guard — rejects expired requirements before verification.
    */
   async verify(
     payload: s402PaymentPayload,
     requirements: s402PaymentRequirements,
   ): Promise<s402VerifyResponse> {
+    // Reject expired requirements
+    if (typeof requirements.expiresAt === 'number' && Number.isFinite(requirements.expiresAt)) {
+      if (Date.now() > requirements.expiresAt) {
+        return {
+          valid: false,
+          invalidReason: `Payment requirements expired at ${new Date(requirements.expiresAt).toISOString()}`,
+        };
+      }
+    }
     const scheme = this.resolveScheme(payload.scheme, requirements.network);
     return scheme.verify(payload, requirements);
   }
 
   /**
    * Settle a payment by dispatching to the correct scheme.
+   * Includes expiration guard — rejects expired requirements before settlement.
    */
   async settle(
     payload: s402PaymentPayload,
     requirements: s402PaymentRequirements,
   ): Promise<s402SettleResponse> {
+    // Reject expired requirements
+    if (typeof requirements.expiresAt === 'number' && Number.isFinite(requirements.expiresAt)) {
+      if (Date.now() > requirements.expiresAt) {
+        return {
+          success: false,
+          error: `Payment requirements expired at ${new Date(requirements.expiresAt).toISOString()}`,
+          errorCode: 'REQUIREMENTS_EXPIRED',
+        };
+      }
+    }
     const scheme = this.resolveScheme(payload.scheme, requirements.network);
     return scheme.settle(payload, requirements);
   }
@@ -82,6 +103,17 @@ export class s402Facilitator {
           success: false,
           error: `Payment requirements expired at ${new Date(requirements.expiresAt).toISOString()}`,
           errorCode: 'REQUIREMENTS_EXPIRED',
+        };
+      }
+    }
+
+    // Cross-check: payload scheme must be in requirements.accepts
+    if (requirements.accepts && requirements.accepts.length > 0) {
+      if (!requirements.accepts.includes(payload.scheme)) {
+        return {
+          success: false,
+          error: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.accepts.join(', ')}]`,
+          errorCode: 'SCHEME_NOT_SUPPORTED',
         };
       }
     }
