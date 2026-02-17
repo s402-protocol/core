@@ -25,7 +25,6 @@ export default defineConfig({
           { text: 'Why s402?', link: '/guide/why-s402' },
           { text: 'Quick Start', link: '/guide/quickstart' },
           { text: 'Tutorial', link: '/guide/tutorial' },
-          { text: 'Codebase Tour', link: '/guide/codebase-tour' },
           { text: 'How It Works', link: '/guide/how-it-works' },
         ],
       },
@@ -51,6 +50,7 @@ export default defineConfig({
       {
         text: 'Going Deeper',
         items: [
+          { text: 'The Complete Guide', link: '/guide/the-s402-story' },
           { text: 's402 vs x402', link: '/comparison' },
           { text: 'Design Principles', link: '/architecture' },
           { text: 'Security Model', link: '/security' },

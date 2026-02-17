@@ -2,7 +2,7 @@
 
 ## The Problem
 
-HTTP has a status code for payments: **402 Payment Required**. It has been reserved [since 1999](https://datatracker.ietf.org/doc/html/rfc2616#section-10.4.3) but never standardized. Every API that charges money invents its own auth-key-plus-billing system, and every AI agent that needs to pay for an API call needs custom integration code for each provider.
+HTTP has a status code for payments: **402 Payment Required**. It has been reserved [since 1997](https://www.rfc-editor.org/rfc/rfc2068.html) but never standardized. Every API that charges money invents its own auth-key-plus-billing system, and every AI agent that needs to pay for an API call needs custom integration code for each provider.
 
 That is a lot of glue code. And it doesn't compose.
 

@@ -1,6 +1,6 @@
 # Design Principles
 
-How s402 is built and why it's built that way.
+How s402 is built and why it's built that way. For a deeper walkthrough with annotated code and trade-off analysis, see [The Complete Guide — Chapters 5 & 6](/guide/the-s402-story#chapter-5-architecture-deep-dive).
 
 ## Three-Actor Model
 
