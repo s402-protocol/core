@@ -1,5 +1,8 @@
 # s402
 
+[![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
+[![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
+
 **Sui-native HTTP 402 protocol.** Atomic settlement via Sui's Programmable Transaction Blocks (PTBs). Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
 ```bash
