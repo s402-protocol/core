@@ -2,12 +2,12 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   title: 's402',
-  description: 'The HTTP 402 protocol for Sui. Five payment schemes. Built for AI agents that spend money autonomously.',
+  description: 'The HTTP 402 payment protocol for Sui. Five payment schemes. Built for AI agents that spend money autonomously.',
   cleanUrls: true,
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
-    ['meta', { property: 'og:title', content: 's402 — The HTTP 402 protocol for Sui' }],
-    ['meta', { property: 'og:description', content: 'Five payment schemes. From one-shot payments to prepaid API budgets. Built for AI agents that spend money autonomously.' }],
+    ['meta', { property: 'og:title', content: 's402 — The HTTP 402 payment protocol for Sui' }],
+    ['meta', { property: 'og:description', content: 'The HTTP 402 payment protocol for Sui. Five payment schemes. From one-shot payments to prepaid API budgets. Built for AI agents that spend money autonomously.' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:image', content: '/images/og.png' }],
   ],

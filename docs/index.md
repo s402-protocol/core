@@ -4,7 +4,7 @@ hero:
   name: s402
   text: Your AI agent needs to pay for things.
   tagline: >-
-    The HTTP 402 protocol for Sui. One npm install. Five payment schemes.
+    The HTTP 402 payment protocol for Sui. One npm install. Five payment schemes.
     From one-shot payments to prepaid API budgets — built for agents
     that spend money autonomously.
   image:
