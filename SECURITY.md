@@ -4,10 +4,10 @@
 
 **Please do not open public issues for security vulnerabilities.**
 
-If you discover a security issue in s402, please report it privately:
+If you discover a security issue in s402, please report it privately via either method:
 
-- **Email:** dannydevs@proton.me
-- **Subject line:** `[s402 security] <brief description>`
+- **Email:** dannydevs@proton.me (subject: `[s402 security] <brief description>`)
+- **GitHub:** [Open a private security advisory](https://github.com/s402-protocol/core/security/advisories/new)
 
 You will receive an acknowledgment within 48 hours. We aim to provide a fix or mitigation plan within 7 days of confirmation.
 

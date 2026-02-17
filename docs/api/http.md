@@ -85,6 +85,8 @@ function decodePaymentPayload(header: string): s402PaymentPayload;
 - `scheme` is missing or not one of the five valid schemes
 - `payload` object is missing
 
+> **Note:** `s402Version` is **not** required on payment payloads. Requirements include it, but payloads omit it for x402 wire compatibility — the scheme field is the discriminant.
+
 ### `decodeSettleResponse(header)`
 
 Decode the `payment-response` header from the server's 200 response.
@@ -123,7 +125,7 @@ if (response.status === 402) {
 
 ### `isValidAmount(s)`
 
-Check that a string represents a canonical non-negative integer (valid for Sui MIST amounts). Rejects leading zeros (`"007"`), empty strings, negatives, and decimals. Accepts `"0"` as the only zero representation.
+Check that a string represents a canonical non-negative integer (format check only). Rejects leading zeros (`"007"`), empty strings, negatives, and decimals. Accepts `"0"` as the only zero representation.
 
 ```typescript
 function isValidAmount(s: string): boolean;
@@ -138,7 +140,24 @@ isValidAmount('1.5');      // false
 isValidAmount('');         // false
 ```
 
-Used internally by `decodePaymentRequired()` to validate the `amount` field. Also useful for validating amounts in your own code before building payment requirements.
+Used internally by `decodePaymentRequired()` to validate the `amount` field. Also useful for validating amounts in your own code before building payment requirements. **Note:** This is a format-only check — it does not enforce magnitude limits. For Sui, use `isValidU64Amount()` which also verifies the value fits in a u64.
+
+### `isValidU64Amount(s)`
+
+Check that a string represents a valid Sui u64 amount: canonical non-negative integer format **and** magnitude ≤ 2^64 − 1 (`18446744073709551615`).
+
+```typescript
+function isValidU64Amount(s: string): boolean;
+```
+
+```typescript
+isValidU64Amount('1000000');                 // true
+isValidU64Amount('18446744073709551615');     // true  (u64 max)
+isValidU64Amount('18446744073709551616');     // false (u64 max + 1)
+isValidU64Amount('99999999999999999999999');  // false (too large)
+```
+
+Use this when building Sui-specific scheme implementations to reject amounts that would overflow on-chain.
 
 ### `extractRequirementsFromResponse(response)`
 

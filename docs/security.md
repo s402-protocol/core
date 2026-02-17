@@ -109,4 +109,9 @@ Without the finality wait, a client could report success for a transaction that 
 
 ## Reporting Vulnerabilities
 
-If you find a security issue, please [open a private security advisory](https://github.com/s402-protocol/core/security/advisories/new) on the `s402-protocol/core` repository. We take security seriously and will respond within 48 hours.
+If you find a security issue, please report it privately via either method:
+
+- **Email:** dannydevs@proton.me (subject: `[s402 security] <brief description>`)
+- **GitHub:** [Open a private security advisory](https://github.com/s402-protocol/core/security/advisories/new) on the `s402-protocol/core` repository
+
+We take security seriously and will respond within 48 hours. See [SECURITY.md](../SECURITY.md) for full disclosure policy and scope.
