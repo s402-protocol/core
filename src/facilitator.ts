@@ -34,14 +34,20 @@ export class s402Facilitator {
 
   /**
    * Verify a payment payload by dispatching to the correct scheme.
-   * Includes expiration guard — rejects expired requirements before verification.
+   * Includes expiration guard and scheme-mismatch check.
    */
   async verify(
     payload: s402PaymentPayload,
     requirements: s402PaymentRequirements,
   ): Promise<s402VerifyResponse> {
-    // Reject expired requirements
-    if (typeof requirements.expiresAt === 'number' && Number.isFinite(requirements.expiresAt)) {
+    // Reject non-number expiresAt (defense-in-depth: matches process() guard)
+    if (requirements.expiresAt != null) {
+      if (typeof requirements.expiresAt !== 'number' || !Number.isFinite(requirements.expiresAt)) {
+        return {
+          valid: false,
+          invalidReason: `Invalid expiresAt value: expected finite number, got ${typeof requirements.expiresAt}`,
+        };
+      }
       if (Date.now() > requirements.expiresAt) {
         return {
           valid: false,
@@ -49,20 +55,38 @@ export class s402Facilitator {
         };
       }
     }
+
+    // Cross-check: payload scheme must be in requirements.accepts
+    if (requirements.accepts && requirements.accepts.length > 0) {
+      if (!requirements.accepts.includes(payload.scheme)) {
+        return {
+          valid: false,
+          invalidReason: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.accepts.join(', ')}]`,
+        };
+      }
+    }
+
     const scheme = this.resolveScheme(payload.scheme, requirements.network);
     return scheme.verify(payload, requirements);
   }
 
   /**
    * Settle a payment by dispatching to the correct scheme.
-   * Includes expiration guard — rejects expired requirements before settlement.
+   * Includes expiration guard and scheme-mismatch check.
    */
   async settle(
     payload: s402PaymentPayload,
     requirements: s402PaymentRequirements,
   ): Promise<s402SettleResponse> {
-    // Reject expired requirements
-    if (typeof requirements.expiresAt === 'number' && Number.isFinite(requirements.expiresAt)) {
+    // Reject non-number expiresAt (defense-in-depth: matches process() guard)
+    if (requirements.expiresAt != null) {
+      if (typeof requirements.expiresAt !== 'number' || !Number.isFinite(requirements.expiresAt)) {
+        return {
+          success: false,
+          error: `Invalid expiresAt value: expected finite number, got ${typeof requirements.expiresAt}`,
+          errorCode: 'INVALID_PAYLOAD',
+        };
+      }
       if (Date.now() > requirements.expiresAt) {
         return {
           success: false,
@@ -71,6 +95,18 @@ export class s402Facilitator {
         };
       }
     }
+
+    // Cross-check: payload scheme must be in requirements.accepts
+    if (requirements.accepts && requirements.accepts.length > 0) {
+      if (!requirements.accepts.includes(payload.scheme)) {
+        return {
+          success: false,
+          error: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.accepts.join(', ')}]`,
+          errorCode: 'SCHEME_NOT_SUPPORTED',
+        };
+      }
+    }
+
     const scheme = this.resolveScheme(payload.scheme, requirements.network);
     return scheme.settle(payload, requirements);
   }
@@ -142,8 +178,17 @@ export class s402Facilitator {
       };
     }
 
-    // Then settle
-    return scheme.settle(payload, requirements);
+    // Then settle — catch exceptions so settle failures return error results
+    // (matching the verify path which uses return values, not exceptions)
+    try {
+      return await scheme.settle(payload, requirements);
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : 'Settlement failed with an unexpected error',
+        errorCode: 'VERIFICATION_FAILED',
+      };
+    }
   }
 
   /**

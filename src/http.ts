@@ -76,12 +76,40 @@ const S402_REQUIREMENTS_KEYS = new Set([
   'stream', 'escrow', 'unlock', 'prepaid', 'extensions',
 ]);
 
+/** Known keys for each sub-object type — used to strip extra keys at the trust boundary. */
+const S402_SUB_OBJECT_KEYS: Record<string, Set<string>> = {
+  mandate: new Set(['required', 'minPerTx', 'coinType']),
+  stream: new Set(['ratePerSecond', 'budgetCap', 'minDeposit', 'streamSetupUrl']),
+  escrow: new Set(['seller', 'arbiter', 'deadlineMs']),
+  unlock: new Set(['encryptionId', 'walrusBlobId', 'encryptionPackageId']),
+  prepaid: new Set(['ratePerCall', 'maxCalls', 'minDeposit', 'withdrawalDelayMs']),
+};
+
+/** Strip unknown keys from a sub-object, returning a clean copy. */
+function pickSubObjectFields(key: string, value: unknown): unknown {
+  const allowedKeys = S402_SUB_OBJECT_KEYS[key];
+  if (!allowedKeys || value == null || typeof value !== 'object' || Array.isArray(value)) {
+    return value;
+  }
+  const obj = value as Record<string, unknown>;
+  const clean: Record<string, unknown> = {};
+  for (const k of allowedKeys) {
+    if (k in obj) clean[k] = obj[k];
+  }
+  return clean;
+}
+
 /** Return a clean object with only known s402 requirement fields. */
 export function pickRequirementsFields(obj: Record<string, unknown>): s402PaymentRequirements {
   const result: Record<string, unknown> = {};
   for (const key of S402_REQUIREMENTS_KEYS) {
     if (key in obj) {
-      result[key] = obj[key];
+      // Strip unknown keys from scheme-specific sub-objects (defense-in-depth)
+      if (key in S402_SUB_OBJECT_KEYS) {
+        result[key] = pickSubObjectFields(key, obj[key]);
+      } else {
+        result[key] = obj[key];
+      }
     }
   }
   return result as unknown as s402PaymentRequirements;
@@ -203,9 +231,14 @@ export function decodeSettleResponse(header: string): s402SettleResponse {
 const VALID_SCHEMES = new Set<string>(['exact', 'stream', 'escrow', 'unlock', 'prepaid']);
 
 /**
- * Check that a string represents a canonical non-negative integer (valid for Sui MIST amounts).
+ * Check that a string represents a canonical non-negative integer.
  * Rejects leading zeros ("007"), empty strings, negatives, decimals.
  * Accepts "0" as the only zero representation.
+ *
+ * NOTE: This is a **format-only** check — it validates the string is a well-formed
+ * non-negative integer but does NOT enforce magnitude bounds. Arbitrarily large
+ * integers (e.g. 100+ digits) pass this check. For Sui-specific u64 validation,
+ * use `isValidU64Amount()` which also checks that the value fits in a u64.
  *
  * A-13 (Semantic gap): "0" passes validation because it's a valid u64 on-chain.
  * However, amount="0" in payment requirements is semantically ambiguous — it could
@@ -216,6 +249,23 @@ const VALID_SCHEMES = new Set<string>(['exact', 'stream', 'escrow', 'unlock', 'p
  */
 export function isValidAmount(s: string): boolean {
   return /^(0|[1-9][0-9]*)$/.test(s);
+}
+
+/** Maximum value representable as a Sui u64: 2^64 - 1 */
+const U64_MAX = '18446744073709551615';
+
+/**
+ * Check that a string represents a valid Sui u64 amount.
+ * Like `isValidAmount` but also rejects values exceeding u64 max (2^64 - 1).
+ *
+ * Use this in scheme implementations that target Sui's u64 amounts (MIST, etc.).
+ * The wire-format validator uses `isValidAmount` (format-only) to stay chain-agnostic.
+ */
+export function isValidU64Amount(s: string): boolean {
+  if (!isValidAmount(s)) return false;
+  if (s.length > U64_MAX.length) return false;
+  if (s.length < U64_MAX.length) return true;
+  return s <= U64_MAX; // lexicographic comparison works for same-length digit strings
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -412,9 +462,9 @@ export function validateRequirementsShape(obj: unknown): void {
 
   // Optional field validation
   if (record.protocolFeeBps !== undefined) {
-    if (typeof record.protocolFeeBps !== 'number' || !Number.isFinite(record.protocolFeeBps) || record.protocolFeeBps < 0 || record.protocolFeeBps > 10000) {
+    if (typeof record.protocolFeeBps !== 'number' || !Number.isFinite(record.protocolFeeBps) || !Number.isInteger(record.protocolFeeBps) || record.protocolFeeBps < 0 || record.protocolFeeBps > 10000) {
       throw new s402Error('INVALID_PAYLOAD',
-        `protocolFeeBps must be a finite number between 0 and 10000, got ${record.protocolFeeBps}`);
+        `protocolFeeBps must be an integer between 0 and 10000, got ${record.protocolFeeBps}`);
     }
   }
   if (record.expiresAt !== undefined) {

@@ -65,6 +65,7 @@ export {
   detectProtocol,
   extractRequirementsFromResponse,
   isValidAmount,
+  isValidU64Amount,
   validateRequirementsShape,
 } from './http.js';
 // Internal validators (validateSubObjects, validateMandateShape, validate*Shape,
