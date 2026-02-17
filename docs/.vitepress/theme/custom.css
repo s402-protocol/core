@@ -1,0 +1,56 @@
+/*
+ * Hero image overrides — the source image is 1200×673 (landscape).
+ * VitePress defaults to 320×320 (square), which squeezes landscapes.
+ * We widen the container so the image displays at a natural ratio.
+ */
+
+/* Desktop: allow landscape to breathe */
+@media (min-width: 960px) {
+  .VPHero .image-container {
+    width: 448px;
+    height: auto;
+  }
+  .VPHero .image-container .image-bg {
+    width: 448px;
+    height: 252px;
+    border-radius: 24px;
+  }
+  .VPHero .image-src {
+    max-width: 448px;
+    max-height: 252px;
+  }
+}
+
+/* Tablet: slightly wider than default 256px */
+@media (min-width: 640px) and (max-width: 959px) {
+  .VPHero .image-container {
+    width: 360px;
+    height: auto;
+  }
+  .VPHero .image-container .image-bg {
+    width: 360px;
+    height: 202px;
+    border-radius: 20px;
+  }
+  .VPHero .image-src {
+    max-width: 360px;
+    max-height: 202px;
+  }
+}
+
+/* Mobile: wider than default 192px */
+@media (max-width: 639px) {
+  .VPHero .image-container {
+    width: 280px;
+    height: auto;
+  }
+  .VPHero .image-container .image-bg {
+    width: 280px;
+    height: 157px;
+    border-radius: 16px;
+  }
+  .VPHero .image-src {
+    max-width: 280px;
+    max-height: 157px;
+  }
+}
