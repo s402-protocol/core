@@ -25,7 +25,16 @@ export default defineConfig({
           { text: 'Why s402?', link: '/guide/why-s402' },
           { text: 'Quick Start', link: '/guide/quickstart' },
           { text: 'Tutorial', link: '/guide/tutorial' },
+          { text: 'Codebase Tour', link: '/guide/codebase-tour' },
           { text: 'How It Works', link: '/guide/how-it-works' },
+        ],
+      },
+      {
+        text: 'Integrations',
+        items: [
+          { text: 'Claude Code (MCP)', link: '/guide/claude-code' },
+          { text: 'Python (FastAPI)', link: '/guide/server-python' },
+          { text: 'Go (net/http)', link: '/guide/server-go' },
         ],
       },
       {
