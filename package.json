@@ -1,6 +1,6 @@
 {
   "name": "s402",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "description": "s402 — Sui-native HTTP 402 wire format. Types, HTTP encoding, and scheme registry for five payment schemes. Wire-compatible with x402. Zero runtime dependencies.",
   "license": "Apache-2.0",
