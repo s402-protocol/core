@@ -32,7 +32,6 @@ export default defineConfig({
       {
         text: 'Integrations',
         items: [
-          { text: 'Claude Code (MCP)', link: '/guide/claude-code' },
           { text: 'Python (FastAPI)', link: '/guide/server-python' },
           { text: 'Go (net/http)', link: '/guide/server-go' },
         ],
