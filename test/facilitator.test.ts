@@ -117,12 +117,13 @@ describe('s402Facilitator', () => {
     expect(result.errorCode).toBe('VERIFICATION_FAILED');
   });
 
-  it('throws on unregistered network', async () => {
+  it('returns failure on unregistered network (H-1: no unhandled rejection)', async () => {
     const facilitator = new s402Facilitator();
 
-    await expect(
-      facilitator.process(PAYLOAD, { ...REQUIREMENTS, network: 'eth:mainnet' }),
-    ).rejects.toThrow('eth:mainnet');
+    const result = await facilitator.process(PAYLOAD, { ...REQUIREMENTS, network: 'eth:mainnet' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('eth:mainnet');
+    expect(result.errorCode).toBe('NETWORK_MISMATCH');
   });
 
   it('process() rejects non-numeric expiresAt (type-safety)', async () => {

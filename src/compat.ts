@@ -89,6 +89,19 @@ export function fromX402Requirements(x402: x402PaymentRequirements): s402Payment
     throw new s402Error('INVALID_PAYLOAD',
       `Invalid amount "${amount}": must be a non-negative integer string`);
   }
+  // M-1: Validate facilitatorUrl to prevent SSRF via dangerous URL schemes (file://, etc.)
+  if (x402.facilitatorUrl !== undefined) {
+    try {
+      const url = new URL(x402.facilitatorUrl);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+        throw new s402Error('INVALID_PAYLOAD',
+          `facilitatorUrl must use https:// or http://, got "${url.protocol}"`);
+      }
+    } catch (e) {
+      if (e instanceof s402Error) throw e;
+      throw new s402Error('INVALID_PAYLOAD', 'facilitatorUrl is not a valid URL');
+    }
+  }
   return {
     s402Version: S402_VERSION,
     accepts: ['exact'],

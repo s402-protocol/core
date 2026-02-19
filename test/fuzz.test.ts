@@ -37,7 +37,11 @@ import {
 // Arbitraries — structured generators for protocol objects
 // ══════════════════════════════════════════════════════════════
 
-const suiAddress = () => fc.string({ minLength: 4, maxLength: 40 }).map(s => `0x${s}`);
+const suiAddress = () =>
+  fc.array(fc.integer({ min: 0, max: 15 }), { minLength: 64, maxLength: 64 })
+    .map(ns => '0x' + ns.map(n => n.toString(16)).join(''));
+
+const VALID_PAY_TO = '0x' + 'a'.repeat(64);
 
 const validRequirements = () =>
   fc.record({
@@ -252,7 +256,7 @@ describe('fuzz: prototype pollution', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
         [key]: { malicious: true },
       };
 
@@ -269,7 +273,7 @@ describe('fuzz: prototype pollution', () => {
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0xabc',
+      payTo: VALID_PAY_TO,
       extensions: { __proto__: { isAdmin: true } },
     };
 
@@ -288,7 +292,7 @@ describe('fuzz: prototype pollution', () => {
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0xabc',
+      payTo: VALID_PAY_TO,
       __proto__hack: 'pwned',
       constructor: 'overwritten',
     };
@@ -307,7 +311,7 @@ describe('fuzz: prototype pollution', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
         __proto__hack: 'pwned',
       }],
       __proto__: { isAdmin: true },
@@ -403,7 +407,7 @@ describe('fuzz: type coercion attacks on normalizeRequirements', () => {
   it('amount as number is rejected', () => {
     const bad = {
       s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: 1000 as any, payTo: '0xabc',
+      asset: '0x2::sui::SUI', amount: 1000 as any, payTo: VALID_PAY_TO,
     };
     expect(() => normalizeRequirements(bad)).toThrow();
   });
@@ -411,7 +415,7 @@ describe('fuzz: type coercion attacks on normalizeRequirements', () => {
   it('accepts as string (not array) is rejected', () => {
     const bad = {
       s402Version: '1', accepts: 'exact' as any, network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0xabc',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
     };
     expect(() => normalizeRequirements(bad)).toThrow();
   });
@@ -419,7 +423,7 @@ describe('fuzz: type coercion attacks on normalizeRequirements', () => {
   it('s402Version as number 1 is rejected', () => {
     const bad = {
       s402Version: 1 as any, accepts: ['exact'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0xabc',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
     };
     expect(() => normalizeRequirements(bad)).toThrow();
   });
@@ -427,7 +431,7 @@ describe('fuzz: type coercion attacks on normalizeRequirements', () => {
   it('null amount is rejected', () => {
     const bad = {
       s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: null as any, payTo: '0xabc',
+      asset: '0x2::sui::SUI', amount: null as any, payTo: VALID_PAY_TO,
     };
     expect(() => normalizeRequirements(bad)).toThrow();
   });
@@ -435,7 +439,7 @@ describe('fuzz: type coercion attacks on normalizeRequirements', () => {
   it('array of numbers in accepts is rejected', () => {
     const bad = {
       s402Version: '1', accepts: [1, 2, 3] as any, network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0xabc',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
     };
     expect(() => normalizeRequirements(bad)).toThrow();
   });
@@ -443,7 +447,7 @@ describe('fuzz: type coercion attacks on normalizeRequirements', () => {
   it('protocolFeeBps as string is rejected', () => {
     const bad = {
       s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0xabc',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       protocolFeeBps: '50' as any,
     };
     expect(() => normalizeRequirements(bad)).toThrow();
@@ -452,7 +456,7 @@ describe('fuzz: type coercion attacks on normalizeRequirements', () => {
   it('expiresAt as Date object is rejected', () => {
     const bad = {
       s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0xabc',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       expiresAt: new Date() as any,
     };
     expect(() => normalizeRequirements(bad)).toThrow();

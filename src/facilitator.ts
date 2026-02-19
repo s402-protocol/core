@@ -20,6 +20,7 @@ import { s402Error } from './errors.js';
 
 export class s402Facilitator {
   private schemes = new Map<string, Map<s402Scheme, s402FacilitatorScheme>>();
+  private inFlight = new Set<string>();
 
   /**
    * Register a scheme-specific facilitator for a network.
@@ -66,8 +67,16 @@ export class s402Facilitator {
       }
     }
 
-    const scheme = this.resolveScheme(payload.scheme, requirements.network);
-    return scheme.verify(payload, requirements);
+    // H-1: Wrap in try/catch — resolveScheme throws s402Error on unknown network/scheme
+    try {
+      const scheme = this.resolveScheme(payload.scheme, requirements.network);
+      return scheme.verify(payload, requirements);
+    } catch (e) {
+      if (e instanceof s402Error) {
+        return { valid: false, invalidReason: e.message };
+      }
+      return { valid: false, invalidReason: 'Unexpected error resolving scheme' };
+    }
   }
 
   /**
@@ -107,8 +116,16 @@ export class s402Facilitator {
       }
     }
 
-    const scheme = this.resolveScheme(payload.scheme, requirements.network);
-    return scheme.settle(payload, requirements);
+    // H-1: Wrap in try/catch — resolveScheme throws s402Error on unknown network/scheme
+    try {
+      const scheme = this.resolveScheme(payload.scheme, requirements.network);
+      return scheme.settle(payload, requirements);
+    } catch (e) {
+      if (e instanceof s402Error) {
+        return { success: false, error: e.message, errorCode: e.code };
+      }
+      return { success: false, error: 'Unexpected error resolving scheme', errorCode: 'SCHEME_NOT_SUPPORTED' };
+    }
   }
 
   /**
@@ -154,40 +171,80 @@ export class s402Facilitator {
       }
     }
 
-    const scheme = this.resolveScheme(payload.scheme, requirements.network);
-
-    // Verify first
-    const verifyResult = await scheme.verify(payload, requirements);
-    if (!verifyResult.valid) {
-      return {
-        success: false,
-        error: verifyResult.invalidReason ?? 'Payment verification failed',
-        errorCode: 'VERIFICATION_FAILED',
-      };
-    }
-
-    // Latency guard: if the dry-run took a long time, don't waste gas on stale requirements.
-    // Note: this is NOT a TOCTOU fix — Sui PTBs are atomic. This just avoids broadcasting
-    // a transaction for requirements the server has already expired.
-    // Type already validated above, so only check expiration here.
-    if (typeof requirements.expiresAt === 'number' && Date.now() > requirements.expiresAt) {
-      return {
-        success: false,
-        error: `Payment requirements expired during verification at ${new Date(requirements.expiresAt).toISOString()}`,
-        errorCode: 'REQUIREMENTS_EXPIRED',
-      };
-    }
-
-    // Then settle — catch exceptions so settle failures return error results
-    // (matching the verify path which uses return values, not exceptions)
+    // H-1: Wrap resolveScheme in try/catch — throws s402Error on unknown network/scheme
+    let scheme: s402FacilitatorScheme;
     try {
-      return await scheme.settle(payload, requirements);
+      scheme = this.resolveScheme(payload.scheme, requirements.network);
     } catch (e) {
-      return {
-        success: false,
-        error: e instanceof Error ? e.message : 'Settlement failed with an unexpected error',
-        errorCode: 'VERIFICATION_FAILED',
-      };
+      if (e instanceof s402Error) {
+        return { success: false, error: e.message, errorCode: e.code };
+      }
+      return { success: false, error: 'Failed to resolve payment scheme', errorCode: 'SCHEME_NOT_SUPPORTED' };
+    }
+
+    // H-2: Deduplicate concurrent identical payloads — prevents free resource access
+    // if two identical requests arrive before either reaches scheme.settle()
+    const dedupeKey = JSON.stringify(payload);
+    if (this.inFlight.has(dedupeKey)) {
+      return { success: false, error: 'Duplicate payment request already in flight', errorCode: 'INVALID_PAYLOAD' };
+    }
+    this.inFlight.add(dedupeKey);
+
+    try {
+      // H-1 + H-3: Verify with timeout to prevent hanging RPC calls from exhausting the event loop
+      let verifyResult: s402VerifyResponse;
+      try {
+        verifyResult = await Promise.race([
+          scheme.verify(payload, requirements),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Verification timed out after 5s')), 5_000)
+          ),
+        ]);
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Verification threw an unexpected error',
+          errorCode: 'VERIFICATION_FAILED',
+        };
+      }
+
+      if (!verifyResult.valid) {
+        return {
+          success: false,
+          error: verifyResult.invalidReason ?? 'Payment verification failed',
+          errorCode: 'VERIFICATION_FAILED',
+        };
+      }
+
+      // Latency guard: if the dry-run took a long time, don't waste gas on stale requirements.
+      // Note: this is NOT a TOCTOU fix — Sui PTBs are atomic. This just avoids broadcasting
+      // a transaction for requirements the server has already expired.
+      // Type already validated above, so only check expiration here.
+      if (typeof requirements.expiresAt === 'number' && Date.now() > requirements.expiresAt) {
+        return {
+          success: false,
+          error: `Payment requirements expired during verification at ${new Date(requirements.expiresAt).toISOString()}`,
+          errorCode: 'REQUIREMENTS_EXPIRED',
+        };
+      }
+
+      // H-1 + H-3 + M-5: Settle with timeout; SETTLEMENT_FAILED is retryable (transient RPC errors)
+      try {
+        return await Promise.race([
+          scheme.settle(payload, requirements),
+          new Promise<never>((_, reject) =>
+            setTimeout(() => reject(new Error('Settlement timed out after 15s')), 15_000)
+          ),
+        ]);
+      } catch (e) {
+        return {
+          success: false,
+          error: e instanceof Error ? e.message : 'Settlement failed with an unexpected error',
+          errorCode: 'SETTLEMENT_FAILED',
+        };
+      }
+    } finally {
+      this.inFlight.delete(dedupeKey);
     }
   }
 

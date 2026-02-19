@@ -16,13 +16,15 @@ import {
   type s402SettleResponse,
 } from '../src/index.js';
 
+const VALID_PAY_TO = '0x' + 'a'.repeat(64);
+
 const SAMPLE_REQUIREMENTS: s402PaymentRequirements = {
   s402Version: S402_VERSION,
   accepts: ['exact'],
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
-  payTo: '0xabc123',
+  payTo: VALID_PAY_TO,
 };
 
 const SAMPLE_PAYLOAD: s402ExactPayload = {
@@ -310,7 +312,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: 1000, // should be string
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       try {
         decodePaymentRequired(bad);
@@ -330,7 +332,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('Unsupported s402 version');
@@ -343,7 +345,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: 'hello',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
@@ -356,7 +358,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '-100',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
@@ -369,7 +371,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '007',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
@@ -382,7 +384,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '0',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       const decoded = decodePaymentRequired(encoded);
       expect(decoded.amount).toBe('0');
@@ -395,7 +397,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       const decoded = decodePaymentRequired(encoded);
       expect(decoded.accepts).toEqual(['exact', 'futureScheme']);
@@ -408,7 +410,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('expected string');
@@ -427,7 +429,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('Missing s402Version');
@@ -440,7 +442,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('at least one scheme');
@@ -453,7 +455,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
         protocolFeeBps: 50000,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
@@ -467,7 +469,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
         protocolFeeBps: -1,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow('protocolFeeBps');
@@ -480,11 +482,11 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
         expiresAt: 'never',
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('expiresAt must be a finite number');
+      expect(() => decodePaymentRequired(bad)).toThrow('expiresAt must be a positive finite number');
     });
 
     it('decodePaymentRequired accepts valid protocolFeeBps and expiresAt', () => {
@@ -494,7 +496,7 @@ describe('s402 HTTP encode/decode', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
-        payTo: '0xabc',
+        payTo: VALID_PAY_TO,
         protocolFeeBps: 50,
         expiresAt: Date.now() + 60000,
       }));

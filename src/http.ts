@@ -424,18 +424,17 @@ export function validateRequirementsShape(obj: unknown): void {
   if (typeof record.asset !== 'string') missing.push('asset (string)');
   if (typeof record.amount !== 'string') {
     missing.push('amount (string)');
-  } else if (!isValidAmount(record.amount)) {
+  } else if (!isValidU64Amount(record.amount)) {
     throw new s402Error('INVALID_PAYLOAD',
-      `Invalid amount "${record.amount}": must be a non-negative integer string`);
+      `Invalid amount "${record.amount}": must be a non-negative integer string within u64 range`);
   }
   if (typeof record.payTo !== 'string') {
     missing.push('payTo (string)');
-  } else if (!record.payTo.startsWith('0x')) {
-    // D-07: Basic address format validation — catch clearly malformed addresses.
-    // We don't enforce length or hex chars here (networks vary), just the 0x prefix
-    // which is universal for hex-encoded blockchain addresses.
+  } else if (!/^0x[0-9a-fA-F]{64}$/.test(record.payTo as string)) {
+    // M-6: Enforce Sui address format — 0x + exactly 64 hex chars (32 bytes).
+    // Rejects "0x" alone, non-hex chars, and wrong-length addresses.
     throw new s402Error('INVALID_PAYLOAD',
-      `payTo must be a hex address starting with "0x", got "${record.payTo.substring(0, 20)}..."`);
+      `payTo must be a 32-byte Sui address (0x + 64 hex chars), got "${(record.payTo as string).substring(0, 20)}..."`);
   }
   if (missing.length > 0) {
     throw new s402Error('INVALID_PAYLOAD',
@@ -468,9 +467,9 @@ export function validateRequirementsShape(obj: unknown): void {
     }
   }
   if (record.expiresAt !== undefined) {
-    if (typeof record.expiresAt !== 'number' || !Number.isFinite(record.expiresAt)) {
+    if (typeof record.expiresAt !== 'number' || !Number.isFinite(record.expiresAt) || record.expiresAt <= 0) {
       throw new s402Error('INVALID_PAYLOAD',
-        `expiresAt must be a finite number (Unix timestamp ms), got ${typeof record.expiresAt}`);
+        `expiresAt must be a positive finite number (Unix timestamp ms), got ${record.expiresAt}`);
     }
   }
 

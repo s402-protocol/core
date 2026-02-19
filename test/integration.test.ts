@@ -24,6 +24,9 @@ import {
 } from '../src/index.js';
 import type { s402ClientScheme, s402FacilitatorScheme } from '../src/scheme.js';
 
+const MERCHANT = '0x' + 'a'.repeat(64);
+const VENDOR = '0x' + 'b'.repeat(64);
+
 // ── Mock scheme implementations ──
 
 function mockClientScheme(): s402ClientScheme {
@@ -81,7 +84,7 @@ describe('integration: full payment flow', () => {
       schemes: ['exact'],
       price: '5000000',
       network: NETWORK,
-      payTo: '0xmerchant',
+      payTo: MERCHANT,
     });
 
     expect(requirements.s402Version).toBe(S402_VERSION);
@@ -95,7 +98,7 @@ describe('integration: full payment flow', () => {
     // ── 3. Client decodes requirements ──
     const decodedReqs = decodePaymentRequired(encoded402);
     expect(decodedReqs.amount).toBe('5000000');
-    expect(decodedReqs.payTo).toBe('0xmerchant');
+    expect(decodedReqs.payTo).toBe(MERCHANT);
 
     // ── 4. Client creates payment ──
     const client = new s402Client();
@@ -135,7 +138,7 @@ describe('integration: full payment flow', () => {
       schemes: ['exact'],
       price: '1000',
       network: NETWORK,
-      payTo: '0xmerchant',
+      payTo: MERCHANT,
     });
 
     // Add expiration in the past
@@ -172,7 +175,7 @@ describe('integration: full payment flow', () => {
       schemes: ['exact'],
       price: '1000',
       network: NETWORK,
-      payTo: '0xmerchant',
+      payTo: MERCHANT,
     });
 
     const client = new s402Client();
@@ -194,7 +197,7 @@ describe('integration: full payment flow', () => {
       network: 'sui:mainnet',
       asset: '0x2::sui::SUI',
       amount: '999999',
-      payTo: '0xvendor',
+      payTo: VENDOR,
       facilitatorUrl: 'https://facilitator.example.com',
       protocolFeeBps: 25,
       expiresAt: Date.now() + 300_000,

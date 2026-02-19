@@ -22,6 +22,7 @@ export const s402ErrorCode = {
   SIGNATURE_INVALID: 'SIGNATURE_INVALID',
   REQUIREMENTS_EXPIRED: 'REQUIREMENTS_EXPIRED',
   VERIFICATION_FAILED: 'VERIFICATION_FAILED',
+  SETTLEMENT_FAILED: 'SETTLEMENT_FAILED',
 } as const;
 
 export type s402ErrorCodeType = (typeof s402ErrorCode)[keyof typeof s402ErrorCode];
@@ -90,6 +91,10 @@ const ERROR_HINTS: Record<s402ErrorCodeType, { retryable: boolean; suggestedActi
   VERIFICATION_FAILED: {
     retryable: false,
     suggestedAction: 'Check payment amount and transaction structure',
+  },
+  SETTLEMENT_FAILED: {
+    retryable: true,
+    suggestedAction: 'Transient RPC failure during settlement — retry in a few seconds',
   },
 };
 

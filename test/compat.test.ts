@@ -19,6 +19,8 @@ import {
   type x402PaymentRequiredEnvelope,
 } from '../src/compat.js';
 
+const VALID_PAY_TO = '0x' + 'a'.repeat(64);
+
 // x402 V2 format (uses `amount`)
 const SAMPLE_X402_V2: x402PaymentRequirements = {
   x402Version: 2,
@@ -47,7 +49,7 @@ const SAMPLE_S402: s402PaymentRequirements = {
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
-  payTo: '0xabc',
+  payTo: VALID_PAY_TO,
   facilitatorUrl: 'https://facilitator.example.com',
   protocolFeeBps: 50,
   mandate: { required: true },
@@ -220,19 +222,19 @@ describe('s402 compat layer', () => {
 
   describe('normalizeRequirements', () => {
     it('passes through s402 requirements', () => {
-      const result = normalizeRequirements({ s402Version: '1', accepts: ['exact'], network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '100', payTo: '0x1' });
+      const result = normalizeRequirements({ s402Version: '1', accepts: ['exact'], network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO });
       expect(result.s402Version).toBe('1');
     });
 
     it('converts x402 V2 requirements (amount)', () => {
-      const result = normalizeRequirements({ x402Version: 2, scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '100', payTo: '0x1' });
+      const result = normalizeRequirements({ x402Version: 2, scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO });
       expect(result.s402Version).toBe('1');
       expect(result.accepts).toEqual(['exact']);
       expect(result.amount).toBe('100');
     });
 
     it('converts x402 V1 requirements (maxAmountRequired)', () => {
-      const result = normalizeRequirements({ x402Version: 1, scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', maxAmountRequired: '500', payTo: '0x1' });
+      const result = normalizeRequirements({ x402Version: 1, scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', maxAmountRequired: '500', payTo: VALID_PAY_TO });
       expect(result.s402Version).toBe('1');
       expect(result.accepts).toEqual(['exact']);
       expect(result.amount).toBe('500');
@@ -269,7 +271,7 @@ describe('s402 compat layer', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '100',
-        payTo: '0x1',
+        payTo: VALID_PAY_TO,
       });
       expect(result.network).toBe('sui:testnet');
     });
@@ -281,7 +283,7 @@ describe('s402 compat layer', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '100',
-        payTo: '0x1',
+        payTo: VALID_PAY_TO,
         __proto__hack: 'malicious',
         unknownField: 42,
         extensions: { safe: true },
@@ -300,7 +302,7 @@ describe('s402 compat layer', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '100',
-        payTo: '0x1',
+        payTo: VALID_PAY_TO,
         facilitatorUrl: 'https://example.com',
         protocolFeeBps: 50,
         expiresAt: Date.now() + 60000,
@@ -316,14 +318,14 @@ describe('s402 compat layer', () => {
     it('rejects empty accepts array in s402 format', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: [], network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: '100', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO,
       })).toThrow('at least one scheme');
     });
 
     it('rejects protocolFeeBps > 10000 in s402 format', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: '100', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO,
         protocolFeeBps: 99999,
       })).toThrow('protocolFeeBps');
     });
@@ -331,9 +333,9 @@ describe('s402 compat layer', () => {
     it('rejects string expiresAt in s402 format', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: '100', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO,
         expiresAt: 'never',
-      })).toThrow('expiresAt must be a finite number');
+      })).toThrow('expiresAt must be a positive finite number');
     });
 
     it('throws s402Error on x402 object missing required fields', () => {
@@ -358,36 +360,36 @@ describe('s402 compat layer', () => {
     it('rejects s402 with non-numeric amount', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: 'hello', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: 'hello', payTo: VALID_PAY_TO,
       })).toThrow(s402Error);
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: 'hello', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: 'hello', payTo: VALID_PAY_TO,
       })).toThrow('Invalid amount');
     });
 
     it('rejects x402 with non-numeric amount', () => {
       expect(() => normalizeRequirements({
         x402Version: 1, scheme: 'exact', network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: '-50', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: '-50', payTo: VALID_PAY_TO,
       })).toThrow(s402Error);
       expect(() => normalizeRequirements({
         x402Version: 1, scheme: 'exact', network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: '-50', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: '-50', payTo: VALID_PAY_TO,
       })).toThrow('Invalid amount');
     });
 
     it('rejects s402 with leading zeros in amount', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: '007', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: '007', payTo: VALID_PAY_TO,
       })).toThrow('Invalid amount');
     });
 
     it('rejects x402 with leading zeros in amount', () => {
       expect(() => normalizeRequirements({
         x402Version: 1, scheme: 'exact', network: 'sui:testnet',
-        asset: '0x2::sui::SUI', amount: '0100', payTo: '0x1',
+        asset: '0x2::sui::SUI', amount: '0100', payTo: VALID_PAY_TO,
       })).toThrow('Invalid amount');
     });
 
@@ -398,7 +400,7 @@ describe('s402 compat layer', () => {
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         maxAmountRequired: '999',
-        payTo: '0x1',
+        payTo: VALID_PAY_TO,
       });
       expect(result.amount).toBe('999');
     });

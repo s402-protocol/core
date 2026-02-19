@@ -22,6 +22,8 @@ import {
   type x402PaymentRequiredEnvelope,
 } from '../src/compat.js';
 
+const VALID_PAY_TO = '0x' + 'a'.repeat(64);
+
 // ════════════════════════════════════════════════════════════════
 // FINDING 1: fromX402Payload has zero input validation
 // ════════════════════════════════════════════════════════════════
@@ -144,8 +146,9 @@ describe('FINDING 4: x402 conversion path bypasses pickS402Fields allowlist', ()
     expect((result.extensions as any).deeply.nested.attack).toBe(true);
   });
 
-  it('fromX402Requirements preserves facilitatorUrl without URL validation', () => {
-    const result = fromX402Requirements({
+  it('fromX402Requirements now rejects dangerous facilitatorUrl schemes (M-1 fix)', () => {
+    // M-1 fix: facilitatorUrl must use https:// or http://
+    expect(() => fromX402Requirements({
       x402Version: 1,
       scheme: 'exact',
       network: 'sui:testnet',
@@ -153,9 +156,19 @@ describe('FINDING 4: x402 conversion path bypasses pickS402Fields allowlist', ()
       amount: '1000',
       payTo: '0xabc',
       facilitatorUrl: 'javascript:alert(1)',
+    })).toThrow('facilitatorUrl must use https');
+
+    // Valid https: passes through
+    const result = fromX402Requirements({
+      x402Version: 1,
+      scheme: 'exact',
+      network: 'sui:testnet',
+      asset: '0x2::sui::SUI',
+      amount: '1000',
+      payTo: '0xabc',
+      facilitatorUrl: 'https://facilitator.example.com',
     });
-    // No URL validation — potentially dangerous in web contexts
-    expect(result.facilitatorUrl).toBe('javascript:alert(1)');
+    expect(result.facilitatorUrl).toBe('https://facilitator.example.com');
   });
 });
 
@@ -171,7 +184,7 @@ describe('FINDING 5: accepts array content validation gaps', () => {
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
     });
     expect(result.accepts).toContain('');
   });
@@ -184,7 +197,7 @@ describe('FINDING 5: accepts array content validation gaps', () => {
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
     });
     expect(result.accepts[0].length).toBe(10000);
   });
@@ -201,7 +214,7 @@ describe('FINDING 6: String field length/content not bounded', () => {
       network: 'x'.repeat(100000),
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
     });
     expect(result.network.length).toBe(100000);
   });
@@ -213,7 +226,7 @@ describe('FINDING 6: String field length/content not bounded', () => {
       network: 'sui:testnet\x00evil',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
     });
     expect(result.network).toContain('\x00');
   });
@@ -225,7 +238,7 @@ describe('FINDING 6: String field length/content not bounded', () => {
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
       facilitatorUrl: 'https://example.com\r\nX-Injected: true',
     });
     expect(result.facilitatorUrl).toContain('\r\n');
@@ -239,7 +252,7 @@ describe('FINDING 7: Scheme-specific sub-objects now validated (FIXED)', () => {
   it('rejects stream with non-string ratePerSecond', () => {
     expect(() => normalizeRequirements({
       s402Version: '1', accepts: ['stream'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0x1',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       stream: { ratePerSecond: -999, budgetCap: '1000', minDeposit: '100' },
     } as any)).toThrow('stream.ratePerSecond must be a string');
   });
@@ -247,7 +260,7 @@ describe('FINDING 7: Scheme-specific sub-objects now validated (FIXED)', () => {
   it('rejects escrow with non-string seller', () => {
     expect(() => normalizeRequirements({
       s402Version: '1', accepts: ['escrow'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0x1',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       escrow: { seller: 42, deadlineMs: '1000' },
     } as any)).toThrow('escrow.seller must be a string');
   });
@@ -255,7 +268,7 @@ describe('FINDING 7: Scheme-specific sub-objects now validated (FIXED)', () => {
   it('rejects unlock as non-object', () => {
     expect(() => normalizeRequirements({
       s402Version: '1', accepts: ['unlock'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0x1',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       unlock: 'not-even-an-object',
     } as any)).toThrow('unlock must be a plain object');
   });
@@ -263,7 +276,7 @@ describe('FINDING 7: Scheme-specific sub-objects now validated (FIXED)', () => {
   it('rejects mandate with non-boolean required', () => {
     expect(() => normalizeRequirements({
       s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0x1',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       mandate: { required: 'yes-please', minPerTx: '500' },
     } as any)).toThrow('mandate.required must be a boolean');
   });
@@ -271,7 +284,7 @@ describe('FINDING 7: Scheme-specific sub-objects now validated (FIXED)', () => {
   it('rejects prepaid with non-string ratePerCall', () => {
     expect(() => normalizeRequirements({
       s402Version: '1', accepts: ['prepaid'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0x1',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       prepaid: { ratePerCall: [1, 2, 3], minDeposit: '100', withdrawalDelayMs: '60000' },
     } as any)).toThrow('prepaid.ratePerCall must be a string');
   });
@@ -279,7 +292,7 @@ describe('FINDING 7: Scheme-specific sub-objects now validated (FIXED)', () => {
   it('accepts valid sub-objects', () => {
     const result = normalizeRequirements({
       s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
-      asset: '0x2::sui::SUI', amount: '1000', payTo: '0x1',
+      asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO,
       mandate: { required: true, minPerTx: '500' },
     });
     expect(result.mandate?.required).toBe(true);
@@ -298,7 +311,7 @@ describe('FINDING 8: protocolFeeBps NaN handling (FIXED)', () => {
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
       protocolFeeBps: NaN,
     })).toThrow('protocolFeeBps');
   });
@@ -310,7 +323,7 @@ describe('FINDING 8: protocolFeeBps NaN handling (FIXED)', () => {
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
       protocolFeeBps: Infinity,
     })).toThrow('protocolFeeBps');
   });
@@ -320,21 +333,18 @@ describe('FINDING 8: protocolFeeBps NaN handling (FIXED)', () => {
 // FINDING 9: amount field BigInt overflow (extremely large numbers)
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 9: amount field — extremely large values', () => {
-  it('accepts amounts far exceeding u64 max without rejection', () => {
+  it('rejects amounts far exceeding u64 max (M-2 fix: isValidU64Amount)', () => {
     // u64 max = 18446744073709551615 (20 digits)
     // This is 100 digits — no u64 or u128 can hold this
     const hugeAmount = '9'.repeat(100);
-    const result = normalizeRequirements({
+    expect(() => normalizeRequirements({
       s402Version: '1',
       accepts: ['exact'],
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: hugeAmount,
-      payTo: '0x1',
-    });
-    // isValidAmount only checks regex, not magnitude
-    expect(result.amount).toBe(hugeAmount);
-    expect(result.amount.length).toBe(100);
+      payTo: VALID_PAY_TO,
+    })).toThrow('must be a non-negative integer string within u64 range');
   });
 });
 
@@ -371,7 +381,7 @@ describe('FINDING 11: decodePaymentRequired now strips unknown keys (FIXED)', ()
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
-      payTo: '0x1',
+      payTo: VALID_PAY_TO,
       __injected: 'malicious_value',
       admin: true,
     };
