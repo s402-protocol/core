@@ -110,7 +110,7 @@ curl -s http://localhost:3402/api/premium-data \
   | python3 -c "import sys,json; print(json.dumps(json.loads(sys.stdin.read()), indent=2))"
 ```
 
-The client-side payment flow (building the Sui transaction, signing, retrying) is handled by [`@sweefi/cli`](https://www.npmjs.com/package/@sweefi/cli) or any s402 client.
+The client-side payment flow (building the Sui transaction, signing, retrying) is handled by any s402 client with a Sui scheme implementation.
 
 ## Production Hardening
 

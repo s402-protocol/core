@@ -1,6 +1,6 @@
 # Use s402 in Claude Code
 
-Add SweePay as an MCP server and your Claude Code agent can check balances, make payments, handle 402 responses, create escrows, and manage streaming payments — all from natural language.
+Add the s402 MCP server to Claude Code and your agent can check balances, make payments, handle 402 responses, create escrows, and manage streaming payments — all from natural language.
 
 ## Setup (One Command)
 

@@ -951,4 +951,4 @@ The one exception: `resolveScheme()` throws `s402Error` for missing scheme imple
 
 ---
 
-*Built with conviction by [Pixel Drift Co](https://s402-protocol.org). The future of internet payments isn't a single protocol — it's the right protocol for each chain. x402 for EVM. s402 for Sui.*
+*s402 is an open protocol maintained by [Swee Group LLC](https://s402-protocol.org). The future of internet payments isn't a single protocol — it's the right protocol for each chain. x402 for EVM. s402 for Sui.*

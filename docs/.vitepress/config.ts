@@ -79,7 +79,7 @@ export default defineConfig({
     ],
     footer: {
       message: 'Released under the MIT License.',
-      copyright: 'Copyright 2026 Pixel Drift Co',
+      copyright: '© 2026 Swee Group LLC',
     },
     search: {
       provider: 'local',

@@ -1,6 +1,6 @@
 # s402: An Internet-Native Payment Protocol for Autonomous Agents
 
-**Version 1.0 · February 2026 · Pixel Drift Co**
+**Version 1.0 · February 2026 · Swee Group LLC**
 
 ---
 
@@ -299,7 +299,7 @@ The compat package is a deliberate sub-path import (`s402/compat`), not part of 
 
 ## 10. Implementation
 
-The `s402` npm package (v0.1.4, MIT licensed) is the protocol layer:
+The `s402` npm package (v0.1.5, MIT licensed) is the protocol layer:
 
 - **2,079 lines** of TypeScript — types, encoding logic, scheme dispatch, error model
 - **2,915 lines** of tests — 207 total, including property-based fuzzing with arbitrarily generated payloads
@@ -309,14 +309,14 @@ The `s402` npm package (v0.1.4, MIT licensed) is the protocol layer:
 The layered architecture:
 
 ```
-SweeWorld (Discovery)       — Service registry and agent-to-agent marketplace
-SweePay SDK                 — DX layer: React hooks, Next.js middleware, retry logic
-@sweefi/sui                 — Sui-specific: PTB builders, transaction types, gas station
+Discovery layer             — Service registry; agents find services to pay for
+SDK / DX layer              — React hooks, middleware, retry logic (bring your own)
+Sui implementation layer    — PTB builders, transaction types, gas station
 s402 (this package)         — Protocol: wire format, types, HTTP encoding, dispatch
 Sui                         — Chain: objects, PTBs, sub-second finality
 ```
 
-s402 is intentionally the narrowest layer. The Sui SDK integration, transaction builders, developer experience abstractions — all of that lives above the protocol. This keeps the core auditable, chain-agnostic in principle, and free from transitive supply chain risk. A security auditor reviewing s402 reviews s402 — not the Sui SDK and its dependencies.
+s402 is intentionally the narrowest layer. The Sui SDK integration, transaction builders, developer experience abstractions — all of that lives above the protocol. Any team can implement s402 schemes using their own Sui SDK. This keeps the core auditable, chain-agnostic in principle, and free from transitive supply chain risk.
 
 ---
 
@@ -381,6 +381,6 @@ The future is using it now.
 
 ---
 
-*s402 v1.0 · February 2026 · Pixel Drift Co · MIT License*
+*s402 v1.0 · February 2026 · © Swee Group LLC · MIT License*
 
 *s402-protocol.org*
