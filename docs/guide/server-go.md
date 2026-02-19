@@ -154,7 +154,7 @@ curl -s http://localhost:3402/api/premium-data -D - -o /dev/null 2>&1 \
   | python3 -m json.tool
 ```
 
-The client-side payment flow (building the Sui transaction, signing, retrying) is handled by [`@sweepay/cli`](https://www.npmjs.com/package/@sweepay/cli) or any s402 client.
+The client-side payment flow (building the Sui transaction, signing, retrying) is handled by [`@sweefi/cli`](https://www.npmjs.com/package/@sweefi/cli) or any s402 client.
 
 ## Production Hardening
 

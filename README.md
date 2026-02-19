@@ -45,11 +45,11 @@ s402          <-- You are here. Protocol spec. Zero runtime deps.
   |-- Compat        Optional x402 migration aid
   |-- Errors        Typed error codes with recovery hints
   |
-@sweepay/sui        <-- Sui-specific implementations (coming soon)
-@sweepay/sdk        <-- High-level DX (coming soon)
+@sweefi/sui         <-- Sui-specific implementations (coming soon)
+@sweefi/sdk         <-- High-level DX (coming soon)
 ```
 
-`s402` is **chain-agnostic protocol plumbing**. It defines _what_ gets sent over HTTP. The Sui-specific _how_ will live in `@sweepay/sui` (coming soon).
+`s402` is **chain-agnostic protocol plumbing**. It defines _what_ gets sent over HTTP. The Sui-specific _how_ will live in `@sweefi/sui` (coming soon).
 
 ## Payment Schemes
 
@@ -212,7 +212,7 @@ import { s402Client } from 's402';
 
 const client = new s402Client();
 
-// Register scheme implementations (from @sweepay/sui or your own)
+// Register scheme implementations (from @sweefi/sui or your own)
 client.register('sui:mainnet', exactScheme);
 client.register('sui:mainnet', streamScheme);
 
@@ -258,7 +258,7 @@ import type {
 } from 's402';
 ```
 
-The reference Sui implementation of all five schemes will be available in `@sweepay/sui` (coming soon).
+The reference Sui implementation of all five schemes will be available in `@sweefi/sui` (coming soon).
 
 ## Wire Format
 
@@ -310,7 +310,7 @@ const requirements: s402PaymentRequirements = {
 
 ## Design Principles
 
-1. **Protocol-agnostic core, Sui-native reference.** `s402` defines chain-agnostic protocol types and HTTP encoding. The reference implementation (`@sweepay/sui`, coming soon) will exploit Sui's unique properties — PTBs, object model, sub-second finality. Other chains can implement s402 schemes using their own primitives.
+1. **Protocol-agnostic core, Sui-native reference.** `s402` defines chain-agnostic protocol types and HTTP encoding. The reference implementation (`@sweefi/sui`, coming soon) will exploit Sui's unique properties — PTBs, object model, sub-second finality. Other chains can implement s402 schemes using their own primitives.
 
 2. **Optional x402 compat.** The `s402/compat` subpath provides a migration aid for codebases with x402-formatted JSON. It normalizes x402 V1 (`maxAmountRequired`) and V2 (`amount`) to s402 format. This is opt-in — the core protocol has no x402 dependency.
 

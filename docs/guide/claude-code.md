@@ -9,7 +9,7 @@ claude mcp add --transport stdio \
   --env SUI_PRIVATE_KEY="your-base64-ed25519-key" \
   --env SUI_NETWORK="testnet" \
   sweepay-mcp \
-  -- npx -y @sweepay/mcp
+  -- npx -y @sweefi/mcp
 ```
 
 Or add to your project's `.mcp.json` (shared with your team):
@@ -20,7 +20,7 @@ Or add to your project's `.mcp.json` (shared with your team):
     "sweepay": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@sweepay/mcp"],
+      "args": ["-y", "@sweefi/mcp"],
       "env": {
         "SUI_PRIVATE_KEY": "${SUI_PRIVATE_KEY}",
         "SUI_NETWORK": "testnet"
@@ -99,7 +99,7 @@ Useful for monitoring without transaction risk.
 
 ## Troubleshooting
 
-**"MCP server not found"** — Run `claude mcp list` to verify it's registered. Check that `npx @sweepay/mcp` works standalone.
+**"MCP server not found"** — Run `claude mcp list` to verify it's registered. Check that `npx @sweefi/mcp` works standalone.
 
 **"Transaction failed"** — Ensure your wallet has enough SUI for gas (~0.01 SUI minimum). Get testnet SUI at https://faucet.sui.io.
 

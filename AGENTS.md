@@ -21,7 +21,7 @@ src/
 
 ## Key rules
 
-- **Zero runtime deps.** This package must never add runtime dependencies. Chain-specific code belongs in `@sweepay/sui`.
+- **Zero runtime deps.** This package must never add runtime dependencies. Chain-specific code belongs in `@sweefi/sui`.
 - **ESM only.** No CommonJS.
 - **Types are the product.** Most consumers import types only. Keep the type surface clean and well-documented.
 - **x402 compat is opt-in.** The `s402/compat` subpath provides x402 V1/V2 normalization as a migration aid. The core protocol (`client.ts`, `http.ts`) has no x402 dependency.

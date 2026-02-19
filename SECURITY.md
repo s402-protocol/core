@@ -15,7 +15,7 @@ You will receive an acknowledgment within 48 hours. We aim to provide a fix or m
 
 This policy covers the `s402` npm package — the protocol types, HTTP encoding/decoding, scheme registry, and compat layer.
 
-Security issues in downstream packages (`@sweepay/sui`, `@sweepay/sdk`, etc.) should be reported to the same email.
+Security issues in downstream packages (`@sweefi/sui`, `@sweefi/sdk`, etc.) should be reported to the same email.
 
 ## What qualifies
 
