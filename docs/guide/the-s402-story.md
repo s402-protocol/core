@@ -72,17 +72,21 @@ This doesn't mean x402 failed. It means the first wave of hype settled, and what
 
 ### The economics problem x402 can't solve
 
-Here's the fundamental issue: **per-call settlement on EVM chains is economically broken for high-frequency use cases.**
+Here's the fundamental issue: **per-call settlement scales gas linearly with call volume, creating overhead that grows with usage.**
 
-Consider an AI agent making 1,000 API calls at $0.001 each ($1.00 total value). With x402's per-call settlement:
+Consider an AI agent making 1,000 API calls at $0.001 each ($1.00 total value). With x402's per-call settlement (figures use February 2026 spot rates: Base at 0.012 Gwei / ETH ~$2,000):
 
 | Cost | Amount |
 |------|--------|
 | API usage (1,000 calls × $0.001) | $1.00 |
-| Gas fees (1,000 × ~$0.007/tx on Base) | **$7.00** |
-| **Total** | **$8.00** |
+| Gas fees (1,000 × ~$0.0016/tx on Base) | **~$1.60** |
+| **Total** | **~$2.60** |
 
-The gas costs **7x more than the API itself**. This is economically impossible for the agent economy everyone is building toward.
+*Gas on Base is highly volatile with ETH price. At $4,000 ETH and higher congestion, this figure rises to $6–13. For low-value high-frequency calls, gas overhead regularly exceeds API value.*
+
+x402 also runs on Solana (via the x402 Foundation), where gas is ~$0.00025/tx — making 1,000 calls cost ~$0.25 in gas. That is significantly cheaper than Base. But it still scales linearly: 10,000 calls = $2.50, 100,000 calls = $25. The per-call settlement model has a structural ceiling regardless of which chain x402 runs on.
+
+s402's Prepaid scheme breaks this linearity with a fixed 2-transaction cost regardless of call count.
 
 ### How s402 solves this: the Prepaid scheme
 
@@ -104,17 +108,21 @@ This is only possible because of Sui's architecture:
 
 ### s402 vs x402: the full comparison
 
-| Dimension | x402 (Coinbase) | s402 |
-|-----------|-----------------|------|
-| **Chains** | Base, Solana, Ethereum | Sui |
-| **Settlement** | Two-step (verify, then settle — temporal gap) | Atomic (single PTB) |
-| **Finality** | 12+ seconds (EVM L1) | ~400ms (Sui) |
-| **Payment models** | Exact only (one-shot per request) | Five: Exact, Prepaid, Escrow, Unlock, Stream |
-| **Micro-payment economics** | $7.00 gas / 1K calls (broken) | $0.014 gas / 1K calls (viable) |
-| **Agent authorization** | None built-in | AP2 mandate delegation |
-| **Direct settlement** | No (facilitator required) | Yes (agents can settle directly) |
-| **Receipts** | Off-chain only | On-chain NFT proofs |
-| **x402 compatibility** | Native | Full (via `s402/compat` layer) |
+| Dimension | x402 V1 (Base) | x402 V2 (Multi-chain) | s402 (Sui) |
+|-----------|----------------|----------------------|------------|
+| **Chains** | Base, Ethereum | Base, Solana, ACH, cards | Sui |
+| **Settlement** | Two-step (temporal gap) | Two-step + deferred Extensions | Atomic (single PTB) |
+| **Finality** | ~2s (Base) | ~2s Base / ~400ms Solana opt. | ~400ms |
+| **Payment models** | Exact only | Exact + session/deferred (app-layer) | Five: protocol-enforced on-chain |
+| **On-chain usage enforcement** | No | No | Yes (Move contract) |
+| **Gas / 1K calls (Exact)** | ~$1.60 (volatile) | ~$0.25 (Solana) | ~$7.00 |
+| **Gas / 1K calls (session model)** | n/a (state channels: ~$0.014, off-protocol) | Application-layer | **$0.014 (Prepaid, on-chain enforced)** |
+| **Agent authorization** | None | None | AP2-aligned mandate delegation |
+| **Direct settlement** | No | No | Yes |
+| **Receipts** | Off-chain | Off-chain | On-chain NFT proofs |
+| **x402 compatibility** | Native | Native | Full (via `s402/compat` layer) |
+
+*Note: x402 V2 (December 2025) is a significant evolution — multi-chain support, formalized Extensions, and backing from Google, Cloudflare, and Visa via the x402 Foundation. s402's differentiation is on-chain contract enforcement of payment caps and Sui's PTB atomicity, not "more schemes" alone.*
 
 ### Why not just build a Sui adapter for x402?
 
@@ -880,7 +888,7 @@ The `s402` package has no `dependencies` in package.json. Not even the Sui SDK.
 3. **Bundle size** — 36KB total. No tree-shaking needed because there's nothing to shake.
 4. **Flexibility** — consumers bring their own Sui SDK version. No peer dependency conflicts.
 
-**Trade-off:** s402 can't do anything chain-specific. It can't verify signatures, check balances, or broadcast transactions. All of that lives in scheme implementations (like the upcoming `@sweepay/sui`). This is the correct layering — the protocol layer should not know about chain internals.
+**Trade-off:** s402 can't do anything chain-specific. It can't verify signatures, check balances, or broadcast transactions. All of that lives in scheme implementations (like the upcoming `@sweefi/sui`). This is the correct layering — the protocol layer should not know about chain internals.
 
 ### Decision 5: Optional x402 compatibility
 

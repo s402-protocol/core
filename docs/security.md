@@ -81,15 +81,16 @@ This prevents clients from guessing whether to retry. If `retryable` is `false`,
 - The facilitator **must** call `waitForTransaction()` before returning success. Without finality confirmation, the server could grant access for a transaction that gets reverted.
 
 ### Prepaid
-- On-chain rate caps: `claimed ≤ maxCalls × ratePerCall`
-- On-chain balance cap: `claimed ≤ deposited amount`
-- Withdrawal delay prevents immediate drain after usage
-- The provider tracks usage off-chain, but the Move contract enforces the math
+- On-chain rate caps: `claimed ≤ maxCalls × ratePerCall` — hard ceiling enforced by Move contract
+- On-chain balance cap: `claimed ≤ deposited amount` — provider cannot claim beyond deposit
+- Withdrawal delay prevents immediate drain after deposit; gives provider time to claim
+- **Trust model caveat:** The contract enforces a maximum, not an exact count. A provider can claim up to the cap regardless of actual API calls served. This is a trust-bounded model — appropriate for commercial relationships, not adversarial zero-trust scenarios. For the latter, use Escrow.
+- **Horizontal scaling:** Multi-instance providers must coordinate off-chain usage counters to prevent double-authorization across instances.
 
 ### Escrow
-- Time-locked vault: funds can't be released until the buyer confirms
-- Deadline enforcement: permissionless refund after deadline (anyone can trigger)
-- Optional arbiter for dispute resolution
+- Time-locked vault: funds locked on-chain, not transferred until resolution
+- Deadline enforcement: permissionless refund after deadline — anyone can trigger, no arbiter required
+- **Optional arbiter:** An arbiter is a trusted third party for dispute resolution. Without one, the only resolution paths are buyer-confirms or deadline-expires. Arbiters are optional by design; for high-value transactions, choose an arbiter you trust independently of the protocol.
 
 ### Stream
 - Per-second rate cap enforced on-chain

@@ -17,6 +17,7 @@ export default defineConfig({
       { text: 'Schemes', link: '/guide/which-scheme' },
       { text: 's402 vs x402', link: '/comparison' },
       { text: 'API', link: '/api/' },
+      { text: 'Whitepaper', link: '/whitepaper' },
     ],
     sidebar: [
       {
@@ -50,6 +51,7 @@ export default defineConfig({
       {
         text: 'Going Deeper',
         items: [
+          { text: 'Whitepaper', link: '/whitepaper' },
           { text: 'The Complete Guide', link: '/guide/the-s402-story' },
           { text: 's402 vs x402', link: '/comparison' },
           { text: 'Design Principles', link: '/architecture' },

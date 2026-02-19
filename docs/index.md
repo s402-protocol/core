@@ -15,6 +15,9 @@ hero:
       text: Quick Start
       link: /guide/quickstart
     - theme: alt
+      text: Read the Whitepaper
+      link: /whitepaper
+    - theme: alt
       text: Why s402?
       link: /guide/why-s402
 features:

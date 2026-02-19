@@ -13,12 +13,15 @@ Deposit-based access. An agent deposits funds into an on-chain `PrepaidBalance` 
 
 ## Economics
 
-| | Exact (per-call) | Prepaid (batched) |
-|---|---|---|
-| 1,000 API calls | 1,000 on-chain TXs | 2 on-chain TXs |
-| Gas cost | ~$7.00 | ~$0.014 |
-| Per-call effective gas | $0.007 | $0.000014 |
-| Improvement | — | **500x cheaper** |
+Gas costs vary with ETH price and network congestion. Figures below use February 2026 spot rates (Base: 0.012 Gwei / ETH ~$2,000; Solana: ~$0.00025/tx). The Prepaid advantage is structural — 2 transactions regardless of call count.
+
+| | x402 Exact (Base) | x402 Exact (Solana) | s402 Exact (Sui) | s402 Prepaid (Sui) |
+|---|---|---|---|---|
+| 1,000 calls (gas) | ~$1.60 | ~$0.25 | ~$7.00 | **~$0.014** |
+| 10,000 calls (gas) | ~$16.00 | ~$2.50 | ~$70.00 | **~$0.014** |
+| On-chain TXs | 1,000 | 1,000 | 1,000 | **2** |
+
+The Prepaid advantage scales with call volume. At 1,000 calls it is ~18× cheaper than the next-cheapest option (x402 on Solana). At 100,000 calls it is ~1,800× cheaper. The gas cost is fixed at 2 transactions regardless of session length.
 
 ## How It Works
 
@@ -67,13 +70,19 @@ Gas: ~$0.007
 
 ## Trust Model
 
-The provider tracks usage off-chain, which means they could theoretically over-report. The on-chain contract prevents this:
+The provider tracks usage off-chain and claims on-chain. Understanding exactly what the Move contract enforces — and what it doesn't — is important for choosing the right scheme.
 
-- `claimed ≤ maxCalls × ratePerCall` — can't claim more than the math allows
-- `claimed ≤ deposited amount` — can't claim more than what's in the balance
-- **Withdrawal delay**: The agent can withdraw unclaimed funds after `withdrawalDelayMs` passes
+**What the contract enforces (hard limits):**
+- `claimed ≤ maxCalls × ratePerCall` — the provider cannot claim more than this ceiling
+- `claimed ≤ deposited amount` — the provider cannot claim more than is in the balance
+- **Withdrawal delay**: The agent can withdraw unclaimed funds after `withdrawalDelayMs` passes — the delay exists so the provider has time to claim before the agent can drain the balance
 
-The agent doesn't need to trust the provider. The Move contract enforces the rules.
+**What the contract does NOT enforce:**
+- The exact number of API calls served. The contract enforces a ceiling, not an exact count. A provider could claim up to the cap regardless of actual usage.
+
+**Practical implication:** The Prepaid scheme is **trust-bounded**, not trustless. The contract sets the maximum that can be taken; it does not audit that the provider served every call they claim. For most commercial relationships this is sufficient — overclaiming is a business risk and a breach of contract. For zero-trust adversarial relationships, use Escrow instead.
+
+**Horizontal scaling note:** If a provider runs multiple server instances, off-chain usage tracking must be coordinated across instances (e.g., with a shared counter or distributed lock). Without this, two instances could independently authorize calls against the same balance, each believing it has headroom. This is an implementation concern for providers — ensure your usage counter is consistent before deploying Prepaid in a multi-instance setup.
 
 ## Common Mistakes
 
