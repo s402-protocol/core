@@ -6,6 +6,11 @@
 
 /* Desktop: allow landscape to breathe */
 @media (min-width: 960px) {
+  .VPHero .image {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
   .VPHero .image-container {
     width: 448px;
     height: 252px;
