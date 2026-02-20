@@ -77,7 +77,7 @@ export default defineConfig({
       { icon: 'github', link: 'https://github.com/s402-protocol/core' },
     ],
     footer: {
-      message: 'Released under the MIT License.',
+      message: 'Released under the Apache 2.0 License.',
       copyright: '© 2026 Swee Group LLC',
     },
     search: {
