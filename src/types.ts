@@ -60,9 +60,27 @@ export interface s402PaymentRequirements {
 
   /** AP2 mandate requirements (if agent spending authorization is needed) */
   mandate?: s402MandateRequirements;
-  /** Protocol fee in basis points (0-10000). 0 = no fee. */
+  /**
+   * Protocol fee in basis points (0-10000). **Advisory only.**
+   *
+   * This field is a transparency hint for the client's UI — it lets the payer
+   * see the total cost before committing. It is NOT the source of truth for
+   * settlement math. The authoritative fee rate is owned by the Facilitator
+   * (configured in its ProtocolState or equivalent on-chain object) and
+   * enforced at the smart contract level.
+   *
+   * Resource Servers SHOULD omit this field and let the Facilitator provide
+   * it via its `/.well-known/s402-facilitator` endpoint. If included, it MUST
+   * match the Facilitator's configured rate — a mismatch is a warning sign.
+   *
+   * Trust model: Facilitator owns the fee. Resource Server cannot override it.
+   */
   protocolFeeBps?: number;
-  /** Address that receives the protocol fee. Defaults to payTo if omitted. */
+  /**
+   * Address that receives the protocol fee.
+   * Advisory only — authoritative value is in Facilitator's on-chain config.
+   * Defaults to the Facilitator's own address if omitted.
+   */
   protocolFeeAddress?: string;
   /** Whether the server requires an on-chain receipt NFT */
   receiptRequired?: boolean;
