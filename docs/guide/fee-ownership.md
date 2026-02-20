@@ -82,6 +82,6 @@ The protocol does not enforce a specific fee amount — it enforces **fee owners
 
 ## See Also
 
-- [`s402PaymentRequirements`](/api/types#s402PaymentRequirements) — wire format reference
+- [`s402PaymentRequirements`](/api/#s402PaymentRequirements) — wire format reference
 - [Security Model](/security) — full threat model and trust boundaries
 - [Architecture](/architecture) — three-actor model (Client, Resource Server, Facilitator)
