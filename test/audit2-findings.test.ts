@@ -219,20 +219,30 @@ describe('FINDING 6: String field length/content not bounded', () => {
     expect(result.network.length).toBe(100000);
   });
 
-  it('accepts null bytes in string fields', () => {
-    const result = normalizeRequirements({
+  it('rejects null bytes in network field (FIXED)', () => {
+    expect(() => normalizeRequirements({
       s402Version: '1',
       accepts: ['exact'],
       network: 'sui:testnet\x00evil',
       asset: '0x2::sui::SUI',
       amount: '1000',
       payTo: VALID_PAY_TO,
-    });
-    expect(result.network).toContain('\x00');
+    })).toThrow('control characters');
   });
 
-  it('accepts newlines/CRLF in string fields (header injection potential)', () => {
-    const result = normalizeRequirements({
+  it('rejects null bytes in asset field (FIXED)', () => {
+    expect(() => normalizeRequirements({
+      s402Version: '1',
+      accepts: ['exact'],
+      network: 'sui:testnet',
+      asset: '0x2::sui::SUI\x00evil',
+      amount: '1000',
+      payTo: VALID_PAY_TO,
+    })).toThrow('control characters');
+  });
+
+  it('rejects CRLF in facilitatorUrl (header injection — FIXED)', () => {
+    expect(() => normalizeRequirements({
       s402Version: '1',
       accepts: ['exact'],
       network: 'sui:testnet',
@@ -240,8 +250,7 @@ describe('FINDING 6: String field length/content not bounded', () => {
       amount: '1000',
       payTo: VALID_PAY_TO,
       facilitatorUrl: 'https://example.com\r\nX-Injected: true',
-    });
-    expect(result.facilitatorUrl).toContain('\r\n');
+    })).toThrow('control characters');
   });
 });
 

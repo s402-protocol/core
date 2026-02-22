@@ -165,6 +165,19 @@ export interface s402PrepaidExtra {
   minDeposit: string;
   /** Withdrawal delay in ms. Agent must wait this long after last claim. Min 60s, max 7d. */
   withdrawalDelayMs: string;
+  /**
+   * Provider's Ed25519 public key (hex string, 32 bytes).
+   * When present, enables v0.2 signed receipt mode — claims enter a pending
+   * state and can be disputed with cryptographic fraud proofs.
+   * @since v0.2
+   */
+  providerPubkey?: string;
+  /**
+   * Dispute window in milliseconds. Min 60s (60000), max 24h (86400000).
+   * Only relevant when providerPubkey is set.
+   * @since v0.2
+   */
+  disputeWindowMs?: string;
 }
 
 // ══════════════════════════════════════════════════════════════

@@ -45,11 +45,14 @@ s402          <-- You are here. Protocol spec. Zero runtime deps.
   |-- Compat        Optional x402 migration aid
   |-- Errors        Typed error codes with recovery hints
   |
-@sweefi/sui         <-- Sui-specific implementations (coming soon)
-@sweefi/sdk         <-- High-level DX (coming soon)
+@sweefi/sui         <-- Sui adapter: 40 PTB builders + SuiPaymentAdapter + createS402Client
+@sweefi/server      <-- Chain-agnostic HTTP: s402Gate middleware + wrapFetchWithS402
+@sweefi/ui-core     <-- State machine + PaymentAdapter interface
+@sweefi/vue         <-- Vue 3 plugin + useSweefiPayment() composable
+@sweefi/react       <-- React context + useSweefiPayment() hook
 ```
 
-`s402` is **chain-agnostic protocol plumbing**. It defines _what_ gets sent over HTTP. The Sui-specific _how_ will live in `@sweefi/sui` (coming soon).
+`s402` is **chain-agnostic protocol plumbing**. It defines _what_ gets sent over HTTP. The Sui-specific _how_ lives in [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui).
 
 ## Payment Schemes
 
@@ -158,7 +161,7 @@ const requirements: s402PaymentRequirements = {
   network: 'sui:mainnet',
   asset: '0x2::sui::SUI',
   amount: '1000000', // 0.001 SUI in MIST
-  payTo: '0xrecipient...',
+  payTo: '0x0000000000000000000000000000000000000000000000000000000000000001',
 };
 
 response.status = 402;
@@ -258,7 +261,7 @@ import type {
 } from 's402';
 ```
 
-The reference Sui implementation of all five schemes will be available in `@sweefi/sui` (coming soon).
+The reference Sui implementation of all five schemes is available in [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui).
 
 ## Wire Format
 
@@ -303,7 +306,7 @@ const requirements: s402PaymentRequirements = {
   network: 'sui:mainnet',
   asset: '0x2::sui::SUI',
   amount: '1000000',
-  payTo: '0xrecipient...',
+  payTo: '0x0000000000000000000000000000000000000000000000000000000000000001',
   expiresAt: Date.now() + 5 * 60 * 1000, // 5-minute window
 };
 ```

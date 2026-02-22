@@ -441,6 +441,18 @@ export function validateRequirementsShape(obj: unknown): void {
       `Malformed payment requirements: missing ${missing.join(', ')}`);
   }
 
+  // Reject control characters in protocol-semantic identifier fields.
+  // These feed into Map keys, error messages, and downstream logs — null bytes
+  // and CRLF are never legitimate in network/asset identifiers.
+  if (/[\x00-\x1f\x7f]/.test(record.network as string)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      'network contains control characters');
+  }
+  if (/[\x00-\x1f\x7f]/.test(record.asset as string)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      'asset contains control characters');
+  }
+
   // Empty accepts is semantically invalid — client cannot match any scheme
   if (Array.isArray(record.accepts) && (record.accepts as unknown[]).length === 0) {
     throw new s402Error('INVALID_PAYLOAD', 'accepts array must contain at least one scheme');
@@ -470,6 +482,23 @@ export function validateRequirementsShape(obj: unknown): void {
     if (typeof record.expiresAt !== 'number' || !Number.isFinite(record.expiresAt) || record.expiresAt <= 0) {
       throw new s402Error('INVALID_PAYLOAD',
         `expiresAt must be a positive finite number (Unix timestamp ms), got ${record.expiresAt}`);
+    }
+  }
+  if (record.protocolFeeAddress !== undefined) {
+    if (typeof record.protocolFeeAddress !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(record.protocolFeeAddress)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `protocolFeeAddress must be a 32-byte Sui address (0x + 64 hex chars), got "${String(record.protocolFeeAddress).substring(0, 20)}..."`);
+    }
+  }
+  if (record.facilitatorUrl !== undefined) {
+    if (typeof record.facilitatorUrl !== 'string') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `facilitatorUrl must be a string, got ${typeof record.facilitatorUrl}`);
+    }
+    // Reject control characters (CRLF injection, null bytes) — defense-in-depth
+    if (/[\x00-\x1f\x7f]/.test(record.facilitatorUrl)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        'facilitatorUrl contains control characters (potential header injection)');
     }
   }
 
