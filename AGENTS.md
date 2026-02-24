@@ -147,6 +147,21 @@ Three independent validation boundaries, each validates without trusting the pre
 
 The canonical validators (`validateRequirementsShape`, `pickRequirementsFields`) live in `http.ts`. The compat layer imports from `http.ts` — no duplicated validation code.
 
+### Safety Invariants
+
+s402 has **6 formally proven invariants** in `INVARIANTS.md`. Read these before modifying payment processing, error handling, or scheme dispatch:
+
+| ID | Property | Type | What it protects |
+|----|----------|------|------------------|
+| S1 | Stale payment rejection | Safety | Expired payments never settle (triple-layer defense) |
+| S2 | Trust boundary integrity | Safety | Untrusted HTTP input cannot corrupt internal state |
+| S3 | Five irreducible schemes | Structural | No scheme can be decomposed into others |
+| S4 | Error recoverability | Liveness | Agents can always determine retry vs. abandon |
+| S5 | Concurrent payment dedup | Safety | Identical payloads produce at most one settlement |
+| S6 | x402 compatibility roundtrip | Structural | s402 → x402 → s402 preserves all x402 fields |
+
+**If you change `facilitator.ts`, `http.ts`, or `errors.ts`, re-verify the relevant invariant.**
+
 ### Error Design: Machines First
 
 Every `s402Error` carries `{ code, retryable, suggestedAction }`. This is designed for autonomous agents, not human developers. An agent's error handler branches on `retryable` (boolean) and reads `suggestedAction` (string) to decide next steps — no message parsing, no regex on error strings.
