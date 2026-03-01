@@ -325,6 +325,11 @@ const requirements: s402PaymentRequirements = {
 
 5. **Errors tell you what to do.** Every error code includes `retryable` (can the client try again?) and `suggestedAction` (what should it do?). Agents can self-recover.
 
+## Related
+
+- **[SweeFi](https://github.com/sweeinc/sweefi)** — Open-source payment SDK built on s402. 10 packages including PTB builders, MCP tools, CLI, and UI components.
+- **[Sui Gas Station](https://github.com/Danny-Devs/sui-gas-station)** — Sponsored transaction infrastructure for Sui.
+
 ## License
 
 Apache-2.0 — see [LICENSE](./LICENSE) for details.
