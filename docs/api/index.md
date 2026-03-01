@@ -119,10 +119,12 @@ interface s402PaymentRequirements {
 | `maxCalls?` | `string` | Max calls cap (omit for unlimited) |
 | `minDeposit` | `string` | Minimum deposit amount |
 | `withdrawalDelayMs` | `string` | Withdrawal delay (min 60s, max 7d) |
+| `providerPubkey?` | `string` | Provider's Ed25519 public key (hex). Enables v0.2 signed receipt mode. |
+| `disputeWindowMs?` | `string` | Dispute window in ms (60s–24h). Only relevant with `providerPubkey`. |
 
 ## Payment Payloads
 
-Sent by the client in the `x-payment` header. Contains the signed transaction.
+Sent by the client via header transport (`x-payment` header) or body transport (`Content-Type: application/s402+json`). Contains the signed transaction.
 
 ### `s402PaymentPayloadBase`
 

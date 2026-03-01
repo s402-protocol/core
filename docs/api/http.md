@@ -1,6 +1,6 @@
 # HTTP Helpers
 
-Encode and decode s402 objects for HTTP transport. Wire-compatible with x402 — same header names, same base64 encoding.
+Encode and decode s402 objects for HTTP transport. Supports two transport modes: **header transport** (base64-encoded JSON in HTTP headers, wire-compatible with x402) and **body transport** (raw JSON in the request/response body, for large payloads).
 
 ```typescript
 import {
@@ -10,9 +10,9 @@ import {
 } from 's402/http';
 ```
 
-## Encoding
+## Header Transport — Encoding
 
-All encoders convert an object → base64 string for use in HTTP headers. Uses Unicode-safe base64 (UTF-8 → base64), so the `extensions` field and error messages can contain any characters.
+All header encoders convert an object → base64 string for use in HTTP headers. Uses Unicode-safe base64 (UTF-8 → base64), so the `extensions` field and error messages can contain any characters.
 
 ### `encodePaymentRequired(requirements)`
 
@@ -53,9 +53,9 @@ Encode a settlement response for the `payment-response` header.
 function encodeSettleResponse(response: s402SettleResponse): string;
 ```
 
-## Decoding
+## Header Transport — Decoding
 
-All decoders convert a base64 header string → typed object. They validate the shape of the decoded JSON and throw `s402Error` with code `INVALID_PAYLOAD` if the data is malformed.
+All header decoders convert a base64 header string → typed object. They validate the shape of the decoded JSON and throw `s402Error` with code `INVALID_PAYLOAD` if the data is malformed.
 
 ### `decodePaymentRequired(header)`
 
@@ -182,11 +182,142 @@ if (response.status === 402) {
 }
 ```
 
+## Body Transport
+
+Header transport encodes s402 objects as base64 in HTTP headers. This works for small payments, but headers are limited by infrastructure you don't control (Nginx: 4–8KB, Node.js: 16KB). Body transport uses raw JSON in the request/response body — no base64, no size limit — enabling large PTBs (128KB+) that cannot fit in headers.
+
+Body transport uses the same validators and field-stripping as header transport. Both paths produce identical decoded objects.
+
+```typescript
+import {
+  S402_CONTENT_TYPE,
+  encodeRequirementsBody,
+  decodeRequirementsBody,
+  detectTransport,
+} from 's402/http';
+```
+
+### `S402_CONTENT_TYPE`
+
+```typescript
+const S402_CONTENT_TYPE = 'application/s402+json' as const;
+```
+
+The MIME type for s402 body transport. Set this as the `Content-Type` header when sending or responding with body-encoded s402 data.
+
+### `encodeRequirementsBody(requirements)`
+
+Encode payment requirements as a JSON string for use in a response body.
+
+```typescript
+function encodeRequirementsBody(requirements: s402PaymentRequirements): string;
+```
+
+**Example:**
+
+```typescript
+const body = encodeRequirementsBody({
+  s402Version: '1',
+  accepts: ['exact'],
+  network: 'sui:mainnet',
+  asset: '0x2::sui::SUI',
+  amount: '1000000',
+  payTo: '0xrecipient...',
+});
+
+res.status(402)
+  .set('content-type', S402_CONTENT_TYPE)
+  .send(body);
+```
+
+### `decodeRequirementsBody(body)`
+
+Decode payment requirements from a JSON string (response body).
+
+```typescript
+function decodeRequirementsBody(body: string): s402PaymentRequirements;
+```
+
+**Throws:** `s402Error` with code `INVALID_PAYLOAD` — same validation as `decodePaymentRequired()`.
+
+### `encodePayloadBody(payload)`
+
+Encode a payment payload as a JSON string for use in a request body.
+
+```typescript
+function encodePayloadBody(payload: s402PaymentPayload): string;
+```
+
+### `decodePayloadBody(body)`
+
+Decode a payment payload from a JSON string (request body).
+
+```typescript
+function decodePayloadBody(body: string): s402PaymentPayload;
+```
+
+**Throws:** `s402Error` with code `INVALID_PAYLOAD` — same validation as `decodePaymentPayload()`.
+
+### `encodeSettleBody(response)`
+
+Encode a settlement response as a JSON string for use in a response body.
+
+```typescript
+function encodeSettleBody(response: s402SettleResponse): string;
+```
+
+### `decodeSettleBody(body)`
+
+Decode a settlement response from a JSON string (response body).
+
+```typescript
+function decodeSettleBody(body: string): s402SettleResponse;
+```
+
+**Throws:** `s402Error` with code `INVALID_PAYLOAD` — same validation as `decodeSettleResponse()`.
+
+### `detectTransport(request)`
+
+Detect whether an incoming request uses header or body transport.
+
+```typescript
+function detectTransport(request: { headers: Headers }): 'header' | 'body' | 'unknown';
+```
+
+Checks `Content-Type` for `application/s402+json` (body transport), then falls back to checking for the `x-payment` header (header transport). When both are present, body transport takes priority.
+
+**Example:**
+
+```typescript
+const transport = detectTransport(request);
+switch (transport) {
+  case 'body': {
+    const payload = decodePayloadBody(await request.text());
+    break;
+  }
+  case 'header': {
+    const payload = decodePaymentPayload(request.headers.get('x-payment')!);
+    break;
+  }
+  case 'unknown':
+    return new Response('No payment provided', { status: 400 });
+}
+```
+
+### When to Use Which Transport
+
+| Scenario | Transport | Why |
+|----------|-----------|-----|
+| Simple exact payments | Header | Small payload, fewer moving parts |
+| Prepaid deposits | Either | Depends on PTB size |
+| Complex DeFi PTBs (128KB+) | Body | Cannot fit in headers |
+| x402 compatibility | Header | x402 only supports header transport |
+
 ## Validation
 
 ### `validateRequirementsShape(obj)`
 
-Validate that an unknown object has the shape of `s402PaymentRequirements`. Throws `s402Error` with code `INVALID_PAYLOAD` if required fields are missing or have wrong types. Used internally by `decodePaymentRequired()` — call directly when you have a pre-parsed JSON object.
+Validate that an unknown object has the shape of `s402PaymentRequirements`. Throws `s402Error` with code `INVALID_PAYLOAD` if required fields are missing or have wrong types. Used internally by `decodePaymentRequired()` and `decodeRequirementsBody()` — call directly when you have a pre-parsed JSON object.
 
 ```typescript
 function validateRequirementsShape(obj: unknown): void;
