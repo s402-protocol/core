@@ -9,6 +9,14 @@ import {
   detectProtocol,
   extractRequirementsFromResponse,
   isValidAmount,
+  S402_CONTENT_TYPE,
+  encodeRequirementsBody,
+  decodeRequirementsBody,
+  encodePayloadBody,
+  decodePayloadBody,
+  encodeSettleBody,
+  decodeSettleBody,
+  detectTransport,
   s402Error,
   S402_VERSION,
   type s402PaymentRequirements,
@@ -555,6 +563,195 @@ describe('s402 HTTP encode/decode', () => {
       const headers = new Headers();
       headers.set('payment-required', '!!!not-base64!!!');
       expect(detectProtocol(headers)).toBe('unknown');
+    });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Body transport (JSON — no base64, no header size limit)
+// ══════════════════════════════════════════════════════════════
+
+describe('s402 body transport', () => {
+  describe('S402_CONTENT_TYPE', () => {
+    it('is application/s402+json', () => {
+      expect(S402_CONTENT_TYPE).toBe('application/s402+json');
+    });
+  });
+
+  describe('requirements body roundtrip', () => {
+    it('encodes and decodes without loss', () => {
+      const json = encodeRequirementsBody(SAMPLE_REQUIREMENTS);
+      expect(typeof json).toBe('string');
+      const decoded = decodeRequirementsBody(json);
+      expect(decoded.s402Version).toBe('1');
+      expect(decoded.network).toBe('sui:testnet');
+      expect(decoded.amount).toBe('1000000000');
+      expect(decoded.accepts).toEqual(['exact']);
+    });
+
+    it('produces valid JSON (not base64)', () => {
+      const json = encodeRequirementsBody(SAMPLE_REQUIREMENTS);
+      const parsed = JSON.parse(json);
+      expect(parsed.s402Version).toBe('1');
+    });
+
+    it('preserves all fields including optional ones', () => {
+      const full: s402PaymentRequirements = {
+        ...SAMPLE_REQUIREMENTS,
+        facilitatorUrl: 'https://facilitator.example.com',
+        protocolFeeBps: 50,
+        expiresAt: Date.now() + 60000,
+        extensions: { custom: 'data' },
+      };
+      const decoded = decodeRequirementsBody(encodeRequirementsBody(full));
+      expect(decoded.facilitatorUrl).toBe('https://facilitator.example.com');
+      expect(decoded.protocolFeeBps).toBe(50);
+      expect((decoded.extensions as Record<string, string>).custom).toBe('data');
+    });
+  });
+
+  describe('payload body roundtrip', () => {
+    it('encodes and decodes without loss', () => {
+      const json = encodePayloadBody(SAMPLE_PAYLOAD);
+      const decoded = decodePayloadBody(json);
+      expect(decoded.scheme).toBe('exact');
+      if (decoded.scheme === 'exact') {
+        expect(decoded.payload.transaction).toBe('dHhieXRlcw==');
+        expect(decoded.payload.signature).toBe('c2lnbmF0dXJl');
+      }
+    });
+
+    it('handles large payloads that would exceed header limits', () => {
+      // 200KB transaction — would NOT fit in a 64KB header but is fine in body
+      const largeTx = 'A'.repeat(200 * 1024);
+      const payload: s402ExactPayload = {
+        s402Version: S402_VERSION,
+        scheme: 'exact',
+        payload: { transaction: largeTx, signature: 'sig' },
+      };
+      const json = encodePayloadBody(payload);
+      const decoded = decodePayloadBody(json);
+      expect(decoded.scheme).toBe('exact');
+      if (decoded.scheme === 'exact') {
+        expect(decoded.payload.transaction).toBe(largeTx);
+      }
+    });
+  });
+
+  describe('settle body roundtrip', () => {
+    it('encodes and decodes without loss', () => {
+      const json = encodeSettleBody(SAMPLE_SETTLE);
+      const decoded = decodeSettleBody(json);
+      expect(decoded.success).toBe(true);
+      expect(decoded.txDigest).toBe('ABC123');
+      expect(decoded.receiptId).toBe('0xreceipt');
+      expect(decoded.finalityMs).toBe(450);
+    });
+
+    it('handles error responses', () => {
+      const errorResponse: s402SettleResponse = {
+        success: false,
+        error: 'Insufficient balance',
+        errorCode: 'INSUFFICIENT_BALANCE',
+      };
+      const decoded = decodeSettleBody(encodeSettleBody(errorResponse));
+      expect(decoded.success).toBe(false);
+      expect(decoded.error).toBe('Insufficient balance');
+    });
+  });
+
+  describe('body decode validation (same validators as header path)', () => {
+    it('decodeRequirementsBody rejects invalid JSON', () => {
+      expect(() => decodeRequirementsBody('not json {')).toThrow(s402Error);
+      expect(() => decodeRequirementsBody('not json {')).toThrow('Failed to parse');
+    });
+
+    it('decodeRequirementsBody rejects missing s402Version', () => {
+      const json = JSON.stringify({ accepts: ['exact'], network: 'sui:testnet' });
+      expect(() => decodeRequirementsBody(json)).toThrow(s402Error);
+      expect(() => decodeRequirementsBody(json)).toThrow('Missing s402Version');
+    });
+
+    it('decodePayloadBody rejects invalid JSON', () => {
+      expect(() => decodePayloadBody('')).toThrow(s402Error);
+    });
+
+    it('decodePayloadBody rejects missing scheme', () => {
+      const json = JSON.stringify({ payload: { transaction: 'tx', signature: 'sig' } });
+      expect(() => decodePayloadBody(json)).toThrow(s402Error);
+      expect(() => decodePayloadBody(json)).toThrow('missing scheme');
+    });
+
+    it('decodeSettleBody rejects invalid JSON', () => {
+      expect(() => decodeSettleBody('{{{')).toThrow(s402Error);
+    });
+
+    it('decodeSettleBody rejects missing success field', () => {
+      const json = JSON.stringify({ txDigest: 'ABC' });
+      expect(() => decodeSettleBody(json)).toThrow(s402Error);
+      expect(() => decodeSettleBody(json)).toThrow('success');
+    });
+
+    it('decodeRequirementsBody strips unknown fields (same as header path)', () => {
+      const json = JSON.stringify({
+        ...SAMPLE_REQUIREMENTS,
+        malicious: 'injected',
+        __proto__: { evil: true },
+      });
+      const decoded = decodeRequirementsBody(json);
+      expect((decoded as unknown as Record<string, unknown>).malicious).toBeUndefined();
+    });
+  });
+
+  describe('detectTransport', () => {
+    it('detects body transport from content-type', () => {
+      const headers = new Headers();
+      headers.set('content-type', 'application/s402+json');
+      expect(detectTransport({ headers })).toBe('body');
+    });
+
+    it('detects body transport with charset parameter', () => {
+      const headers = new Headers();
+      headers.set('content-type', 'application/s402+json; charset=utf-8');
+      expect(detectTransport({ headers })).toBe('body');
+    });
+
+    it('detects header transport from x-payment header', () => {
+      const headers = new Headers();
+      headers.set('x-payment', encodePaymentPayload(SAMPLE_PAYLOAD));
+      expect(detectTransport({ headers })).toBe('header');
+    });
+
+    it('returns unknown when neither present', () => {
+      const headers = new Headers();
+      expect(detectTransport({ headers })).toBe('unknown');
+    });
+
+    it('prefers body transport when both are present', () => {
+      const headers = new Headers();
+      headers.set('content-type', 'application/s402+json');
+      headers.set('x-payment', encodePaymentPayload(SAMPLE_PAYLOAD));
+      expect(detectTransport({ headers })).toBe('body');
+    });
+  });
+
+  describe('header vs body equivalence', () => {
+    it('both transports produce same decoded requirements', () => {
+      const fromHeader = decodePaymentRequired(encodePaymentRequired(SAMPLE_REQUIREMENTS));
+      const fromBody = decodeRequirementsBody(encodeRequirementsBody(SAMPLE_REQUIREMENTS));
+      expect(fromHeader).toEqual(fromBody);
+    });
+
+    it('both transports produce same decoded payload', () => {
+      const fromHeader = decodePaymentPayload(encodePaymentPayload(SAMPLE_PAYLOAD));
+      const fromBody = decodePayloadBody(encodePayloadBody(SAMPLE_PAYLOAD));
+      expect(fromHeader).toEqual(fromBody);
+    });
+
+    it('both transports produce same decoded settle response', () => {
+      const fromHeader = decodeSettleResponse(encodeSettleResponse(SAMPLE_SETTLE));
+      const fromBody = decodeSettleBody(encodeSettleBody(SAMPLE_SETTLE));
+      expect(fromHeader).toEqual(fromBody);
     });
   });
 });

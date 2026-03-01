@@ -5,6 +5,8 @@
 
 **Sui-native HTTP 402 protocol.** Atomic settlement via Sui's Programmable Transaction Blocks (PTBs). Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
+s402 is the Sui-native implementation of HTTP 402 (Payment Required) — an open protocol that lets AI agents pay for API calls in a single HTTP request with no per-call on-chain transaction. Unlike Coinbase's x402 on Ethereum, s402 uses Sui's Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
+
 ```bash
 npm install s402
 pnpm add s402

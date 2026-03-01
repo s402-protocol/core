@@ -82,7 +82,7 @@ const S402_SUB_OBJECT_KEYS: Record<string, Set<string>> = {
   stream: new Set(['ratePerSecond', 'budgetCap', 'minDeposit', 'streamSetupUrl']),
   escrow: new Set(['seller', 'arbiter', 'deadlineMs']),
   unlock: new Set(['encryptionId', 'walrusBlobId', 'encryptionPackageId']),
-  prepaid: new Set(['ratePerCall', 'maxCalls', 'minDeposit', 'withdrawalDelayMs']),
+  prepaid: new Set(['ratePerCall', 'maxCalls', 'minDeposit', 'withdrawalDelayMs', 'providerPubkey', 'disputeWindowMs']),
 };
 
 /** Strip unknown keys from a sub-object, returning a clean copy. */
@@ -386,6 +386,8 @@ export function validatePrepaidShape(value: unknown): void {
       `prepaid.withdrawalDelayMs must be a non-negative integer string (milliseconds), got "${obj.withdrawalDelayMs}"`);
   }
   assertOptionalString(obj, 'maxCalls', 'prepaid');
+  assertOptionalString(obj, 'providerPubkey', 'prepaid');
+  assertOptionalString(obj, 'disputeWindowMs', 'prepaid');
 }
 
 /**
@@ -565,6 +567,95 @@ function validateSettleShape(obj: unknown): void {
     throw new s402Error('INVALID_PAYLOAD',
       'Malformed settle response: missing or invalid "success" (boolean)');
   }
+}
+
+// ══════════════════════════════════════════════════════════════
+// Body transport (JSON — no base64, no header size limit)
+//
+// Header transport uses base64-encoded JSON in HTTP headers.
+// Body transport uses raw JSON in the request/response body.
+//
+// Why both? Headers are limited by infrastructure you don't control:
+//   - Nginx: 4-8KB default (ALL headers)
+//   - Node.js: 16KB default
+//   - Sui max PTB: 128KB → ~170KB base64 (CANNOT fit in headers)
+// Body limits are set by YOUR application (Express: 100KB default,
+// Nginx: 1MB default, easily configurable).
+//
+// Use header transport for small payments (< 8KB).
+// Use body transport for large/complex DeFi PTBs.
+// ══════════════════════════════════════════════════════════════
+
+/** Content type for s402 JSON body transport */
+export const S402_CONTENT_TYPE = 'application/s402+json' as const;
+
+/** Encode payment requirements as JSON string (for response body) */
+export function encodeRequirementsBody(requirements: s402PaymentRequirements): string {
+  return JSON.stringify(requirements);
+}
+
+/** Decode payment requirements from JSON string (from response body) */
+export function decodeRequirementsBody(body: string): s402PaymentRequirements {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch (e) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Failed to parse s402 requirements body: ${e instanceof Error ? e.message : 'invalid JSON'}`);
+  }
+  validateRequirementsShape(parsed);
+  return pickRequirementsFields(parsed as Record<string, unknown>);
+}
+
+/** Encode payment payload as JSON string (for request body) */
+export function encodePayloadBody(payload: s402PaymentPayload): string {
+  return JSON.stringify(payload);
+}
+
+/** Decode payment payload from JSON string (from request body) */
+export function decodePayloadBody(body: string): s402PaymentPayload {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch (e) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Failed to parse s402 payload body: ${e instanceof Error ? e.message : 'invalid JSON'}`);
+  }
+  validatePayloadShape(parsed);
+  return pickPayloadFields(parsed as Record<string, unknown>);
+}
+
+/** Encode settlement response as JSON string (for response body) */
+export function encodeSettleBody(response: s402SettleResponse): string {
+  return JSON.stringify(response);
+}
+
+/** Decode settlement response from JSON string (from response body) */
+export function decodeSettleBody(body: string): s402SettleResponse {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch (e) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Failed to parse s402 settle body: ${e instanceof Error ? e.message : 'invalid JSON'}`);
+  }
+  validateSettleShape(parsed);
+  return pickSettleResponseFields(parsed as Record<string, unknown>);
+}
+
+/**
+ * Detect transport mode from an incoming request.
+ *
+ * Checks Content-Type for body transport, then falls back to header detection.
+ * Returns 'body' if Content-Type is application/s402+json.
+ * Returns 'header' if x-payment header is present.
+ * Returns 'unknown' otherwise.
+ */
+export function detectTransport(request: { headers: Headers }): 'header' | 'body' | 'unknown' {
+  const contentType = request.headers.get('content-type');
+  if (contentType?.includes(S402_CONTENT_TYPE)) return 'body';
+  if (request.headers.get(S402_HEADERS.PAYMENT)) return 'header';
+  return 'unknown';
 }
 
 // ══════════════════════════════════════════════════════════════

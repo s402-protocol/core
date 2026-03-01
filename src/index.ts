@@ -54,7 +54,7 @@ export { s402ResourceServer } from './server.js';
 // Facilitator
 export { s402Facilitator } from './facilitator.js';
 
-// HTTP helpers
+// HTTP helpers — header transport (base64-encoded JSON in HTTP headers)
 export {
   encodePaymentRequired,
   decodePaymentRequired,
@@ -67,6 +67,18 @@ export {
   isValidAmount,
   isValidU64Amount,
   validateRequirementsShape,
+} from './http.js';
+
+// HTTP helpers — body transport (raw JSON, no size limit)
+export {
+  S402_CONTENT_TYPE,
+  encodeRequirementsBody,
+  decodeRequirementsBody,
+  encodePayloadBody,
+  decodePayloadBody,
+  encodeSettleBody,
+  decodeSettleBody,
+  detectTransport,
 } from './http.js';
 // Internal validators (validateSubObjects, validateMandateShape, validate*Shape,
 // pickRequirementsFields) are available via 's402/http' for advanced use cases.
