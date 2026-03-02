@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.0] - 2026-03-01
+
+### Added
+
+- **Receipt HTTP helpers** — `s402/receipts` sub-path export with `formatReceiptHeader()`, `parseReceiptHeader()`, `S402_RECEIPT_HEADER`. Chain-agnostic receipt wire format (`v2:base64(sig):callNumber:timestampMs:base64(hash)`) for v0.2 signed usage receipts.
+- **S7 chain-agnostic boundary invariant** — formal safety invariant enforced by `test/boundary.test.ts`. Greps `src/` for chain-specific patterns (Sui address regex, Solana base58, Ethereum imports) and fails the build if any are found.
+- **v0.2 prepaid type extensions** — `providerPubkey` and `disputeWindowMs` fields on `s402PrepaidExtra` for signed receipt mode.
+- **Body transport** — `application/s402+json` content type for large payloads that don't fit in HTTP headers.
+- **Formal safety invariants** (S1-S7) documented in AGENTS.md.
+
+### Fixed
+
+- **Chain-agnostic payTo/protocolFeeAddress validation** — removed Sui-specific address regex (`/^0x[0-9a-fA-F]{64}$/`) from `http.ts`. Replaced with chain-agnostic checks (non-empty string, no control characters). Chain-specific validation belongs in `@sweefi/sui`.
+- **x402 compat validation parity** — `normalizeRequirements()` now runs `validateRequirementsShape()` on x402 conversion output, ensuring identical validation regardless of input format.
+- **Prepaid pairing invariant enforcement** — `providerPubkey` and `disputeWindowMs` must both be present (v0.2) or both absent (v0.1). Was documented in JSDoc but not enforced at wire decode.
+- **Receipt BigInt coercion** — `parseReceiptHeader()` rejects empty strings and whitespace-only strings that JavaScript's `BigInt()` would silently coerce to `0n`.
+- **Removed Sui default for `asset`** — `s402RouteConfig.asset` is now required (was optional with `'0x2::sui::SUI'` default). Chain-specific defaults don't belong in the protocol layer.
+
+### Changed
+
+- **BREAKING**: `s402RouteConfig.asset` is now required (was optional).
+- JSDoc on `s402PaymentRequirements` updated to chain-agnostic wording (network, asset, amount fields).
+- 258 tests across 11 suites (was 207 at v0.1.0).
+
+## [0.1.8] - 2026-02-27
+
+### Added
+
+- Body transport (`application/s402+json`) for large payloads
+- v0.2 prepaid type extensions (`providerPubkey`, `disputeWindowMs`)
+- `FUNDING.yml` and cross-linked SweeFi in README
+
+## [0.1.7] - 2026-02-25
+
+### Added
+
+- Formal safety invariants (Lamport-style proofs)
+- `isValidU64Amount()` magnitude checks
+
 ## [0.1.6] - 2026-02-19
 
 ### Fixed
@@ -77,6 +116,9 @@ _Version bump for npm publish after license change._
 - Property-based fuzz testing via fast-check
 - 207 tests, zero runtime dependencies
 
+[0.2.0]: https://github.com/s402-protocol/core/compare/v0.1.8...v0.2.0
+[0.1.8]: https://github.com/s402-protocol/core/compare/v0.1.7...v0.1.8
+[0.1.7]: https://github.com/s402-protocol/core/compare/v0.1.6...v0.1.7
 [0.1.6]: https://github.com/s402-protocol/core/compare/v0.1.5...v0.1.6
 [0.1.5]: https://github.com/s402-protocol/core/compare/v0.1.4...v0.1.5
 [0.1.4]: https://github.com/s402-protocol/core/compare/v0.1.3...v0.1.4
