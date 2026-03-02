@@ -69,4 +69,4 @@ s402 defines the wire format — _what_ gets sent over HTTP. You bring your own 
 
 ---
 
-**v0.1.8** · Exact, Prepaid, and Escrow schemes are stable · 235 tests with property-based fuzzing · Apache-2.0 · [View on npm](https://www.npmjs.com/package/s402)
+**v0.1.8** · Exact, Prepaid, and Escrow schemes are stable · 245 tests with property-based fuzzing · Apache-2.0 · [View on npm](https://www.npmjs.com/package/s402)

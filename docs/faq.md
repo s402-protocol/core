@@ -6,7 +6,7 @@ description: Common questions about s402 — production readiness, testing, faci
 
 ## Is s402 production-ready?
 
-The protocol spec and TypeScript package (`s402@0.1.8`) are stable for the **Exact**, **Prepaid**, and **Escrow** schemes. These are v0.1 and covered by 235 tests.
+The protocol spec and TypeScript package (`s402@0.1.8`) are stable for the **Exact**, **Prepaid**, and **Escrow** schemes. These are v0.1 and covered by 245 tests.
 
 **Stream** and **Unlock** are v0.2 — the types are defined but the on-chain implementations are under active development. Use them for prototyping, not production.
 

@@ -155,6 +155,11 @@ export interface s402UnlockExtra {
  * Move cannot verify calls actually happened. Agent's protection: rate cap,
  * max_calls, deposit ceiling, small deposits + short refill cycles, reputation.
  * v0.2 adds signed usage receipts for cryptographic fraud proofs. See ADR-007.
+ *
+ * PAIRING INVARIANT: `providerPubkey` and `disputeWindowMs` are a pair.
+ * Both must be present (v0.2 signed receipt mode) or both absent (v0.1 default).
+ * Setting `providerPubkey` without `disputeWindowMs` (or vice versa) is invalid
+ * and will be rejected by the on-chain contract at deposit time.
  */
 export interface s402PrepaidExtra {
   /** Maximum base units per API call (rate cap) */

@@ -152,5 +152,9 @@ export interface s402RouteConfig {
     maxCalls?: string;
     minDeposit: string;
     withdrawalDelayMs: string;
+    /** Provider Ed25519 pubkey (hex). Enables v0.2 signed receipt mode. @since v0.2 */
+    providerPubkey?: string;
+    /** Dispute window in ms. Required when providerPubkey is set. @since v0.2 */
+    disputeWindowMs?: string;
   };
 }

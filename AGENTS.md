@@ -30,7 +30,7 @@ src/
 
 ```bash
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (207 across 9 suites)
+pnpm run test       # Run tests (245 across 10 suites)
 pnpm run typecheck  # tsc --noEmit
 ```
 
