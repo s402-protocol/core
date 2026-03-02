@@ -395,6 +395,13 @@ export function validatePrepaidShape(value: unknown): void {
   assertOptionalString(obj, 'maxCalls', 'prepaid');
   assertOptionalString(obj, 'providerPubkey', 'prepaid');
   assertOptionalString(obj, 'disputeWindowMs', 'prepaid');
+  // Pairing invariant: providerPubkey and disputeWindowMs must both be present or both absent.
+  const hasPubkey = typeof obj.providerPubkey === 'string';
+  const hasWindow = typeof obj.disputeWindowMs === 'string';
+  if (hasPubkey !== hasWindow) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `prepaid: providerPubkey and disputeWindowMs must both be present (v0.2) or both absent (v0.1), got ${hasPubkey ? 'providerPubkey only' : 'disputeWindowMs only'}`);
+  }
 }
 
 /**
@@ -439,11 +446,8 @@ export function validateRequirementsShape(obj: unknown): void {
   }
   if (typeof record.payTo !== 'string') {
     missing.push('payTo (string)');
-  } else if (!/^0x[0-9a-fA-F]{64}$/.test(record.payTo as string)) {
-    // M-6: Enforce Sui address format — 0x + exactly 64 hex chars (32 bytes).
-    // Rejects "0x" alone, non-hex chars, and wrong-length addresses.
-    throw new s402Error('INVALID_PAYLOAD',
-      `payTo must be a 32-byte Sui address (0x + 64 hex chars), got "${(record.payTo as string).substring(0, 20)}..."`);
+  } else if ((record.payTo as string).length === 0) {
+    throw new s402Error('INVALID_PAYLOAD', 'payTo must be a non-empty string');
   }
   if (missing.length > 0) {
     throw new s402Error('INVALID_PAYLOAD',
@@ -452,7 +456,7 @@ export function validateRequirementsShape(obj: unknown): void {
 
   // Reject control characters in protocol-semantic identifier fields.
   // These feed into Map keys, error messages, and downstream logs — null bytes
-  // and CRLF are never legitimate in network/asset identifiers.
+  // and CRLF are never legitimate in network/asset/address identifiers.
   if (/[\x00-\x1f\x7f]/.test(record.network as string)) {
     throw new s402Error('INVALID_PAYLOAD',
       'network contains control characters');
@@ -460,6 +464,10 @@ export function validateRequirementsShape(obj: unknown): void {
   if (/[\x00-\x1f\x7f]/.test(record.asset as string)) {
     throw new s402Error('INVALID_PAYLOAD',
       'asset contains control characters');
+  }
+  if (/[\x00-\x1f\x7f]/.test(record.payTo as string)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      'payTo contains control characters');
   }
 
   // Empty accepts is semantically invalid — client cannot match any scheme
@@ -494,9 +502,13 @@ export function validateRequirementsShape(obj: unknown): void {
     }
   }
   if (record.protocolFeeAddress !== undefined) {
-    if (typeof record.protocolFeeAddress !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(record.protocolFeeAddress)) {
+    if (typeof record.protocolFeeAddress !== 'string' || record.protocolFeeAddress.length === 0) {
       throw new s402Error('INVALID_PAYLOAD',
-        `protocolFeeAddress must be a 32-byte Sui address (0x + 64 hex chars), got "${String(record.protocolFeeAddress).substring(0, 20)}..."`);
+        `protocolFeeAddress must be a non-empty string, got ${JSON.stringify(record.protocolFeeAddress)}`);
+    }
+    if (/[\x00-\x1f\x7f]/.test(record.protocolFeeAddress)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        'protocolFeeAddress contains control characters');
     }
   }
   if (record.facilitatorUrl !== undefined) {
