@@ -7,6 +7,7 @@ export default defineConfig({
     http: 'src/http.ts',
     compat: 'src/compat.ts',
     errors: 'src/errors.ts',
+    receipts: 'src/receipts.ts',
   },
   format: ['esm'],
   dts: true,

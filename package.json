@@ -76,6 +76,13 @@
         "default": "./dist/errors.mjs"
       },
       "default": "./dist/errors.mjs"
+    },
+    "./receipts": {
+      "import": {
+        "types": "./dist/receipts.d.mts",
+        "default": "./dist/receipts.mjs"
+      },
+      "default": "./dist/receipts.mjs"
     }
   },
   "scripts": {
