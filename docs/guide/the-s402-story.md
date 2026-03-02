@@ -144,7 +144,7 @@ This is the most common question. The answer is architectural:
 
 s402 is the **protocol layer** — it defines what goes over the wire. It's the foundation for:
 
-- **Scheme implementations**: Sui-specific PTB builders, gas station, and developer SDK (e.g. `@sweefi/sui`).
+- **Scheme implementations**: Sui-specific PTB builders, gas station, and developer SDK — your own or a third-party Sui integration.
 - **Service discovery**: Where services advertise their s402 endpoints and agents discover them (e.g. `/.well-known/s402.json`).
 
 ```
@@ -892,7 +892,7 @@ The `s402` package has no `dependencies` in package.json. Not even the Sui SDK.
 3. **Bundle size** — 36KB total. No tree-shaking needed because there's nothing to shake.
 4. **Flexibility** — consumers bring their own Sui SDK version. No peer dependency conflicts.
 
-**Trade-off:** s402 can't do anything chain-specific. It can't verify signatures, check balances, or broadcast transactions. All of that lives in scheme implementations (like the upcoming `@sweefi/sui`). This is the correct layering — the protocol layer should not know about chain internals.
+**Trade-off:** s402 can't do anything chain-specific. It can't verify signatures, check balances, or broadcast transactions. All of that lives in scheme implementations — your Sui SDK integration of choice. This is the correct layering — the protocol layer should not know about chain internals.
 
 ### Decision 5: Optional x402 compatibility
 
