@@ -139,10 +139,10 @@ const requirements: s402PaymentRequirements = {
 When `providerPubkey` is set, each API response includes a signed receipt in the header:
 
 ```
-x-s402-receipt: <base64signature>:<callIndex>:<timestampMs>
+X-S402-Receipt: v2:<base64(signature)>:<callNumber>:<timestampMs>:<base64(responseHash)>
 ```
 
-The provider signs the message `${balanceId}:${callIndex}:${timestampMs}` with the Ed25519 private key corresponding to `providerPubkey`. This creates a tamper-proof record tied to the specific balance and call sequence.
+The provider signs a BCS-encoded message containing the balance ID, call number, timestamp, and response hash using the Ed25519 private key corresponding to `providerPubkey`. This creates a tamper-proof record tied to the specific balance, call sequence, and response content.
 
 **Agent accumulates receipts:**
 

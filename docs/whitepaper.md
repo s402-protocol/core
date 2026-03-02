@@ -306,7 +306,7 @@ The compat package is a deliberate sub-path import (`s402/compat`), not part of 
 The `s402` npm package (v0.1.8, Apache-2.0) is the protocol layer:
 
 - **2,079 lines** of TypeScript — types, encoding logic, scheme dispatch, error model
-- **2,915 lines** of tests — 643 total (226 Move + 417 TypeScript), including property-based fuzzing with arbitrarily generated payloads
+- **2,915 lines** of tests — 235 total, including property-based fuzzing with arbitrarily generated payloads
 - **Zero runtime dependencies** — pure TypeScript using only built-in APIs (`TextEncoder`, `btoa/atob`, `JSON`)
 - **Sub-path exports** — import only what you need: `s402/types`, `s402/http`, `s402/errors`, `s402/compat`
 
