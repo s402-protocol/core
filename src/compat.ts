@@ -254,12 +254,21 @@ export function normalizeRequirements(
   }
   // x402 V2 envelope: { x402Version, accepts: [{scheme, network, ...}, ...] }
   if (isX402Envelope(obj)) {
-    return fromX402Envelope(obj as unknown as x402PaymentRequiredEnvelope);
+    const result = fromX402Envelope(obj as unknown as x402PaymentRequiredEnvelope);
+    // Validate the normalized output with the same checks as native s402 decode
+    // (payTo format, control chars, u64 bounds) — prevents weaker x402 validation
+    // from producing an s402PaymentRequirements that would fail native validation.
+    const record = result as unknown as Record<string, unknown>;
+    validateRequirementsShape(record);
+    return pickRequirementsFields(record);
   }
   // x402 V1 flat: { x402Version, scheme, network, amount/maxAmountRequired, ... }
   if (isX402(obj)) {
     validateX402Shape(obj);
-    return fromX402Requirements(obj as unknown as x402PaymentRequirements);
+    const result = fromX402Requirements(obj as unknown as x402PaymentRequirements);
+    const record = result as unknown as Record<string, unknown>;
+    validateRequirementsShape(record);
+    return pickRequirementsFields(record);
   }
   throw new s402Error('INVALID_PAYLOAD', 'Unrecognized payment requirements format: missing s402Version or x402Version');
 }
