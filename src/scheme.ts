@@ -100,14 +100,14 @@ export interface s402DirectScheme {
 export interface s402RouteConfig {
   /** Which payment scheme(s) to accept. Always includes "exact" for x402 compat. */
   schemes: s402Scheme[];
-  /** Amount in base units, same as wire format (e.g., "1000000" for 0.001 SUI in MIST) */
+  /** Amount in base units, same as wire format (e.g., "1000000") */
   price: string;
-  /** Sui network */
+  /** Network identifier (e.g., "sui:mainnet", "solana:mainnet-beta") */
   network: string;
-  /** Recipient address */
+  /** Recipient address (chain-specific format, validated by chain adapter) */
   payTo: string;
-  /** Move coin type */
-  asset?: string;
+  /** Asset/coin type identifier (chain-specific, e.g., Sui Move type or Solana mint address) */
+  asset: string;
   /** Facilitator URL (optional for direct settlement) */
   facilitatorUrl?: string;
   /** Settlement mode preference */

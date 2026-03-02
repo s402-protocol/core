@@ -232,6 +232,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
       price: '5000000',
       network: 'sui:testnet',
       payTo: '0xrecipient',
+      asset: '0x2::sui::SUI',
     });
 
     expect(reqs.s402Version).toBe(S402_VERSION);
@@ -242,13 +243,14 @@ describe('s402ResourceServer.buildRequirements()', () => {
     expect(reqs.network).toBe('sui:testnet');
   });
 
-  it('defaults asset to SUI', () => {
+  it('passes through asset without chain-specific defaults', () => {
     const server = new s402ResourceServer();
     const reqs = server.buildRequirements({
       schemes: ['exact'],
       price: '1000',
       network: 'sui:testnet',
       payTo: '0x1',
+      asset: '0x2::sui::SUI',
     });
 
     expect(reqs.asset).toBe('0x2::sui::SUI');
@@ -274,6 +276,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
       price: '1000',
       network: 'sui:testnet',
       payTo: '0x1',
+      asset: '0x2::sui::SUI',
       mandate: { required: true, minPerTx: '500' },
     });
 
@@ -287,6 +290,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
       price: '1000',
       network: 'sui:testnet',
       payTo: '0x1',
+      asset: '0x2::sui::SUI',
       stream: { ratePerSecond: '100', budgetCap: '10000', minDeposit: '1000' },
     });
 
@@ -302,7 +306,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
           s402Version: S402_VERSION,
           accepts: ['stream'], // deliberately omits 'exact'
           network: config.network,
-          asset: config.asset ?? '0x2::sui::SUI',
+          asset: config.asset,
           amount: config.price,
           payTo: config.payTo,
         };
@@ -315,6 +319,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
       price: '1000',
       network: 'sui:testnet',
       payTo: '0x1',
+      asset: '0x2::sui::SUI',
     });
 
     expect(reqs.accepts).toContain('exact');
@@ -328,6 +333,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
       price: 'abc',
       network: 'sui:testnet',
       payTo: '0x1',
+      asset: '0x2::sui::SUI',
     })).toThrow('Invalid price');
   });
 
@@ -338,6 +344,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
       price: '-100',
       network: 'sui:testnet',
       payTo: '0x1',
+      asset: '0x2::sui::SUI',
     })).toThrow('Invalid price');
   });
 
@@ -348,6 +355,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
       price: '1000',
       network: 'sui:testnet',
       payTo: '0x1',
+      asset: '0x2::sui::SUI',
     });
 
     const exactCount = reqs.accepts.filter(s => s === 'exact').length;

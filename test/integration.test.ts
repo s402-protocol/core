@@ -85,6 +85,7 @@ describe('integration: full payment flow', () => {
       price: '5000000',
       network: NETWORK,
       payTo: MERCHANT,
+      asset: '0x2::sui::SUI',
     });
 
     expect(requirements.s402Version).toBe(S402_VERSION);
@@ -139,6 +140,7 @@ describe('integration: full payment flow', () => {
       price: '1000',
       network: NETWORK,
       payTo: MERCHANT,
+      asset: '0x2::sui::SUI',
     });
 
     // Add expiration in the past
@@ -176,6 +178,7 @@ describe('integration: full payment flow', () => {
       price: '1000',
       network: NETWORK,
       payTo: MERCHANT,
+      asset: '0x2::sui::SUI',
     });
 
     const client = new s402Client();

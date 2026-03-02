@@ -74,7 +74,7 @@ export class s402ResourceServer {
       s402Version: S402_VERSION,
       accepts,
       network: config.network,
-      asset: config.asset ?? '0x2::sui::SUI',
+      asset: config.asset,
       amount: config.price,
       payTo: config.payTo,
       facilitatorUrl: config.facilitatorUrl,

@@ -45,11 +45,11 @@ export interface s402PaymentRequirements {
   s402Version: typeof S402_VERSION;
   /** Which payment schemes the server accepts. Always includes "exact" for x402 compat. */
   accepts: s402Scheme[];
-  /** Sui network (e.g., "sui:testnet", "sui:mainnet") */
+  /** Network identifier (e.g., "sui:mainnet", "solana:mainnet-beta", "eip155:8453") */
   network: string;
-  /** Move coin type (e.g., "0x2::sui::SUI") */
+  /** Asset/coin type identifier (chain-specific format, opaque to s402 core) */
   asset: string;
-  /** Amount in base units (MIST for SUI, 6-decimal for USDC) */
+  /** Amount in base units as a non-negative integer string */
   amount: string;
   /** Recipient address */
   payTo: string;
