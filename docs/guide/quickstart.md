@@ -1,3 +1,7 @@
+---
+description: Install s402 and add HTTP 402 payments to your API in minutes. TypeScript-first, zero runtime dependencies, works with any Sui wallet.
+---
+
 # Quick Start
 
 ## Install

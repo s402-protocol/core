@@ -1,3 +1,7 @@
+---
+description: Accept s402 HTTP 402 payments in Python with FastAPI, Flask, or Django. No SDK required — just base64, JSON, and one Sui RPC call.
+---
+
 # Accept s402 Payments in Python
 
 s402 is language-agnostic. This example uses FastAPI, but the same pattern works in Flask, Django, or any Python HTTP framework. No SDK required — just base64, JSON, and one Sui RPC call.

@@ -1,3 +1,7 @@
+---
+description: Pay-to-decrypt content on Sui using SEAL encryption and Walrus storage. Payment atomically releases the decryption key — no window where content is accessible without payment.
+---
+
 # Unlock Scheme
 
 <img src="/images/seal.png" alt="Encrypted geometric crystal with a keyhole, surrounded by clouds" style="border-radius: 12px; margin-top: 16px; margin-bottom: 24px;" />

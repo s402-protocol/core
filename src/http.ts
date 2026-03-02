@@ -381,9 +381,16 @@ export function validatePrepaidShape(value: unknown): void {
       `prepaid.minDeposit must be a non-negative integer string, got "${obj.minDeposit}"`);
   }
   assertString(obj, 'withdrawalDelayMs', 'prepaid');
-  if (typeof obj.withdrawalDelayMs === 'string' && !isValidAmount(obj.withdrawalDelayMs)) {
-    throw new s402Error('INVALID_PAYLOAD',
-      `prepaid.withdrawalDelayMs must be a non-negative integer string (milliseconds), got "${obj.withdrawalDelayMs}"`);
+  if (typeof obj.withdrawalDelayMs === 'string') {
+    if (!isValidAmount(obj.withdrawalDelayMs)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `prepaid.withdrawalDelayMs must be a non-negative integer string (milliseconds), got "${obj.withdrawalDelayMs}"`);
+    }
+    const delayMs = BigInt(obj.withdrawalDelayMs);
+    if (delayMs < 60_000n || delayMs > 604_800_000n) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `prepaid.withdrawalDelayMs must be between 60000 (1 min) and 604800000 (7 days), got "${obj.withdrawalDelayMs}"`);
+    }
   }
   assertOptionalString(obj, 'maxCalls', 'prepaid');
   assertOptionalString(obj, 'providerPubkey', 'prepaid');

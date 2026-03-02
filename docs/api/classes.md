@@ -1,3 +1,7 @@
+---
+description: API reference for s402Client, s402Server, and s402Facilitator — the three core classes that coordinate the HTTP 402 payment flow on Sui.
+---
+
 # Classes
 
 The three core classes that coordinate the s402 protocol flow. Each is a registry of scheme implementations — you register only the schemes you need.

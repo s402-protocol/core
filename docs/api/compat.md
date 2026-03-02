@@ -1,3 +1,7 @@
+---
+description: Bidirectional interop between s402 and x402. An x402 client can pay an s402 server using the Exact scheme with zero code changes.
+---
+
 # x402 Compatibility
 
 Bidirectional interop between s402 and x402. An x402 client can talk to an s402 server (via the "exact" scheme), and an s402 client can talk to an x402 server (via automatic normalization).

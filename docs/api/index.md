@@ -1,3 +1,7 @@
+---
+description: Core TypeScript type definitions for the s402 protocol — payment requirements, scheme types, payloads, and settlement responses.
+---
+
 # Types
 
 Core type definitions for the s402 protocol. All types are importable from the main package or the `s402/types` sub-path.

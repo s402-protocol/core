@@ -6,7 +6,7 @@ description: Common questions about s402 — production readiness, testing, faci
 
 ## Is s402 production-ready?
 
-The protocol spec and TypeScript package (`s402@0.1.2`) are stable for the **Exact**, **Prepaid**, and **Escrow** schemes. These are v0.1 and covered by 211 tests.
+The protocol spec and TypeScript package (`s402@0.1.8`) are stable for the **Exact**, **Prepaid**, and **Escrow** schemes. These are v0.1 and covered by 643 tests (226 Move + 417 TypeScript).
 
 **Stream** and **Unlock** are v0.2 — the types are defined but the on-chain implementations are under active development. Use them for prototyping, not production.
 
@@ -40,6 +40,18 @@ const encoded = encodePaymentRequired({
 const decoded = decodePaymentRequired(encoded);
 assert(decoded.amount === '1000000');
 ```
+
+## What if a prepaid provider claims more than they actually served?
+
+The Move contract enforces a hard ceiling: providers cannot claim more than `ratePerCall × maxCalls` or more than the deposited balance. If they try to claim above the ceiling, the transaction fails on-chain — this part is trustless.
+
+What the contract cannot enforce is whether every claimed call actually happened. Two protections apply depending on the trust level you need:
+
+**v0.1 — economic bounds (default):** Keep deposits small and refill often. Your maximum exposure is one deposit cycle — not your total budget. The `withdrawalDelayMs` parameter ensures the provider has time to claim before you can drain the balance, but also bounds how long your capital is locked.
+
+**v0.2 — cryptographic receipts (opt-in):** When providers include `providerPubkey` in their requirements, they sign an Ed25519 receipt for every API call served. You accumulate these receipts locally. If the provider claims X calls but you only hold Y < X valid signed receipts, you have a cryptographic fraud proof — verifiable evidence of overclaiming.
+
+**For zero-trust scenarios** — unknown providers with no track record — use [Escrow](/schemes/escrow) instead. Escrow gives you full on-chain dispute resolution: an arbiter can resolve disputes, and if the deadline passes without resolution, anyone can trigger a refund.
 
 ## What happens if Sui goes down?
 

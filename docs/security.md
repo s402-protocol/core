@@ -1,3 +1,7 @@
+---
+description: s402 security model — trust boundaries, validation at decode time, scheme-specific security guarantees, and zero-dependency supply chain transparency.
+---
+
 # Security Model
 
 How s402 handles trust, validation, and failure modes.
@@ -81,11 +85,23 @@ This prevents clients from guessing whether to retry. If `retryable` is `false`,
 - The facilitator **must** call `waitForTransaction()` before returning success. Without finality confirmation, the server could grant access for a transaction that gets reverted.
 
 ### Prepaid
+
+**Provider-side enforcement (trustless):**
 - On-chain rate caps: `claimed ≤ maxCalls × ratePerCall` — hard ceiling enforced by Move contract
 - On-chain balance cap: `claimed ≤ deposited amount` — provider cannot claim beyond deposit
-- Withdrawal delay prevents immediate drain after deposit; gives provider time to claim
-- **Trust model caveat:** The contract enforces a maximum, not an exact count. A provider can claim up to the cap regardless of actual API calls served. This is a trust-bounded model — appropriate for commercial relationships, not adversarial zero-trust scenarios. For the latter, use Escrow.
-- **Horizontal scaling:** Multi-instance providers must coordinate off-chain usage counters to prevent double-authorization across instances.
+- Withdrawal delay prevents immediate drain after deposit; gives provider time to claim what they legitimately earned before the agent reclaims funds
+
+**Agent-side mitigations (economic):**
+- **Small deposits + short refill cycles**: Limit exposure to one deposit cycle. The worst-case overclaim is bounded by deposit size, not your total budget.
+- **Evaluate `withdrawalDelayMs` before depositing**: Set by the provider. High values lock your capital. Check it before committing funds to an unfamiliar provider.
+- **Prefer providers advertising `providerPubkey`**: Signals v0.2 support — signed receipts per call, enabling cryptographic fraud proofs if overclaiming occurs.
+
+**Trust model:**
+The contract enforces a maximum, not an exact count. A provider can claim up to the cap regardless of actual calls served. This is a trust-bounded model — appropriate for commercial relationships, not adversarial zero-trust scenarios. For the latter, use Escrow.
+
+**v0.2 signed receipts (opt-in):** When providers include `providerPubkey` (Ed25519) in requirements, they sign a receipt for every call served. Agents accumulate these and can produce a fraud proof if claimed count exceeds signed receipt count. Backward-compatible — providers without `providerPubkey` use v0.1 behavior.
+
+**Horizontal scaling:** Multi-instance providers must coordinate off-chain usage counters to prevent double-authorization across instances.
 
 ### Escrow
 - Time-locked vault: funds locked on-chain, not transferred until resolution

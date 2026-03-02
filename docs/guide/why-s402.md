@@ -1,3 +1,7 @@
+---
+description: Why HTTP 402 payments on Sui? The case for machine-to-machine payments that require no accounts, no API keys, and no billing dashboards — just a wallet and one header.
+---
+
 # Why s402?
 
 ## The Problem

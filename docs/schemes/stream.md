@@ -1,3 +1,7 @@
+---
+description: Per-second micropayments via an on-chain StreamingMeter. Deposit once, pay for exactly what you use — real-time billing without per-call transactions.
+---
+
 # Stream Scheme
 
 Per-second micropayments via an on-chain `StreamingMeter`. The client deposits funds into a shared object; the server claims accrued tokens over time. Pay only for what you use.

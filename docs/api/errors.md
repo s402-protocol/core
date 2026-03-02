@@ -1,3 +1,7 @@
+---
+description: s402 error codes, the s402Error class, and error handling patterns. Every error includes retryable and suggestedAction for autonomous agent recovery.
+---
+
 # Errors
 
 Every s402 error is typed, tells you whether it's retryable, and suggests what to do next. No guessing.
@@ -15,7 +19,8 @@ import { s402Error, s402ErrorCode, createS402Error } from 's402/errors';
 | `MANDATE_LIMIT_EXCEEDED` | No | Request mandate increase or split across transactions |
 | `STREAM_DEPLETED` | Yes | Top up the stream deposit |
 | `ESCROW_DEADLINE_PASSED` | No | Create a new escrow with a later deadline |
-| `UNLOCK_DECRYPTION_FAILED` | Yes | Re-request SEAL key with a fresh session key |
+| `UNLOCK_DECRYPTION_FAILED` | Yes | Re-request decryption key with a fresh session key |
+| `SETTLEMENT_FAILED` | Yes | Transient RPC failure during settlement — retry in a few seconds |
 | `FINALITY_TIMEOUT` | Yes | Transaction submitted but not confirmed — retry finality check |
 | `FACILITATOR_UNAVAILABLE` | Yes | Fall back to direct settlement if signer is available |
 | `INVALID_PAYLOAD` | No | Check payload format and re-sign the transaction |

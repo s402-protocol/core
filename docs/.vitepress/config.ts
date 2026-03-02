@@ -4,12 +4,19 @@ export default defineConfig({
   title: 's402',
   description: 'The HTTP 402 payment protocol for Sui. Five payment schemes. Built for AI agents that spend money autonomously.',
   cleanUrls: true,
+  sitemap: {
+    hostname: 'https://s402-protocol.org',
+  },
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     ['meta', { property: 'og:title', content: 's402 — The HTTP 402 payment protocol for Sui' }],
     ['meta', { property: 'og:description', content: 'The HTTP 402 payment protocol for Sui. Five payment schemes. From one-shot payments to prepaid API budgets. Built for AI agents that spend money autonomously.' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:image', content: '/images/og.png' }],
+    ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
+    ['meta', { name: 'twitter:title', content: 's402 — HTTP 402 payment protocol for Sui' }],
+    ['meta', { name: 'twitter:description', content: 'Five payment schemes for AI agents. From one-shot payments to prepaid API budgets — $0.014 gas per 1,000 calls.' }],
+    ['meta', { name: 'twitter:image', content: '/images/og.png' }],
   ],
   themeConfig: {
     nav: [
@@ -55,6 +62,7 @@ export default defineConfig({
           { text: 's402 vs x402', link: '/comparison' },
           { text: 'Design Principles', link: '/architecture' },
           { text: 'Security Model', link: '/security' },
+          { text: 'Fee Ownership & Trust', link: '/guide/fee-ownership' },
           { text: 'FAQ', link: '/faq' },
         ],
       },

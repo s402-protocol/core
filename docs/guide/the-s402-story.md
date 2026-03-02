@@ -1,4 +1,8 @@
-# The s402 Story: From a 27-Year-Old Promise to the Future of Internet Payments
+---
+description: A progressive guide to s402 — from first principles to enterprise architecture. Covers the economics, security model, and protocol design in depth, from ELI10 to staff-engineer level.
+---
+
+# The s402 Story: From a 29-Year-Old Promise to the Future of Internet Payments
 
 > A progressive guide to understanding s402 — from "explain like I'm 10" through to enterprise architecture. Whether you're a founder pitching to a board, a junior engineer reading your first TypeScript, or a staff architect evaluating protocol design, there's a chapter here for you.
 
@@ -140,15 +144,15 @@ This is the most common question. The answer is architectural:
 
 s402 is the **protocol layer** — it defines what goes over the wire. It's the foundation for:
 
-- **SweePay**: The reference implementation. Sui-specific scheme implementations, SDK, and developer tools.
-- **SweeWorld**: The marketplace. Where services advertise their s402 endpoints and agents discover them.
+- **Scheme implementations**: Sui-specific PTB builders, gas station, and developer SDK (e.g. `@sweefi/sui`).
+- **Service discovery**: Where services advertise their s402 endpoints and agents discover them (e.g. `/.well-known/s402.json`).
 
 ```
 ┌──────────────────────────────────────────────┐
-│              SweeWorld (Discovery)            │
+│           Service Discovery Layer             │
 │          Agents find services to pay for      │
 ├──────────────────────────────────────────────┤
-│              SweePay (Implementation)         │
+│           SDK / Implementation Layer          │
 │     Sui-specific: PTB builders, gas station,  │
 │     scheme implementations, SDK              │
 ├──────────────────────────────────────────────┤

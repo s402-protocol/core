@@ -1,3 +1,7 @@
+---
+description: HTTP encoding and decoding helpers for s402. Supports header transport (x402-compatible) and body transport for large payloads.
+---
+
 # HTTP Helpers
 
 Encode and decode s402 objects for HTTP transport. Supports two transport modes: **header transport** (base64-encoded JSON in HTTP headers, wire-compatible with x402) and **body transport** (raw JSON in the request/response body, for large payloads).

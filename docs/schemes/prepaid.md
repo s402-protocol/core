@@ -1,3 +1,7 @@
+---
+description: Deposit-based API access on Sui. One deposit, thousands of API calls, one claim — $0.014 total gas vs $7 per-call. Built for AI agent API budgets.
+---
+
 # Prepaid Scheme
 
 <img src="/images/prepaid.png" alt="Glowing reservoir of tokens being deposited into a digital vault" style="border-radius: 12px; margin-top: 16px; margin-bottom: 24px;" />
@@ -83,6 +87,80 @@ The provider tracks usage off-chain and claims on-chain. Understanding exactly w
 **Practical implication:** The Prepaid scheme is **trust-bounded**, not trustless. The contract sets the maximum that can be taken; it does not audit that the provider served every call they claim. For most commercial relationships this is sufficient — overclaiming is a business risk and a breach of contract. For zero-trust adversarial relationships, use Escrow instead.
 
 **Horizontal scaling note:** If a provider runs multiple server instances, off-chain usage tracking must be coordinated across instances (e.g., with a shared counter or distributed lock). Without this, two instances could independently authorize calls against the same balance, each believing it has headroom. This is an implementation concern for providers — ensure your usage counter is consistent before deploying Prepaid in a multi-instance setup.
+
+## Agent Security Recommendations
+
+The contract enforces the ceiling — it does not audit every call. These practices bound your exposure:
+
+**1. Keep deposits small and refill often.**
+Do not deposit a week's budget upfront. Deposit enough for one session or one day and refill as needed. If a provider overclaims, your maximum loss is bounded by one deposit cycle — not your total balance.
+
+**2. Size your deposit to your acceptable risk.**
+A $5 deposit with a $0.001/call rate and 5,000-call cap means the worst-case overclaim is $5. Think of your deposit size as your risk budget, not just your usage budget.
+
+**3. Evaluate `withdrawalDelayMs` before depositing.**
+This parameter is set by the provider, not you. A 1-hour delay means you cannot reclaim unclaimed funds for 1 hour after requesting withdrawal. A 7-day delay (the maximum) is a significant capital lockup. Always check this value before committing funds to an unfamiliar provider.
+
+**4. Prefer providers that advertise `providerPubkey`.**
+When a provider includes `providerPubkey` in their requirements, they support signed-receipt mode (v0.2) — cryptographic evidence of every call served. This upgrades the trust model from economic to verifiable. See [v0.2: Signed Receipts](#v02-signed-receipts-opt-in) below.
+
+**5. Use Escrow for unknown providers.**
+If you have no prior relationship with a provider and cannot evaluate their reputation, use [Escrow](/schemes/escrow) instead. Escrow gives you full on-chain dispute resolution with an arbiter and automatic deadline refunds. Prepaid is designed for recurring, established relationships — not first-contact commerce.
+
+## v0.2: Signed Receipts (Opt-In)
+
+Providers can opt into signed-receipt mode by including `providerPubkey` in their requirements. This is **backward-compatible** — providers without `providerPubkey` behave identically to v0.1. No changes required for existing providers or agents that don't implement v0.2.
+
+### How it works
+
+**Provider requirements (v0.2 mode):**
+
+```typescript
+const requirements: s402PaymentRequirements = {
+  s402Version: '1',
+  accepts: ['prepaid'],
+  network: 'sui:mainnet',
+  asset: '0x2::sui::SUI',
+  amount: '10000000',
+  payTo: '0xprovider...',
+  prepaid: {
+    ratePerCall: '1000',
+    maxCalls: '10000',
+    minDeposit: '10000000',
+    withdrawalDelayMs: '3600000',
+    providerPubkey: '0xabc123...', // Ed25519 public key, 32 bytes hex
+    disputeWindowMs: '3600000',    // 1 hour window for agent to dispute
+  },
+};
+```
+
+**Per-call receipt in HTTP response:**
+
+When `providerPubkey` is set, each API response includes a signed receipt in the header:
+
+```
+x-s402-receipt: <base64signature>:<callIndex>:<timestampMs>
+```
+
+The provider signs the message `${balanceId}:${callIndex}:${timestampMs}` with the Ed25519 private key corresponding to `providerPubkey`. This creates a tamper-proof record tied to the specific balance and call sequence.
+
+**Agent accumulates receipts:**
+
+The agent stores the receipts locally (memory or disk). If the provider later claims X calls but the agent holds only Y < X valid signatures, the agent has a cryptographic fraud proof — verifiable evidence of overclaiming.
+
+**Trust model with v0.2:**
+
+| | v0.1 (default) | v0.2 (opt-in, `providerPubkey` set) |
+|---|---|---|
+| **Ceiling enforcement** | On-chain (trustless) | On-chain (trustless) |
+| **Call audit** | Economic only | Cryptographic — signed per call |
+| **Overclaim proof** | None | Ed25519 signature set |
+| **Provider overhead** | None | ~1ms Ed25519 sign per response |
+| **Agent overhead** | None | ~100 bytes stored per call |
+
+::: tip Building a new provider?
+Implement v0.2 from the start. The overhead is minimal — one Ed25519 signature added to each HTTP response — and it gives your clients a verifiable trust guarantee from day one.
+:::
 
 ## Common Mistakes
 

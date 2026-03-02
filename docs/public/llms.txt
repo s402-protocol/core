@@ -1,0 +1,69 @@
+# s402 — HTTP 402 Payment Protocol for Sui
+
+> s402 is an open protocol that activates HTTP 402 on the Sui blockchain. It defines a wire format for machine-to-machine payments — fast enough for real-time conversations (~400ms finality), cheap enough for micropayments ($0.014 per thousand API calls), and rich enough for the full spectrum of commercial relationships AI agents need.
+
+## What is s402?
+
+s402 is a TypeScript protocol layer for HTTP 402 payments on Sui. It provides wire format encoding/decoding, five payment schemes, and a machine-native error model. Zero runtime dependencies.
+
+## Five Payment Schemes
+
+- **Exact** — One payment, one resource. Atomic PTB settlement.
+- **Prepaid** — Deposit once, make 1000+ API calls, batch-claim. Gas: $0.014 total vs $7.00 per-call.
+- **Escrow** — Time-locked vault with optional arbiter. Trustless commerce.
+- **Stream** — Per-second billing with on-chain rate cap.
+- **Unlock** — Pay-to-decrypt with Sui SEAL + Walrus.
+
+## Key Facts
+
+- Version: v0.1.8
+- License: Apache-2.0
+- Tests: 643 (226 Move + 417 TypeScript)
+- Zero runtime dependencies
+- x402-compatible (Coinbase's EVM payment protocol)
+- npm: https://www.npmjs.com/package/s402
+
+## Documentation
+
+- Quick Start: https://s402-protocol.org/guide/quickstart
+- How It Works: https://s402-protocol.org/guide/how-it-works
+- Which Scheme: https://s402-protocol.org/guide/which-scheme
+- Whitepaper: https://s402-protocol.org/whitepaper
+- Security Model: https://s402-protocol.org/security
+- API Reference: https://s402-protocol.org/api/
+- FAQ: https://s402-protocol.org/faq
+
+## Payment Schemes
+
+- Exact: https://s402-protocol.org/schemes/exact
+- Prepaid: https://s402-protocol.org/schemes/prepaid
+- Escrow: https://s402-protocol.org/schemes/escrow
+- Stream: https://s402-protocol.org/schemes/stream
+- Unlock: https://s402-protocol.org/schemes/unlock
+
+## Quick Example
+
+```typescript
+import { extractRequirementsFromResponse, encodePaymentPayload, S402_HEADERS } from 's402';
+
+// 1. Client makes a request, server returns 402
+const res = await fetch(url);
+if (res.status !== 402) return res;
+
+// 2. Decode requirements
+const requirements = extractRequirementsFromResponse(res);
+
+// 3. Build payment (you bring the Sui SDK)
+const payment = await buildPayment(requirements);
+
+// 4. Retry with payment
+return fetch(url, {
+  headers: { [S402_HEADERS.PAYMENT]: encodePaymentPayload(payment) },
+});
+```
+
+## Source
+
+- GitHub: https://github.com/s402-protocol/core
+- npm: https://www.npmjs.com/package/s402
+- Protocol docs: https://s402-protocol.org

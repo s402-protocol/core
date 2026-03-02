@@ -5,7 +5,7 @@
 
 **Sui-native HTTP 402 protocol.** Atomic settlement via Sui's Programmable Transaction Blocks (PTBs). Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
-s402 is the Sui-native implementation of HTTP 402 (Payment Required) — an open protocol that lets AI agents pay for API calls in a single HTTP request with no per-call on-chain transaction. Unlike Coinbase's x402 on Ethereum, s402 uses Sui's Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
+s402 is the Sui-native implementation of HTTP 402 (Payment Required) — an open protocol that lets AI agents pay for API calls in a single HTTP request with no per-call on-chain transaction. Unlike Coinbase's x402 on Base (EVM L2), s402 uses Sui's Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
 
 ```bash
 npm install s402
@@ -27,7 +27,7 @@ HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a pay
 | **Settlement** | Two-step: verify then settle (temporal gap) | Atomic: verify + settle in one PTB |
 | **Finality** | 12+ second blocks (EVM L1) | ~400ms (Sui) |
 | **Payment models** | Exact (one-shot) only | Five schemes: Exact, Prepaid, Escrow, Unlock, Stream |
-| **Micro-payments** | $7.00 gas per 1K calls (broken) | $0.014 gas per 1K calls (prepaid) |
+| **Micro-payments** | ~$1.60 gas per 1K calls on Base (broken) | $0.014 gas per 1K calls (prepaid) |
 | **Coin handling** | approve + transferFrom | Native `coinWithBalance` + `splitCoins` |
 | **Agent auth** | None | AP2 mandate delegation |
 | **Direct mode** | No | Yes (no facilitator needed) |

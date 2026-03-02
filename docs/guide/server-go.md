@@ -1,3 +1,7 @@
+---
+description: Accept s402 HTTP 402 payments in Go using net/http. Language-agnostic — works with Gin, Echo, Fiber, or any Go HTTP framework. No SDK required.
+---
+
 # Accept s402 Payments in Go
 
 s402 is language-agnostic. This example uses Go's `net/http` standard library — no external dependencies. The same pattern works with Gin, Echo, Fiber, or any Go HTTP framework.

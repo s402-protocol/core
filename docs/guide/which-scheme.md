@@ -1,3 +1,7 @@
+---
+description: How to choose the right s402 payment scheme. Decision tree comparing Exact, Prepaid, Escrow, Stream, and Unlock — pick the right one in 10 seconds.
+---
+
 # Which Scheme Do I Need?
 
 Five schemes sounds like a lot. Here is how to pick the right one in 10 seconds.

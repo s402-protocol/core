@@ -1,3 +1,7 @@
+---
+description: How s402 HTTP 402 payments work — the three-request flow, what the facilitator can and cannot do, direct settlement mode, and service discovery.
+---
+
 # How It Works
 
 s402 adds a payment negotiation layer to standard HTTP. The flow is simple: a client requests a resource, the server says "pay me first", the client pays, and the server delivers.
@@ -80,6 +84,23 @@ Content-Type: application/json
 
 { "data": "the premium content" }
 ```
+
+### What the facilitator can and cannot do
+
+The client sends a **fully signed, pre-built PTB** to the facilitator. The transaction is cryptographically locked at this point. Here is exactly what the facilitator can and cannot do:
+
+| | Facilitator |
+|---|---|
+| Verify the transaction will succeed (dry-run) | ✅ Can |
+| Broadcast the transaction to Sui | ✅ Can |
+| Return the settlement result to the server | ✅ Can |
+| Reject a payment that fails verification | ✅ Can |
+| Change the payment amount | ❌ Cannot |
+| Redirect funds to a different recipient | ❌ Cannot |
+| Replay the signed transaction for a second payment | ❌ Cannot (Sui nonces prevent replay) |
+| Silently fail without the server knowing | ❌ Cannot (settlement failure is an explicit typed error) |
+
+The facilitator cannot steal or alter anything — it is a **delivery service for a pre-sealed package**, not a trusted custodian. This is why direct mode is possible: the same security properties hold whether the client hands the PTB to a facilitator or broadcasts it directly.
 
 ## Direct Settlement
 

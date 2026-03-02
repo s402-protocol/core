@@ -1,3 +1,7 @@
+---
+description: s402 whitepaper — the economics, architecture, and design rationale for the HTTP 402 payment protocol for Sui. Five schemes, zero runtime dependencies, $0.014 per 1,000 calls.
+---
+
 # s402: An Internet-Native Payment Protocol for Autonomous Agents
 
 **Version 1.0 · February 2026 · Swee Group LLC**
@@ -16,7 +20,7 @@ The agent economy is here. This is its payment layer.
 
 ---
 
-## 1. The 27-Year Promise
+## 1. The 29-Year Promise
 
 > "This status code is reserved for future use."
 > — RFC 2068, Section 10.4.3, January 1997
@@ -25,7 +29,7 @@ HTTP 402 was a bet on the future. The architects of the web foresaw a world wher
 
 The bet was right. The infrastructure wasn't ready.
 
-In 1997, "digital payments" meant credit cards over SSL, processing fees of 2-3%, and settlement windows of 2-5 business days. There was no native concept of sub-cent amounts. You cannot build a micropayment system on that foundation. So HTTP 402 sat in the spec, acknowledged and unused, for twenty-eight years — present in every browser, every server, every HTTP library ever shipped. Infrastructure waiting for a moment that hadn't arrived.
+In 1997, "digital payments" meant credit cards over SSL, processing fees of 2-3%, and settlement windows of 2-5 business days. There was no native concept of sub-cent amounts. You cannot build a micropayment system on that foundation. So HTTP 402 sat in the spec, acknowledged and unused, for twenty-nine years — present in every browser, every server, every HTTP library ever shipped. Infrastructure waiting for a moment that hadn't arrived.
 
 Two things changed in 2025. First, Coinbase launched x402 — the first serious protocol to implement HTTP 402 at scale. Within months, x402 had processed over 100 million payments, attracted Cloudflare and Stripe integrations, and spawned a Foundation. The proof of concept was decisive: HTTP payments work. Agents, scripts, and services can exchange payment and receive data in a single round-trip.
 
@@ -299,10 +303,10 @@ The compat package is a deliberate sub-path import (`s402/compat`), not part of 
 
 ## 10. Implementation
 
-The `s402` npm package (v0.1.5, MIT licensed) is the protocol layer:
+The `s402` npm package (v0.1.8, Apache-2.0) is the protocol layer:
 
 - **2,079 lines** of TypeScript — types, encoding logic, scheme dispatch, error model
-- **2,915 lines** of tests — 207 total, including property-based fuzzing with arbitrarily generated payloads
+- **2,915 lines** of tests — 643 total (226 Move + 417 TypeScript), including property-based fuzzing with arbitrarily generated payloads
 - **Zero runtime dependencies** — pure TypeScript using only built-in APIs (`TextEncoder`, `btoa/atob`, `JSON`)
 - **Sub-path exports** — import only what you need: `s402/types`, `s402/http`, `s402/errors`, `s402/compat`
 
@@ -332,7 +336,7 @@ s402 is a protocol, which means it is an agreement. When a server responds with 
 
 The immediate horizon: AI agents paying for inference APIs, data feeds, content access, and compute — at economics that actually work. The medium horizon: agents commissioning other agents for specialized work — orchestration markets where capabilities are traded on-demand, with economic contracts that don't require human approval of each transaction. The longer horizon: a dense mesh of agent-to-agent economic activity where the payment protocol recedes into infrastructure, as invisible and as critical as TCP/IP.
 
-SweeWorld is the first marketplace built on s402: a discovery layer where services advertise their payment endpoints and agents find them. But the protocol is not owned by the marketplace. s402 is open, MIT-licensed, and implementable by anyone. The bet is not on a platform. The bet is on the protocol layer — the same bet the internet made on TCP/IP, on HTTP, on TLS.
+s402 enables a discovery layer where services advertise their payment endpoints and agents find them. The protocol is open, Apache-2.0 licensed, and implementable by anyone. The bet is not on a platform. The bet is on the protocol layer — the same bet the internet made on TCP/IP, on HTTP, on TLS.
 
 In 1997, the architects of HTTP wrote: *"This status code is reserved for future use."*
 
@@ -375,12 +379,12 @@ The future is using it now.
 - Solana Transaction Fees — solana.com/docs/core/fees (~$0.00025/tx)
 
 **s402 Implementation**
-- s402 npm package v0.1.4 — npmjs.com/package/s402
+- s402 npm package v0.1.8 — npmjs.com/package/s402
 - s402 Protocol documentation — s402-protocol.org
 - s402 Source repository — github.com/s402-protocol/core
 
 ---
 
-*s402 v1.0 · February 2026 · © Swee Group LLC · MIT License*
+*s402 v1.0 · February 2026 · © Swee Group LLC · Apache-2.0*
 
 *s402-protocol.org*

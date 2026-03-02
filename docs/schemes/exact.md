@@ -1,3 +1,7 @@
+---
+description: One-shot HTTP 402 payment on Sui. One signed PTB per request, fully x402-compatible. The baseline scheme for simple API payments.
+---
+
 # Exact Scheme
 
 One-shot payment. The client builds a signed transfer PTB, the facilitator verifies and broadcasts it atomically. One transaction per request.

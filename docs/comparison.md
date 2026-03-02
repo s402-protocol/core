@@ -1,3 +1,7 @@
+---
+description: s402 vs x402 — how Sui's HTTP 402 protocol extends Coinbase's x402 with Prepaid, Escrow, Stream, and Unlock schemes. Complementary, not competing.
+---
+
 # s402 vs x402
 
 s402 extends [x402](https://github.com/coinbase/x402) (Coinbase's HTTP 402 protocol) with Sui-native capabilities. They are **complementary**, not competing — x402 handles Base, Solana, and traditional rails; s402 handles Sui's unique architecture.

@@ -1,3 +1,7 @@
+---
+description: Trustless commerce with on-chain escrow. Time-locked funds, optional arbiter dispute resolution, and permissionless deadline refunds — ideal for agent-to-agent contracts.
+---
+
 # Escrow Scheme
 
 <img src="/images/escrow.png" alt="Geometric vault with a luminous time-lock mechanism" style="border-radius: 12px; margin-top: 16px; margin-bottom: 24px;" />

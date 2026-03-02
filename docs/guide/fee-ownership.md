@@ -1,3 +1,7 @@
+---
+description: How s402 handles protocol fees — why fee ownership belongs to the facilitator, not the resource server, and the five failure modes this design prevents.
+---
+
 # Fee Ownership & Trust Model
 
 > **Decision**: Protocol fees are owned by the Facilitator, not the Resource Server.
