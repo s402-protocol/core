@@ -21,7 +21,8 @@ src/
 
 ## Key rules
 
-- **Zero runtime deps.** This package must never add runtime dependencies. Chain-specific code belongs in `@sweefi/sui`.
+- **Zero runtime deps.** This package must never add runtime dependencies.
+- **Chain-agnostic (S7).** No chain-specific address formats, amount bounds, or imports in `src/`. Sui validation → `@sweefi/sui`. Solana validation → `@sweefi/solana`. See S7 invariant below.
 - **ESM only.** No CommonJS.
 - **Types are the product.** Most consumers import types only. Keep the type surface clean and well-documented.
 - **x402 compat is opt-in.** The `s402/compat` subpath provides x402 V1/V2 normalization as a migration aid. The core protocol (`client.ts`, `http.ts`) has no x402 dependency.
@@ -30,7 +31,7 @@ src/
 
 ```bash
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (245 across 10 suites)
+pnpm run test       # Run tests (258 across 11 suites)
 pnpm run typecheck  # tsc --noEmit
 ```
 
@@ -159,8 +160,38 @@ s402 has **6 formally proven invariants** in `INVARIANTS.md`. Read these before 
 | S4 | Error recoverability | Liveness | Agents can always determine retry vs. abandon |
 | S5 | Concurrent payment dedup | Safety | Identical payloads produce at most one settlement |
 | S6 | x402 compatibility roundtrip | Structural | s402 → x402 → s402 preserves all x402 fields |
+| S7 | Chain-agnostic boundary | Safety | s402 core contains ZERO chain-specific logic (see below) |
 
 **If you change `facilitator.ts`, `http.ts`, or `errors.ts`, re-verify the relevant invariant.**
+
+### S7: Chain-Agnostic Boundary (CRITICAL — Read Before ANY Code Change)
+
+**s402 is a chain-agnostic protocol.** The `src/` directory must NEVER contain:
+
+- Chain-specific address validation (no Sui `0x` + 64 hex, no Solana base58, no Ethereum EIP-55)
+- Chain-specific amount magnitude checks (no u64 max, no lamport bounds)
+- Chain-specific imports (`@mysten/sui`, `@solana/web3.js`, `ethers`, etc.)
+- Chain-specific constants (coin type strings, network IDs, RPC URLs)
+
+**Where chain-specific code belongs:** `@sweefi/sui` (Sui), `@sweefi/solana` (Solana), or future chain packages. These packages import from `s402` and add chain-specific validation on top.
+
+**What s402 validates:** Structure and safety only — non-empty strings, no control characters, numeric format (parseable as integer), key presence/absence. Never format correctness of chain-specific values.
+
+**This invariant is enforced by `test/boundary.test.ts`.** The test greps `src/` for chain-specific patterns and fails if any are found. If you believe a chain-specific check is genuinely needed in s402, you are almost certainly wrong — discuss with the maintainer first.
+
+**Why this exists:** In Feb 2026, multiple AI sessions introduced Sui-specific address validation (`/^0x[0-9a-fA-F]{64}$/`) into `http.ts` — the protocol layer. Each subsequent AI session saw the regex and assumed it was correct. It took 4-6 AI sessions and a human review to catch the violation. This invariant + test prevents recurrence.
+
+### Verify Prior AI Work (CRITICAL for AI Agents)
+
+**Do not assume existing code is correct.** Prior code may have been written by another AI session that:
+- Misunderstood the s402/SweeFi boundary (S7 above)
+- Introduced chain-specific logic in the wrong layer
+- Added validation that is too strict or too loose
+- Made assumptions that aren't documented in this file
+
+**Before modifying existing code:** Verify it against the invariants (S1-S7) above. If you find a violation, fix it — don't perpetuate it. If a prior AI added something that looks wrong, it probably is wrong.
+
+**Before adding new validation:** Ask: "Is this chain-specific?" If yes, it belongs in `@sweefi/sui`, not here. The `test/boundary.test.ts` test will catch you if you get this wrong.
 
 ### Error Design: Machines First
 
