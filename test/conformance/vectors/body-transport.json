@@ -1,0 +1,142 @@
+[
+  {
+    "description": "Requirements body encode/decode",
+    "input": {
+      "type": "requirements",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      }
+    },
+    "expected": {
+      "body": "{\"s402Version\":\"1\",\"accepts\":[\"exact\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"}",
+      "decoded": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      }
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Requirements body with extensions",
+    "input": {
+      "type": "requirements",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "extensions": {
+          "auction": {
+            "type": "sealed-bid",
+            "deadline": 1708000000000
+          },
+          "customField": "hello world"
+        }
+      }
+    },
+    "expected": {
+      "body": "{\"s402Version\":\"1\",\"accepts\":[\"exact\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\",\"extensions\":{\"auction\":{\"type\":\"sealed-bid\",\"deadline\":1708000000000},\"customField\":\"hello world\"}}",
+      "decoded": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "extensions": {
+          "auction": {
+            "type": "sealed-bid",
+            "deadline": 1708000000000
+          },
+          "customField": "hello world"
+        }
+      }
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Payload body encode/decode",
+    "input": {
+      "type": "payload",
+      "value": {
+        "s402Version": "1",
+        "scheme": "exact",
+        "payload": {
+          "transaction": "dHhfYnl0ZXM=",
+          "signature": "c2lnX2J5dGVz"
+        }
+      }
+    },
+    "expected": {
+      "body": "{\"s402Version\":\"1\",\"scheme\":\"exact\",\"payload\":{\"transaction\":\"dHhfYnl0ZXM=\",\"signature\":\"c2lnX2J5dGVz\"}}",
+      "decoded": {
+        "s402Version": "1",
+        "scheme": "exact",
+        "payload": {
+          "transaction": "dHhfYnl0ZXM=",
+          "signature": "c2lnX2J5dGVz"
+        }
+      }
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Settle body encode/decode",
+    "input": {
+      "type": "settle",
+      "value": {
+        "success": true,
+        "txDigest": "ABC123",
+        "finalityMs": 300
+      }
+    },
+    "expected": {
+      "body": "{\"success\":true,\"txDigest\":\"ABC123\",\"finalityMs\":300}",
+      "decoded": {
+        "success": true,
+        "txDigest": "ABC123",
+        "finalityMs": 300
+      }
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Settle failure body encode/decode",
+    "input": {
+      "type": "settle",
+      "value": {
+        "success": false,
+        "error": "Gas object not found",
+        "errorCode": "SETTLEMENT_FAILED"
+      }
+    },
+    "expected": {
+      "body": "{\"success\":false,\"error\":\"Gas object not found\",\"errorCode\":\"SETTLEMENT_FAILED\"}",
+      "decoded": {
+        "success": false,
+        "error": "Gas object not found",
+        "errorCode": "SETTLEMENT_FAILED"
+      }
+    },
+    "shouldReject": false
+  }
+]

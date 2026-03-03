@@ -1,0 +1,156 @@
+[
+  {
+    "description": "Requirements header roundtrip: encode → decode → re-encode = identical",
+    "input": {
+      "type": "requirements",
+      "transport": "header",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      }
+    },
+    "expected": {
+      "firstEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCJ9",
+      "reEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCJ9",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Requirements body roundtrip: encode → decode → re-encode = identical",
+    "input": {
+      "type": "requirements",
+      "transport": "body",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      }
+    },
+    "expected": {
+      "firstEncode": "{\"s402Version\":\"1\",\"accepts\":[\"exact\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"}",
+      "reEncode": "{\"s402Version\":\"1\",\"accepts\":[\"exact\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"}",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Payload header roundtrip: encode → decode → re-encode = identical",
+    "input": {
+      "type": "payload",
+      "transport": "header",
+      "value": {
+        "s402Version": "1",
+        "scheme": "exact",
+        "payload": {
+          "transaction": "dHhfYnl0ZXM=",
+          "signature": "c2lnX2J5dGVz"
+        }
+      }
+    },
+    "expected": {
+      "firstEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJleGFjdCIsInBheWxvYWQiOnsidHJhbnNhY3Rpb24iOiJkSGhmWW5sMFpYTT0iLCJzaWduYXR1cmUiOiJjMmxuWDJKNWRHVnoifX0=",
+      "reEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJleGFjdCIsInBheWxvYWQiOnsidHJhbnNhY3Rpb24iOiJkSGhmWW5sMFpYTT0iLCJzaWduYXR1cmUiOiJjMmxuWDJKNWRHVnoifX0=",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Payload body roundtrip: encode → decode → re-encode = identical",
+    "input": {
+      "type": "payload",
+      "transport": "body",
+      "value": {
+        "s402Version": "1",
+        "scheme": "exact",
+        "payload": {
+          "transaction": "dHhfYnl0ZXM=",
+          "signature": "c2lnX2J5dGVz"
+        }
+      }
+    },
+    "expected": {
+      "firstEncode": "{\"s402Version\":\"1\",\"scheme\":\"exact\",\"payload\":{\"transaction\":\"dHhfYnl0ZXM=\",\"signature\":\"c2lnX2J5dGVz\"}}",
+      "reEncode": "{\"s402Version\":\"1\",\"scheme\":\"exact\",\"payload\":{\"transaction\":\"dHhfYnl0ZXM=\",\"signature\":\"c2lnX2J5dGVz\"}}",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Settle header roundtrip: encode → decode → re-encode = identical",
+    "input": {
+      "type": "settle",
+      "transport": "header",
+      "value": {
+        "success": true,
+        "txDigest": "ABC123",
+        "finalityMs": 300
+      }
+    },
+    "expected": {
+      "firstEncode": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6IkFCQzEyMyIsImZpbmFsaXR5TXMiOjMwMH0=",
+      "reEncode": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6IkFCQzEyMyIsImZpbmFsaXR5TXMiOjMwMH0=",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Settle body roundtrip: encode → decode → re-encode = identical",
+    "input": {
+      "type": "settle",
+      "transport": "body",
+      "value": {
+        "success": true,
+        "txDigest": "ABC123",
+        "finalityMs": 300
+      }
+    },
+    "expected": {
+      "firstEncode": "{\"success\":true,\"txDigest\":\"ABC123\",\"finalityMs\":300}",
+      "reEncode": "{\"success\":true,\"txDigest\":\"ABC123\",\"finalityMs\":300}",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Complex requirements with extensions roundtrip",
+    "input": {
+      "type": "requirements",
+      "transport": "header",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "extensions": {
+          "auction": {
+            "type": "sealed-bid",
+            "deadline": 1708000000000
+          },
+          "customField": "hello world"
+        }
+      }
+    },
+    "expected": {
+      "firstEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsImV4dGVuc2lvbnMiOnsiYXVjdGlvbiI6eyJ0eXBlIjoic2VhbGVkLWJpZCIsImRlYWRsaW5lIjoxNzA4MDAwMDAwMDAwfSwiY3VzdG9tRmllbGQiOiJoZWxsbyB3b3JsZCJ9fQ==",
+      "reEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsImV4dGVuc2lvbnMiOnsiYXVjdGlvbiI6eyJ0eXBlIjoic2VhbGVkLWJpZCIsImRlYWRsaW5lIjoxNzA4MDAwMDAwMDAwfSwiY3VzdG9tRmllbGQiOiJoZWxsbyB3b3JsZCJ9fQ==",
+      "identical": true
+    },
+    "shouldReject": false
+  }
+]

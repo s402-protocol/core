@@ -1,0 +1,65 @@
+[
+  {
+    "description": "Success with txDigest and finalityMs",
+    "input": {
+      "success": true,
+      "txDigest": "ABC123digest",
+      "finalityMs": 450
+    },
+    "expected": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6IkFCQzEyM2RpZ2VzdCIsImZpbmFsaXR5TXMiOjQ1MH0="
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Success with all optional fields",
+    "input": {
+      "success": true,
+      "txDigest": "XYZ789digest",
+      "receiptId": "0xreceipt123",
+      "finalityMs": 200,
+      "streamId": "0xstream456"
+    },
+    "expected": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6IlhZWjc4OWRpZ2VzdCIsInJlY2VpcHRJZCI6IjB4cmVjZWlwdDEyMyIsImZpbmFsaXR5TXMiOjIwMCwic3RyZWFtSWQiOiIweHN0cmVhbTQ1NiJ9"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Failure with error message",
+    "input": {
+      "success": false,
+      "error": "Insufficient gas",
+      "errorCode": "SETTLEMENT_FAILED"
+    },
+    "expected": {
+      "header": "eyJzdWNjZXNzIjpmYWxzZSwiZXJyb3IiOiJJbnN1ZmZpY2llbnQgZ2FzIiwiZXJyb3JDb2RlIjoiU0VUVExFTUVOVF9GQUlMRUQifQ=="
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Failure with retryable errorCode",
+    "input": {
+      "success": false,
+      "error": "RPC timeout",
+      "errorCode": "FINALITY_TIMEOUT"
+    },
+    "expected": {
+      "header": "eyJzdWNjZXNzIjpmYWxzZSwiZXJyb3IiOiJSUEMgdGltZW91dCIsImVycm9yQ29kZSI6IkZJTkFMSVRZX1RJTUVPVVQifQ=="
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Success with balanceId (prepaid)",
+    "input": {
+      "success": true,
+      "txDigest": "prep123",
+      "balanceId": "0xbalance789",
+      "finalityMs": 300
+    },
+    "expected": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6InByZXAxMjMiLCJiYWxhbmNlSWQiOiIweGJhbGFuY2U3ODkiLCJmaW5hbGl0eU1zIjozMDB9"
+    },
+    "shouldReject": false
+  }
+]

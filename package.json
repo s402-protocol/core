@@ -36,7 +36,8 @@
     "README.md",
     "LICENSE",
     "CHANGELOG.md",
-    "SECURITY.md"
+    "SECURITY.md",
+    "test/conformance/vectors"
   ],
   "main": "./dist/index.mjs",
   "module": "./dist/index.mjs",

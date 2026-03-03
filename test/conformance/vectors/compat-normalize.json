@@ -1,0 +1,259 @@
+[
+  {
+    "description": "x402 V1 flat format → s402",
+    "input": {
+      "x402Version": 1,
+      "scheme": "exact",
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipient123",
+      "maxTimeoutSeconds": 60
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipient123"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 V2 envelope (single offer) → s402",
+    "input": {
+      "x402Version": 2,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "2000000",
+          "payTo": "0xrecipient456"
+        }
+      ]
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "2000000",
+      "payTo": "0xrecipient456"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 V2 envelope (multiple offers) → s402 (first offer taken)",
+    "input": {
+      "x402Version": 2,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xrecipientFirst"
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "USDC",
+          "amount": "500000",
+          "payTo": "0xrecipientSecond"
+        }
+      ]
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipientFirst"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 V1 with maxAmountRequired → amount",
+    "input": {
+      "x402Version": 1,
+      "scheme": "exact",
+      "network": "eip155:8453",
+      "asset": "USDC",
+      "maxAmountRequired": "7500000",
+      "payTo": "0xethRecipient"
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "eip155:8453",
+      "asset": "USDC",
+      "amount": "7500000",
+      "payTo": "0xethRecipient"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Native s402 passed through unchanged",
+    "input": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 V1 with extra unknown fields (stripped)",
+    "input": {
+      "x402Version": 1,
+      "scheme": "exact",
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipient789",
+      "unknownField": "should be stripped",
+      "anotherRandom": 42
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipient789"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 with facilitatorUrl (SSRF-safe HTTPS)",
+    "input": {
+      "x402Version": 1,
+      "scheme": "exact",
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipientUrl",
+      "facilitatorUrl": "https://safe-facilitator.example.com/settle"
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipientUrl",
+      "facilitatorUrl": "https://safe-facilitator.example.com/settle"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 V1 with both amount and maxAmountRequired (amount wins)",
+    "input": {
+      "x402Version": 1,
+      "scheme": "exact",
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "2000000",
+      "maxAmountRequired": "1000000",
+      "payTo": "0xrecipientBoth"
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "2000000",
+      "payTo": "0xrecipientBoth"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 V2 envelope with resource metadata",
+    "input": {
+      "x402Version": 2,
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "3000000",
+          "payTo": "0xrecipientRes"
+        }
+      ],
+      "resource": {
+        "url": "https://api.example.com/data",
+        "mimeType": "application/json"
+      }
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "3000000",
+      "payTo": "0xrecipientRes"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "x402 V1 with extensions preserved",
+    "input": {
+      "x402Version": 1,
+      "scheme": "exact",
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipientExt",
+      "extensions": {
+        "custom": "data"
+      }
+    },
+    "expected": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipientExt",
+      "extensions": {
+        "custom": "data"
+      }
+    },
+    "shouldReject": false
+  }
+]

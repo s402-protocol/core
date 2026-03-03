@@ -1,0 +1,317 @@
+[
+  {
+    "description": "Rejects missing s402Version",
+    "input": {
+      "header": "eyJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects missing accepts array",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIn0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects missing network",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects missing asset",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIn0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects missing amount",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwicGF5VG8iOiIweGFiYyJ9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects missing payTo",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCJ9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects negative amount",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiLTEwMCIsInBheVRvIjoiMHhhYmMifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects non-numeric amount",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50Ijoibm90X2FfbnVtYmVyIiwicGF5VG8iOiIweGFiYyJ9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects leading zeros in amount (except \"0\")",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMDA3IiwicGF5VG8iOiIweGFiYyJ9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects floating point amount",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMS41IiwicGF5VG8iOiIweGFiYyJ9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects payTo with control characters",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmNcdTAwMDBkZWYifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects protocolFeeAddress with control characters",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUFkZHJlc3MiOiIweGZlZVxuXHJpbmplY3Rpb24ifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects empty payTo",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiIn0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects prepaid providerPubkey without disputeWindowMs",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjM2MDAwMDAiLCJwcm92aWRlclB1YmtleSI6ImFiYzEyMyJ9fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects prepaid disputeWindowMs without providerPubkey",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjM2MDAwMDAiLCJkaXNwdXRlV2luZG93TXMiOiI4NjQwMDAwMCJ9fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects negative expiresAt",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHBpcmVzQXQiOi0xfQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects empty accepts array",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyJ9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects unsupported s402Version \"2\"",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjIiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects numeric s402Version (must be string \"1\")",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6MSwiYWNjZXB0cyI6WyJleGFjdCJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIn0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects protocolFeeBps exceeding 10000",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUJwcyI6MTAwMDF9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects negative protocolFeeBps",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUJwcyI6LTF9"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects non-integer protocolFeeBps",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUJwcyI6NTAuNX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects amount exceeding u64 max",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTg0NDY3NDQwNzM3MDk1NTE2MTYiLCJwYXlUbyI6IjB4YWJjIn0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects invalid base64 header",
+    "input": {
+      "header": "!!!not+valid+base64!!!"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects empty string header",
+    "input": {
+      "header": ""
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects base64 decoding to non-JSON",
+    "input": {
+      "header": "dGhpcyBpcyBub3QganNvbiBhdCBhbGw="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects facilitatorUrl with file:// scheme (SSRF)",
+    "input": {
+      "header": "{\"x402Version\":1,\"scheme\":\"exact\",\"network\":\"sui:mainnet\",\"asset\":\"SUI\",\"amount\":\"1000\",\"payTo\":\"0xabc\",\"facilitatorUrl\":\"file:///etc/passwd\"}",
+      "decodeAs": "compat"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects facilitatorUrl with javascript: scheme (SSRF)",
+    "input": {
+      "header": "{\"x402Version\":1,\"scheme\":\"exact\",\"network\":\"sui:mainnet\",\"asset\":\"SUI\",\"amount\":\"1000\",\"payTo\":\"0xabc\",\"facilitatorUrl\":\"javascript:alert(1)\"}",
+      "decodeAs": "compat"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects invalid scheme name in payload",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJub25leGlzdGVudF9zY2hlbWUiLCJwYXlsb2FkIjp7InRyYW5zYWN0aW9uIjoiZEhnPSIsInNpZ25hdHVyZSI6ImMybG4ifX0=",
+      "decodeAs": "payload"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects receipt with too few fields",
+    "input": {
+      "header": "v2:AAAA:1:1700000000000"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "RECEIPT_PARSE_ERROR"
+  },
+  {
+    "description": "Rejects receipt with non-numeric callNumber",
+    "input": {
+      "header": "v2:AAAA:abc:1700000000000:BBBB"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "RECEIPT_PARSE_ERROR"
+  },
+  {
+    "description": "Rejects receipt with unknown version prefix",
+    "input": {
+      "header": "v9:AAAA:1:1700000000000:BBBB"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "RECEIPT_PARSE_ERROR"
+  },
+  {
+    "description": "Rejects receipt with callNumber 0 (must be positive)",
+    "input": {
+      "header": "v2:q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqw==:0:1700000000000:zc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "RECEIPT_PARSE_ERROR"
+  },
+  {
+    "description": "Rejects receipt with timestampMs 0 (must be positive)",
+    "input": {
+      "header": "v2:q6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urq6urqw==:1:0:zc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc3Nzc0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "RECEIPT_PARSE_ERROR"
+  },
+  {
+    "description": "Rejects network with control characters",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldFx1MDAwMCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects asset with control characters",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWlcbjo6U1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects facilitatorUrl with control characters (CRLF injection)",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJmYWNpbGl0YXRvclVybCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vc2V0dGxlXHJcblgtSW5qZWN0ZWQ6IGV2aWwifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects prepaid withdrawalDelayMs below 60000 (1 min minimum)",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjU5OTk5In19"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects prepaid withdrawalDelayMs above 604800000 (7 day maximum)",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjYwNDgwMDAwMSJ9fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  }
+]

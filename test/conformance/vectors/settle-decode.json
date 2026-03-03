@@ -1,0 +1,76 @@
+[
+  {
+    "description": "Decode success response",
+    "input": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6IkFCQzEyM2RpZ2VzdCIsImZpbmFsaXR5TXMiOjQ1MH0="
+    },
+    "expected": {
+      "success": true,
+      "txDigest": "ABC123digest",
+      "finalityMs": 450
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode failure response",
+    "input": {
+      "header": "eyJzdWNjZXNzIjpmYWxzZSwiZXJyb3IiOiJJbnN1ZmZpY2llbnQgZ2FzIiwiZXJyb3JDb2RlIjoiU0VUVExFTUVOVF9GQUlMRUQifQ=="
+    },
+    "expected": {
+      "success": false,
+      "error": "Insufficient gas",
+      "errorCode": "SETTLEMENT_FAILED"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode failure with retryable flag",
+    "input": {
+      "header": "eyJzdWNjZXNzIjpmYWxzZSwiZXJyb3IiOiJSUEMgdGltZW91dCIsImVycm9yQ29kZSI6IkZJTkFMSVRZX1RJTUVPVVQifQ=="
+    },
+    "expected": {
+      "success": false,
+      "error": "RPC timeout",
+      "errorCode": "FINALITY_TIMEOUT"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode success with escrowId",
+    "input": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6ImVzY3Jvd19kaWdlc3QiLCJlc2Nyb3dJZCI6IjB4ZXNjcm93MTIzIiwiZmluYWxpdHlNcyI6NTAwfQ=="
+    },
+    "expected": {
+      "success": true,
+      "txDigest": "escrow_digest",
+      "finalityMs": 500,
+      "escrowId": "0xescrow123"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode success with balanceId",
+    "input": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6ImJhbGFuY2VfZGlnZXN0IiwiYmFsYW5jZUlkIjoiMHhiYWxhbmNlNDU2IiwiZmluYWxpdHlNcyI6MzUwfQ=="
+    },
+    "expected": {
+      "success": true,
+      "txDigest": "balance_digest",
+      "finalityMs": 350,
+      "balanceId": "0xbalance456"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode strips unknown top-level keys from settle response",
+    "input": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6IkFCQzEyMyIsImZpbmFsaXR5TXMiOjMwMCwiaW5qZWN0ZWRFdmlsIjoic2hvdWxkIGJlIHN0cmlwcGVkIiwiaW50ZXJuYWxOb3RlIjoiYWxzbyBzdHJpcHBlZCJ9"
+    },
+    "expected": {
+      "success": true,
+      "txDigest": "ABC123",
+      "finalityMs": 300
+    },
+    "shouldReject": false
+  }
+]
