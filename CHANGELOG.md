@@ -27,7 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **BREAKING**: `s402RouteConfig.asset` is now required (was optional).
 - JSDoc on `s402PaymentRequirements` updated to chain-agnostic wording (network, asset, amount fields).
-- 258 tests across 11 suites (was 207 at v0.1.0).
+- **Conformance test suite** — 133 machine-readable JSON test vectors across 12 files for cross-language implementation verification. Covers encode/decode, body transport, compat normalization, receipt format/parse, validation rejection, key-stripping, and roundtrip identity. Vectors ship in the npm package.
+- **API stability declaration** — `API-STABILITY.md` classifies all 83 exports as stable/experimental/internal.
+- 405 tests across 12 suites (was 207 at v0.1.0).
 
 ## [0.1.8] - 2026-02-27
 

@@ -2,7 +2,7 @@
 
 ## What is this?
 
-`s402` is the Sui-native HTTP 402 payment protocol. It defines chain-agnostic types, HTTP encoding/decoding, and error handling. Optional x402 compat layer available via `s402/compat`. **Zero runtime dependencies.**
+`s402` is a chain-agnostic HTTP 402 payment protocol. It defines types, HTTP encoding/decoding, and error handling for five payment schemes. Optional x402 compat layer available via `s402/compat`. **Zero runtime dependencies.**
 
 ## Architecture
 
@@ -31,9 +31,17 @@ src/
 
 ```bash
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (258 across 11 suites)
+pnpm run test       # Run tests (405 across 12 suites, incl. 133-vector conformance)
 pnpm run typecheck  # tsc --noEmit
 ```
+
+## Conformance test suite
+
+`test/conformance/` contains 133 machine-readable JSON test vectors across 12 files. These are the **product** — cross-language implementors (Go, Python, Rust) use them to verify s402 conformance without this TypeScript runner. The vectors ship in the npm package.
+
+- **Generator**: `npx tsx test/conformance/generate-vectors.ts` — regenerate after any encode/decode changes
+- **Runner**: `test/conformance/conformance.test.ts` — vitest runner that proves s402 passes its own spec
+- **Docs**: `test/conformance/README.md` — cross-language implementation guide
 
 ## Sub-path exports
 
@@ -150,7 +158,7 @@ The canonical validators (`validateRequirementsShape`, `pickRequirementsFields`)
 
 ### Safety Invariants
 
-s402 has **6 formally proven invariants** in `INVARIANTS.md`. Read these before modifying payment processing, error handling, or scheme dispatch:
+s402 has **7 formally proven invariants** in `INVARIANTS.md`. Read these before modifying payment processing, error handling, or scheme dispatch:
 
 | ID | Property | Type | What it protects |
 |----|----------|------|------------------|

@@ -325,6 +325,20 @@ const requirements: s402PaymentRequirements = {
 
 5. **Errors tell you what to do.** Every error code includes `retryable` (can the client try again?) and `suggestedAction` (what should it do?). Agents can self-recover.
 
+## Conformance Testing
+
+s402 ships 133 machine-readable JSON test vectors for cross-language conformance. If you're implementing s402 in Go, Python, Rust, or any other language, use these vectors to verify your implementation matches the spec.
+
+```bash
+# Vectors are in the npm package
+ls node_modules/s402/test/conformance/vectors/
+
+# Or clone the repo
+ls test/conformance/vectors/
+```
+
+See [`test/conformance/README.md`](./test/conformance/README.md) for the vector format, encoding scheme, and implementation guide.
+
 ## Related
 
 - **[SweeFi](https://github.com/sweeinc/sweefi)** — Open-source payment SDK built on s402. 10 packages including PTB builders, MCP tools, CLI, and UI components.
