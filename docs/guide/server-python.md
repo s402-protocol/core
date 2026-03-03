@@ -125,6 +125,17 @@ The example above is minimal. For production, add:
 - **Expiry enforcement**: Reject payments made after `expiresAt`
 - **HTTPS**: Required — payment headers are base64, not encrypted
 
+## Conformance Testing
+
+s402 ships [133 machine-readable JSON test vectors](/guide/conformance) in the npm package. Use them to verify your Python implementation matches the spec:
+
+```bash
+npm pack s402 && tar xzf s402-*.tgz
+ls package/test/conformance/vectors/
+```
+
+Load the vectors with `json.load()` and run your encode/decode functions against them. See the [Conformance Vectors](/guide/conformance) guide for a complete pytest example.
+
 ## Key Takeaway
 
 The server side of s402 is trivial in any language. The complexity lives in the _client_ (building Sui transactions) and the _protocol_ (types, encoding). Your server just decodes base64 and checks one RPC call.

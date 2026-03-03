@@ -69,4 +69,4 @@ s402 defines the wire format — _what_ gets sent over HTTP. You bring your own 
 
 ---
 
-**v0.2.0** · Five payment schemes · 405 tests with 133-vector conformance suite + property-based fuzzing · Apache-2.0 · [View on npm](https://www.npmjs.com/package/s402)
+**v0.2.1** · Five payment schemes · 405 tests with [133-vector conformance suite](/guide/conformance) + property-based fuzzing · Apache-2.0 · [View on npm](https://www.npmjs.com/package/s402)

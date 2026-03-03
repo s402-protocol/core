@@ -170,6 +170,17 @@ The example above is minimal. For production, add:
 - **HTTPS**: Required — payment headers are base64, not encrypted
 - **Concurrent safety**: Use `sync.Map` or similar for the replay protection set
 
+## Conformance Testing
+
+s402 ships [133 machine-readable JSON test vectors](/guide/conformance) in the npm package. Use them to verify your Go implementation matches the spec — no TypeScript required:
+
+```bash
+npm pack s402 && tar xzf s402-*.tgz
+ls package/test/conformance/vectors/
+```
+
+Load the vectors, run your encode/decode functions against them, and compare results. See the [Conformance Vectors](/guide/conformance) guide for a complete Go example.
+
 ## Key Takeaway
 
 Go's standard library is enough to accept s402 payments. No SDK, no dependencies, no framework required. The entire server-side integration is: decode base64, parse JSON, POST to Sui RPC.

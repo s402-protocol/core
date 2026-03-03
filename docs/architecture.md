@@ -141,6 +141,12 @@ Three design details:
 - **Latency guard**: If the dry-run took a long time, don't waste gas on requirements the server has already expired
 - **Not a TOCTOU fix**: Sui PTBs are atomic. The latency guard just avoids broadcasting stale transactions
 
+## Cross-Language Conformance
+
+s402 ships [133 machine-readable JSON test vectors](/guide/conformance) that define correct behavior for all encode/decode paths, validation rules, and key-stripping boundaries. Any implementation in any language can load these vectors and verify compliance — without reading a single line of TypeScript.
+
+The vectors are generated from source (never hand-written) and validated by 4 rounds of expert audit. They ship in the npm package alongside the TypeScript implementation.
+
 ## Forward Compatibility
 
 - **`extensions` field** on requirements allows arbitrary data without breaking parsers
