@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.2.1] - 2026-03-02
+
+### Added
+
+- **Conformance test vectors ship in npm package** — 133 machine-readable JSON test vectors across 12 files now included via `test/conformance/vectors`. Cross-language implementors (Go, Python, Rust) can `npm pack s402` to get the vectors without cloning the repo.
+- **API stability declaration** — `API-STABILITY.md` classifies all 83 exports as stable, experimental, or internal.
+
+### Fixed
+
+- Barrel export JSDoc updated to chain-agnostic wording (was "Sui-native").
+
 ## [0.2.0] - 2026-03-01
 
 ### Added
@@ -118,6 +129,7 @@ _Version bump for npm publish after license change._
 - Property-based fuzz testing via fast-check
 - 207 tests, zero runtime dependencies
 
+[0.2.1]: https://github.com/s402-protocol/core/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/s402-protocol/core/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/s402-protocol/core/compare/v0.1.7...v0.1.8
 [0.1.7]: https://github.com/s402-protocol/core/compare/v0.1.6...v0.1.7
