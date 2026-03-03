@@ -1,9 +1,9 @@
 /**
- * s402 — Sui-native HTTP 402 protocol
+ * s402 — Chain-agnostic HTTP 402 protocol
  *
- * Atomic settlement via Sui's PTBs.
  * Five payment schemes: exact, stream, escrow, unlock, prepaid.
  * AP2 mandate support. Direct settlement. On-chain receipts.
+ * Wire-compatible with x402. Zero runtime dependencies.
  * Optional x402 compat layer available via 's402/compat'.
  *
  * @packageDocumentation
