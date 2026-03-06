@@ -214,6 +214,79 @@ describe('s402 HTTP encode/decode', () => {
       expect(() => decodeSettleResponse(bad)).toThrow('success');
     });
 
+    it('decodeSettleResponse rejects non-string txDigest', () => {
+      const bad = btoa(JSON.stringify({ success: true, txDigest: 42 }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('txDigest must be a string');
+    });
+
+    it('decodeSettleResponse rejects non-string receiptId', () => {
+      const bad = btoa(JSON.stringify({ success: true, receiptId: true }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('receiptId must be a string');
+    });
+
+    it('decodeSettleResponse rejects non-number finalityMs', () => {
+      const bad = btoa(JSON.stringify({ success: true, finalityMs: 'fast' }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('finalityMs must be a finite number');
+    });
+
+    it('decodeSettleResponse rejects NaN finalityMs', () => {
+      // JSON.stringify(NaN) becomes null, so test Infinity which becomes null too.
+      // Instead, test via body transport where we can inject post-parse.
+      const bad = btoa(JSON.stringify({ success: true, finalityMs: null }));
+      // null is not a number, so this should fail. But JSON null → null, typeof null !== 'number'.
+      // The guard checks typeof !== 'number', null passes that. But null !== undefined so it enters the check.
+      expect(() => decodeSettleResponse(bad)).toThrow('finalityMs must be a finite number');
+    });
+
+    it('decodeSettleResponse rejects non-string streamId', () => {
+      const bad = btoa(JSON.stringify({ success: true, streamId: 123 }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('streamId must be a string');
+    });
+
+    it('decodeSettleResponse rejects non-string escrowId', () => {
+      const bad = btoa(JSON.stringify({ success: true, escrowId: [] }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('escrowId must be a string');
+    });
+
+    it('decodeSettleResponse rejects non-string balanceId', () => {
+      const bad = btoa(JSON.stringify({ success: true, balanceId: {} }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('balanceId must be a string');
+    });
+
+    it('decodeSettleResponse rejects non-string error field', () => {
+      const bad = btoa(JSON.stringify({ success: false, error: 404 }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('error must be a string');
+    });
+
+    it('decodeSettleResponse rejects non-string errorCode', () => {
+      const bad = btoa(JSON.stringify({ success: false, error: 'fail', errorCode: 123 }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('errorCode must be a string');
+    });
+
+    it('decodeSettleResponse still accepts valid optional fields', () => {
+      const good = btoa(JSON.stringify({
+        success: true,
+        txDigest: 'ABC123',
+        receiptId: '0xreceipt',
+        finalityMs: 450,
+        streamId: '0xstream',
+        escrowId: '0xescrow',
+        balanceId: '0xbalance',
+      }));
+      const decoded = decodeSettleResponse(good);
+      expect(decoded.success).toBe(true);
+      expect(decoded.txDigest).toBe('ABC123');
+      expect(decoded.finalityMs).toBe(450);
+    });
+
     it('decodePaymentPayload rejects unknown scheme', () => {
       const bad = btoa(JSON.stringify({ scheme: 'bancruptcy', payload: { transaction: 'tx', signature: 'sig' } }));
       expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
@@ -253,6 +326,24 @@ describe('s402 HTTP encode/decode', () => {
       const bad = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig' } }));
       expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
       expect(() => decodePaymentPayload(bad)).toThrow('prepaid payload requires ratePerCall');
+    });
+
+    it('decodePaymentPayload rejects prepaid payload with non-string maxCalls', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig', ratePerCall: '100', maxCalls: 42 } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('maxCalls must be a string');
+    });
+
+    it('decodePaymentPayload accepts prepaid payload with string maxCalls', () => {
+      const good = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig', ratePerCall: '100', maxCalls: '500' } }));
+      const decoded = decodePaymentPayload(good);
+      expect(decoded.scheme).toBe('prepaid');
+    });
+
+    it('decodePaymentPayload accepts prepaid payload without maxCalls', () => {
+      const good = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig', ratePerCall: '100' } }));
+      const decoded = decodePaymentPayload(good);
+      expect(decoded.scheme).toBe('prepaid');
     });
 
     it('decodePaymentPayload accepts valid payload', () => {

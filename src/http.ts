@@ -667,6 +667,10 @@ function validatePayloadShape(obj: unknown): void {
     throw new s402Error('INVALID_PAYLOAD',
       `prepaid payload requires ratePerCall (string), got ${typeof inner.ratePerCall}`);
   }
+  if (record.scheme === 'prepaid' && inner.maxCalls !== undefined && typeof inner.maxCalls !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `prepaid payload maxCalls must be a string if provided, got ${typeof inner.maxCalls}`);
+  }
 }
 
 /** Validate that a decoded settle response has the required shape. */
@@ -678,6 +682,41 @@ function validateSettleShape(obj: unknown): void {
   if (typeof record.success !== 'boolean') {
     throw new s402Error('INVALID_PAYLOAD',
       'Malformed settle response: missing or invalid "success" (boolean)');
+  }
+  // Validate optional fields have correct types when present.
+  // These arrive from facilitator RPCs (trust boundary) — wrong types would
+  // pass through pickSettleResponseFields and violate s402SettleResponse's interface.
+  if (record.txDigest !== undefined && typeof record.txDigest !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: txDigest must be a string, got ${typeof record.txDigest}`);
+  }
+  if (record.receiptId !== undefined && typeof record.receiptId !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: receiptId must be a string, got ${typeof record.receiptId}`);
+  }
+  if (record.finalityMs !== undefined && (typeof record.finalityMs !== 'number' || !Number.isFinite(record.finalityMs))) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: finalityMs must be a finite number, got ${typeof record.finalityMs}`);
+  }
+  if (record.streamId !== undefined && typeof record.streamId !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: streamId must be a string, got ${typeof record.streamId}`);
+  }
+  if (record.escrowId !== undefined && typeof record.escrowId !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: escrowId must be a string, got ${typeof record.escrowId}`);
+  }
+  if (record.balanceId !== undefined && typeof record.balanceId !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: balanceId must be a string, got ${typeof record.balanceId}`);
+  }
+  if (record.error !== undefined && typeof record.error !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: error must be a string, got ${typeof record.error}`);
+  }
+  if (record.errorCode !== undefined && typeof record.errorCode !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: errorCode must be a string, got ${typeof record.errorCode}`);
   }
 }
 
