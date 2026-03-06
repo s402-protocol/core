@@ -261,6 +261,10 @@ export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope): s402Pay
 export function normalizeRequirements(
   obj: Record<string, unknown>,
 ): s402PaymentRequirements {
+  if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Payment requirements must be a plain object, got ${obj === null ? 'null' : Array.isArray(obj) ? 'array' : typeof obj}`);
+  }
   if (isS402(obj)) {
     // Delegate to the canonical validator in http.ts — single source of truth.
     validateRequirementsShape(obj);

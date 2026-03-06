@@ -172,6 +172,40 @@ describe('s402Facilitator', () => {
   });
 });
 
+describe('s402Facilitator timer cleanup', () => {
+  it('process() clears verify timeout after fast resolution (no timer leak)', async () => {
+    const facilitator = new s402Facilitator();
+    const mockScheme = createMockScheme();
+    // Verify resolves instantly — the 5s timeout timer should be cleared
+    (mockScheme.verify as ReturnType<typeof vi.fn>).mockResolvedValue({ valid: true });
+    (mockScheme.settle as ReturnType<typeof vi.fn>).mockResolvedValue({ success: true, txDigest: 'X' });
+    facilitator.register('sui:testnet', mockScheme);
+
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    await facilitator.process(PAYLOAD, REQUIREMENTS);
+
+    // Both verify and settle timers should be cleared (2 calls)
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
+    clearTimeoutSpy.mockRestore();
+  });
+
+  it('process() clears settle timeout even when settle rejects', async () => {
+    const facilitator = new s402Facilitator();
+    const mockScheme = createMockScheme();
+    (mockScheme.verify as ReturnType<typeof vi.fn>).mockResolvedValue({ valid: true });
+    (mockScheme.settle as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('RPC failed'));
+    facilitator.register('sui:testnet', mockScheme);
+
+    const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
+    const result = await facilitator.process(PAYLOAD, REQUIREMENTS);
+
+    expect(result.success).toBe(false);
+    // Both timers should still be cleared (verify succeeded, settle failed)
+    expect(clearTimeoutSpy).toHaveBeenCalledTimes(2);
+    clearTimeoutSpy.mockRestore();
+  });
+});
+
 describe('s402Facilitator verify/settle expiration (A-25)', () => {
   it('verify() rejects expired requirements', async () => {
     const facilitator = new s402Facilitator();

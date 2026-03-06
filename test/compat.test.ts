@@ -489,4 +489,36 @@ describe('s402 compat layer', () => {
       expect(() => fromX402Envelope(envelope)).toThrow('Invalid amount');
     });
   });
+
+  describe('normalizeRequirements primitive guard', () => {
+    it('throws s402Error on null input (not TypeError)', () => {
+      expect(() => normalizeRequirements(null as any)).toThrow(s402Error);
+      expect(() => normalizeRequirements(null as any)).toThrow('plain object');
+    });
+
+    it('throws s402Error on number input (not TypeError)', () => {
+      expect(() => normalizeRequirements(42 as any)).toThrow(s402Error);
+      expect(() => normalizeRequirements(42 as any)).toThrow('plain object');
+    });
+
+    it('throws s402Error on string input (not TypeError)', () => {
+      expect(() => normalizeRequirements('hello' as any)).toThrow(s402Error);
+      expect(() => normalizeRequirements('hello' as any)).toThrow('plain object');
+    });
+
+    it('throws s402Error on boolean input (not TypeError)', () => {
+      expect(() => normalizeRequirements(true as any)).toThrow(s402Error);
+      expect(() => normalizeRequirements(true as any)).toThrow('plain object');
+    });
+
+    it('throws s402Error on array input (not TypeError)', () => {
+      expect(() => normalizeRequirements([] as any)).toThrow(s402Error);
+      expect(() => normalizeRequirements([] as any)).toThrow('plain object');
+    });
+
+    it('throws s402Error on undefined input (not TypeError)', () => {
+      expect(() => normalizeRequirements(undefined as any)).toThrow(s402Error);
+      expect(() => normalizeRequirements(undefined as any)).toThrow('plain object');
+    });
+  });
 });

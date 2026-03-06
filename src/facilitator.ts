@@ -140,9 +140,7 @@ export class s402Facilitator {
    *
    * @param payload - Client's payment payload
    * @param requirements - Server's payment requirements
-   * @returns Settlement result (check `result.success`)
-   * @throws {s402Error} `NETWORK_MISMATCH` if no schemes registered for the network
-   * @throws {s402Error} `SCHEME_NOT_SUPPORTED` if the payload's scheme isn't registered
+   * @returns Settlement result (check `result.success` and `result.errorCode`)
    *
    * @example
    * ```ts
@@ -217,12 +215,13 @@ export class s402Facilitator {
       // H-1 + H-3: Verify with timeout to prevent hanging RPC calls from exhausting the event loop
       let verifyResult: s402VerifyResponse;
       try {
+        let verifyTimer: ReturnType<typeof setTimeout>;
         verifyResult = await Promise.race([
           scheme.verify(payload, requirements),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Verification timed out after 5s')), 5_000)
-          ),
-        ]);
+          new Promise<never>((_, reject) => {
+            verifyTimer = setTimeout(() => reject(new Error('Verification timed out after 5s')), 5_000);
+          }),
+        ]).finally(() => clearTimeout(verifyTimer));
       } catch (e) {
         return {
           success: false,
@@ -253,12 +252,13 @@ export class s402Facilitator {
 
       // H-1 + H-3 + M-5: Settle with timeout; SETTLEMENT_FAILED is retryable (transient RPC errors)
       try {
+        let settleTimer: ReturnType<typeof setTimeout>;
         return await Promise.race([
           scheme.settle(payload, requirements),
-          new Promise<never>((_, reject) =>
-            setTimeout(() => reject(new Error('Settlement timed out after 15s')), 15_000)
-          ),
-        ]);
+          new Promise<never>((_, reject) => {
+            settleTimer = setTimeout(() => reject(new Error('Settlement timed out after 15s')), 15_000);
+          }),
+        ]).finally(() => clearTimeout(settleTimer));
       } catch (e) {
         return {
           success: false,
