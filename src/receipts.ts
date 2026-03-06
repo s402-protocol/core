@@ -56,9 +56,14 @@ function uint8ToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-/** Decode a base64 string to Uint8Array using built-in atob. */
+/** Decode a base64 string to Uint8Array using built-in atob. Throws Error on invalid base64. */
 function base64ToUint8(b64: string): Uint8Array {
-  const binary = atob(b64);
+  let binary: string;
+  try {
+    binary = atob(b64);
+  } catch {
+    throw new Error(`Invalid base64: "${b64.slice(0, 20)}${b64.length > 20 ? '...' : ''}"`);
+  }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
     bytes[i] = binary.charCodeAt(i);
@@ -118,8 +123,18 @@ export function parseReceiptHeader(header: string): s402Receipt {
     );
   }
 
-  const callNumber = BigInt(callNumberStr);
-  const timestampMs = BigInt(timestampMsStr);
+  let callNumber: bigint;
+  let timestampMs: bigint;
+  try {
+    callNumber = BigInt(callNumberStr);
+  } catch {
+    throw new Error(`Invalid receipt callNumber: not a valid integer "${callNumberStr}"`);
+  }
+  try {
+    timestampMs = BigInt(timestampMsStr);
+  } catch {
+    throw new Error(`Invalid receipt timestampMs: not a valid integer "${timestampMsStr}"`);
+  }
   if (callNumber <= 0n) {
     throw new Error(`Invalid receipt callNumber: must be positive, got ${callNumber}`);
   }

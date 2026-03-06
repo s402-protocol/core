@@ -589,6 +589,20 @@ export function validateRequirementsShape(obj: unknown): void {
     }
   }
 
+  // Optional enum/boolean field validation
+  if (record.settlementMode !== undefined) {
+    if (record.settlementMode !== 'facilitator' && record.settlementMode !== 'direct') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `settlementMode must be "facilitator" or "direct", got ${JSON.stringify(record.settlementMode)}`);
+    }
+  }
+  if (record.receiptRequired !== undefined) {
+    if (typeof record.receiptRequired !== 'boolean') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `receiptRequired must be a boolean, got ${typeof record.receiptRequired}`);
+    }
+  }
+
   // Sub-object structural validation
   validateSubObjects(record);
 }
