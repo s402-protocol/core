@@ -16,6 +16,8 @@
  * @see docs/schemes/prepaid.md — v0.2 spec
  */
 
+import { s402Error } from './errors.js';
+
 // ── Types ────────────────────────────────────────────
 
 /** Receipt data extracted from an HTTP header. */
@@ -62,7 +64,7 @@ function base64ToUint8(b64: string): Uint8Array {
   try {
     binary = atob(b64);
   } catch {
-    throw new Error(`Invalid base64: "${b64.slice(0, 20)}${b64.length > 20 ? '...' : ''}"`);
+    throw new s402Error('INVALID_PAYLOAD', `Invalid base64: "${b64.slice(0, 20)}${b64.length > 20 ? '...' : ''}"`);;
   }
   const bytes = new Uint8Array(binary.length);
   for (let i = 0; i < binary.length; i++) {
@@ -105,22 +107,20 @@ export function formatReceiptHeader(receipt: {
  */
 export function parseReceiptHeader(header: string): s402Receipt {
   if (!header) {
-    throw new Error('Empty receipt header');
+    throw new s402Error('INVALID_PAYLOAD', 'Empty receipt header');
   }
 
   const parts = header.split(':');
   if (parts.length !== 5) {
-    throw new Error(
-      `Malformed receipt header: expected 5 colon-separated parts, got ${parts.length}`,
-    );
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed receipt header: expected 5 colon-separated parts, got ${parts.length}`);
   }
 
   const [version, sigB64, callNumberStr, timestampMsStr, hashB64] = parts;
 
   if (version !== HEADER_VERSION) {
-    throw new Error(
-      `Unknown receipt header version: "${version}" (expected "${HEADER_VERSION}")`,
-    );
+    throw new s402Error('INVALID_PAYLOAD',
+      `Unknown receipt header version: "${version}" (expected "${HEADER_VERSION}")`);
   }
 
   let callNumber: bigint;
@@ -128,25 +128,36 @@ export function parseReceiptHeader(header: string): s402Receipt {
   try {
     callNumber = BigInt(callNumberStr);
   } catch {
-    throw new Error(`Invalid receipt callNumber: not a valid integer "${callNumberStr}"`);
+    throw new s402Error('INVALID_PAYLOAD', `Invalid receipt callNumber: not a valid integer "${callNumberStr}"`);
   }
   try {
     timestampMs = BigInt(timestampMsStr);
   } catch {
-    throw new Error(`Invalid receipt timestampMs: not a valid integer "${timestampMsStr}"`);
+    throw new s402Error('INVALID_PAYLOAD', `Invalid receipt timestampMs: not a valid integer "${timestampMsStr}"`);
   }
   if (callNumber <= 0n) {
-    throw new Error(`Invalid receipt callNumber: must be positive, got ${callNumber}`);
+    throw new s402Error('INVALID_PAYLOAD', `Invalid receipt callNumber: must be positive, got ${callNumber}`);
   }
   if (timestampMs <= 0n) {
-    throw new Error(`Invalid receipt timestampMs: must be positive, got ${timestampMs}`);
+    throw new s402Error('INVALID_PAYLOAD', `Invalid receipt timestampMs: must be positive, got ${timestampMs}`);
+  }
+
+  const signature = base64ToUint8(sigB64);
+  if (signature.length !== 64) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Receipt signature must be 64 bytes (Ed25519), got ${signature.length}`);
+  }
+  const responseHash = base64ToUint8(hashB64);
+  if (responseHash.length !== 32) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Receipt responseHash must be 32 bytes (SHA-256), got ${responseHash.length}`);
   }
 
   return {
     version: 'v2',
-    signature: base64ToUint8(sigB64),
+    signature,
     callNumber,
     timestampMs,
-    responseHash: base64ToUint8(hashB64),
+    responseHash,
   };
 }

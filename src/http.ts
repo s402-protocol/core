@@ -587,6 +587,19 @@ export function validateRequirementsShape(obj: unknown): void {
       throw new s402Error('INVALID_PAYLOAD',
         'facilitatorUrl contains control characters (potential header injection)');
     }
+    // M-1: Validate URL scheme to prevent SSRF via dangerous protocols (file://, gopher://, etc.)
+    // Mirrors the same check in compat.ts fromX402Requirements — both paths now enforce equally.
+    try {
+      const url = new URL(record.facilitatorUrl);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+        throw new s402Error('INVALID_PAYLOAD',
+          `facilitatorUrl must use https:// or http://, got "${url.protocol}"`);
+      }
+    } catch (e) {
+      if (e instanceof s402Error) throw e;
+      throw new s402Error('INVALID_PAYLOAD',
+        'facilitatorUrl is not a valid URL');
+    }
   }
 
   // Optional enum/boolean field validation
