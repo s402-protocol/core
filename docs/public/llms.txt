@@ -1,26 +1,25 @@
-# s402 — HTTP 402 Payment Protocol for Sui
+# s402 -- Chain-Agnostic HTTP 402 Payment Protocol
 
-> s402 is an open protocol that activates HTTP 402 on the Sui blockchain. It defines a wire format for machine-to-machine payments — fast enough for real-time conversations (~400ms finality), cheap enough for micropayments ($0.014 per thousand API calls), and rich enough for the full spectrum of commercial relationships AI agents need.
+> s402 is an open wire format for HTTP 402 machine-to-machine payments. Five payment schemes (Exact, Prepaid, Escrow, Stream, Unlock), zero runtime dependencies, wire-compatible with x402 (Coinbase). ~400ms finality on Sui, $0.014 per thousand API calls via Prepaid scheme.
 
 ## What is s402?
 
-s402 is a TypeScript protocol layer for HTTP 402 payments on Sui. It provides wire format encoding/decoding, five payment schemes, and a machine-native error model. Zero runtime dependencies.
+s402 is a TypeScript protocol layer for HTTP 402 payments. It provides wire format encoding/decoding, five payment schemes, and a machine-native error model with 15 typed error codes (each with retryable flag + recovery action). Zero runtime dependencies. Chain-agnostic core with Sui-native reference implementation.
 
 ## Five Payment Schemes
 
-- **Exact** — One payment, one resource. Atomic PTB settlement.
-- **Prepaid** — Deposit once, make 1000+ API calls, batch-claim. Gas: $0.014 total vs $7.00 per-call.
-- **Escrow** — Time-locked vault with optional arbiter. Trustless commerce.
-- **Stream** — Per-second billing with on-chain rate cap.
-- **Unlock** — Pay-to-decrypt with Sui SEAL + Walrus.
+- **Exact** -- One payment, one resource. Atomic settlement. x402-compatible baseline.
+- **Prepaid** -- Deposit once, make 1000+ API calls, batch-claim. Gas: $0.014 total vs $7.00 per-call.
+- **Escrow** -- Time-locked vault with optional arbiter dispute resolution.
+- **Stream** -- Per-second billing with on-chain rate cap.
+- **Unlock** -- Pay-to-decrypt encrypted content (Walrus + SEAL).
 
 ## Key Facts
 
-- Version: v0.1.8
 - License: Apache-2.0
-- Tests: 643 (226 Move + 417 TypeScript)
 - Zero runtime dependencies
 - x402-compatible (Coinbase's EVM payment protocol)
+- 133 machine-readable conformance test vectors
 - npm: https://www.npmjs.com/package/s402
 
 ## Documentation
@@ -28,7 +27,7 @@ s402 is a TypeScript protocol layer for HTTP 402 payments on Sui. It provides wi
 - Quick Start: https://s402-protocol.org/guide/quickstart
 - How It Works: https://s402-protocol.org/guide/how-it-works
 - Which Scheme: https://s402-protocol.org/guide/which-scheme
-- Whitepaper: https://s402-protocol.org/whitepaper
+- Tutorial: https://s402-protocol.org/guide/tutorial
 - Security Model: https://s402-protocol.org/security
 - API Reference: https://s402-protocol.org/api/
 - FAQ: https://s402-protocol.org/faq
@@ -53,13 +52,31 @@ if (res.status !== 402) return res;
 // 2. Decode requirements
 const requirements = extractRequirementsFromResponse(res);
 
-// 3. Build payment (you bring the Sui SDK)
+// 3. Build payment (you bring the chain SDK)
 const payment = await buildPayment(requirements);
 
 // 4. Retry with payment
 return fetch(url, {
   headers: { [S402_HEADERS.PAYMENT]: encodePaymentPayload(payment) },
 });
+```
+
+## Error Handling
+
+Every s402 error includes: code, retryable flag, suggestedAction.
+
+```typescript
+import { s402Error } from 's402';
+
+try {
+  await facilitator.process(payload, requirements);
+} catch (e) {
+  if (e instanceof s402Error) {
+    console.log(e.code);            // 'SETTLEMENT_FAILED'
+    console.log(e.retryable);       // true
+    console.log(e.suggestedAction); // 'Transient RPC failure -- retry in a few seconds'
+  }
+}
 ```
 
 ## Source

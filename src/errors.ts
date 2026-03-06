@@ -100,6 +100,17 @@ const ERROR_HINTS: Record<s402ErrorCodeType, { retryable: boolean; suggestedActi
 
 /**
  * Create a typed s402 error with recovery hints.
+ *
+ * @param code - One of the 15 s402 error codes (e.g. 'SETTLEMENT_FAILED')
+ * @param message - Optional human-readable message (defaults to the code)
+ * @returns Error info object with code, message, retryable flag, and suggestedAction
+ *
+ * @example
+ * ```ts
+ * const info = createS402Error('INSUFFICIENT_BALANCE');
+ * // { code: 'INSUFFICIENT_BALANCE', message: 'INSUFFICIENT_BALANCE',
+ * //   retryable: false, suggestedAction: 'Top up wallet balance...' }
+ * ```
  */
 export function createS402Error(code: s402ErrorCodeType, message?: string): s402ErrorInfo {
   const hints = ERROR_HINTS[code];
@@ -113,6 +124,21 @@ export function createS402Error(code: s402ErrorCodeType, message?: string): s402
 
 /**
  * s402 error class for throwing in code.
+ * Every instance includes a machine-readable `code`, `retryable` flag, and `suggestedAction`.
+ *
+ * @example
+ * ```ts
+ * try {
+ *   await facilitator.process(payload, requirements);
+ * } catch (e) {
+ *   if (e instanceof s402Error) {
+ *     console.log(e.code);            // 'SETTLEMENT_FAILED'
+ *     console.log(e.retryable);       // true
+ *     console.log(e.suggestedAction); // 'Transient RPC failure...'
+ *     if (e.retryable) { } // retry with exponential backoff
+ *   }
+ * }
+ * ```
  */
 export class s402Error extends Error {
   readonly code: s402ErrorCodeType;

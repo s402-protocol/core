@@ -38,12 +38,45 @@ function fromBase64(b64: string): string {
 // Encode (object → base64 string for HTTP header)
 // ══════════════════════════════════════════════════════════════
 
-/** Encode payment requirements for the `payment-required` header */
+/**
+ * Encode payment requirements for the `payment-required` header.
+ *
+ * @param requirements - Typed s402 payment requirements
+ * @returns Base64-encoded JSON string for the HTTP header
+ *
+ * @example
+ * ```ts
+ * import { encodePaymentRequired } from 's402/http';
+ *
+ * const header = encodePaymentRequired({
+ *   s402Version: '1',
+ *   accepts: ['exact'],
+ *   network: 'sui:mainnet',
+ *   asset: '0x2::sui::SUI',
+ *   amount: '1000000',
+ *   payTo: '0xYOUR_ADDRESS',
+ * });
+ * response.headers.set('payment-required', header);
+ * ```
+ */
 export function encodePaymentRequired(requirements: s402PaymentRequirements): string {
   return toBase64(JSON.stringify(requirements));
 }
 
-/** Encode payment payload for the `x-payment` header */
+/**
+ * Encode payment payload for the `x-payment` header.
+ *
+ * @param payload - Typed s402 payment payload (any scheme)
+ * @returns Base64-encoded JSON string for the HTTP header
+ *
+ * @example
+ * ```ts
+ * import { encodePaymentPayload, S402_HEADERS } from 's402/http';
+ *
+ * const header = encodePaymentPayload(payload);
+ * fetch(url, { headers: { [S402_HEADERS.PAYMENT]: header } });
+ * ```
+ */
 export function encodePaymentPayload(payload: s402PaymentPayload): string {
   return toBase64(JSON.stringify(payload));
 }
@@ -115,7 +148,24 @@ export function pickRequirementsFields(obj: Record<string, unknown>): s402Paymen
   return result as unknown as s402PaymentRequirements;
 }
 
-/** Decode payment requirements from the `payment-required` header */
+/**
+ * Decode payment requirements from the `payment-required` header.
+ * Validates shape, strips unknown keys, enforces size limit (64KB).
+ *
+ * @param header - Base64-encoded JSON string from the HTTP header
+ * @returns Validated s402 payment requirements
+ * @throws {s402Error} `INVALID_PAYLOAD` on oversized header, invalid base64/JSON, or malformed shape
+ *
+ * @example
+ * ```ts
+ * import { decodePaymentRequired } from 's402/http';
+ *
+ * const header = response.headers.get('payment-required')!;
+ * const requirements = decodePaymentRequired(header);
+ * console.log(requirements.accepts); // ['exact', 'prepaid']
+ * console.log(requirements.amount);  // '1000000'
+ * ```
+ */
 export function decodePaymentRequired(header: string): s402PaymentRequirements {
   if (header.length > MAX_HEADER_BYTES) {
     throw new s402Error('INVALID_PAYLOAD',
@@ -171,7 +221,23 @@ export function pickPayloadFields(obj: Record<string, unknown>): s402PaymentPayl
   return result as unknown as s402PaymentPayload;
 }
 
-/** Decode payment payload from the `x-payment` header */
+/**
+ * Decode payment payload from the `x-payment` header.
+ * Validates shape, strips unknown keys, enforces size limit (64KB).
+ *
+ * @param header - Base64-encoded JSON string from the HTTP header
+ * @returns Validated s402 payment payload
+ * @throws {s402Error} `INVALID_PAYLOAD` on oversized header, invalid base64/JSON, or malformed shape
+ *
+ * @example
+ * ```ts
+ * import { decodePaymentPayload, S402_HEADERS } from 's402/http';
+ *
+ * const header = request.headers.get(S402_HEADERS.PAYMENT)!;
+ * const payload = decodePaymentPayload(header);
+ * console.log(payload.scheme); // 'exact'
+ * ```
+ */
 export function decodePaymentPayload(header: string): s402PaymentPayload {
   if (header.length > MAX_HEADER_BYTES) {
     throw new s402Error('INVALID_PAYLOAD',
@@ -708,6 +774,22 @@ export function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown' {
  * Extract s402 payment requirements from a 402 Response.
  * Returns null if the header is missing, malformed, or not s402 format.
  * For x402 responses, decode the header manually and use normalizeRequirements().
+ *
+ * @param response - Fetch API Response object (status should be 402)
+ * @returns Parsed requirements, or null if not an s402 response
+ *
+ * @example
+ * ```ts
+ * import { extractRequirementsFromResponse } from 's402/http';
+ *
+ * const res = await fetch(url);
+ * if (res.status === 402) {
+ *   const requirements = extractRequirementsFromResponse(res);
+ *   if (requirements) {
+ *     // Build and send payment
+ *   }
+ * }
+ * ```
  */
 export function extractRequirementsFromResponse(response: Response): s402PaymentRequirements | null {
   const header = response.headers.get(S402_HEADERS.PAYMENT_REQUIRED);

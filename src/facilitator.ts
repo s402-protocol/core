@@ -129,12 +129,35 @@ export class s402Facilitator {
   }
 
   /**
-   * Expiration-guarded verify + settle in one call.
+   * Expiration-guarded verify + settle in one call. **This is the recommended path.**
    * Rejects expired requirements, verifies the payload, then settles.
+   * Includes deduplication (prevents concurrent identical requests) and timeouts
+   * (5s verify, 15s settle).
    *
    * Note: True atomicity comes from Sui's PTBs in the scheme implementation,
    * not from this method. This method provides the expiration guard and
-   * sequential verify→settle orchestration.
+   * sequential verify-then-settle orchestration.
+   *
+   * @param payload - Client's payment payload
+   * @param requirements - Server's payment requirements
+   * @returns Settlement result (check `result.success`)
+   * @throws {s402Error} `NETWORK_MISMATCH` if no schemes registered for the network
+   * @throws {s402Error} `SCHEME_NOT_SUPPORTED` if the payload's scheme isn't registered
+   *
+   * @example
+   * ```ts
+   * import { s402Facilitator } from 's402';
+   *
+   * const facilitator = new s402Facilitator();
+   * facilitator.register('sui:mainnet', exactFacilitatorScheme);
+   *
+   * const result = await facilitator.process(payload, requirements);
+   * if (result.success) {
+   *   console.log(result.txDigest); // Sui transaction digest
+   * } else {
+   *   console.log(result.errorCode); // e.g. 'VERIFICATION_FAILED'
+   * }
+   * ```
    */
   async process(
     payload: s402PaymentPayload,

@@ -243,6 +243,20 @@ export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope): s402Pay
  * Validates required fields to catch malformed/malicious payloads at the trust boundary.
  *
  * Returns a clean object with only known s402 fields — unknown top-level keys are stripped.
+ *
+ * @param obj - Raw decoded JSON (could be s402, x402 V1, or x402 V2 envelope)
+ * @returns Validated s402PaymentRequirements
+ * @throws {s402Error} `INVALID_PAYLOAD` if the format is unrecognized or malformed
+ *
+ * @example
+ * ```ts
+ * import { normalizeRequirements } from 's402/compat';
+ *
+ * // Works with any format — auto-detects s402 vs x402
+ * const rawJson = JSON.parse(atob(header));
+ * const requirements = normalizeRequirements(rawJson);
+ * // Always returns s402PaymentRequirements regardless of input format
+ * ```
  */
 export function normalizeRequirements(
   obj: Record<string, unknown>,

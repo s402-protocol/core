@@ -25,7 +25,11 @@
     "streaming",
     "escrow",
     "web3",
-    "protocol"
+    "protocol",
+    "ai-agent",
+    "machine-to-machine",
+    "m2m",
+    "agent-payments"
   ],
   "engines": {
     "node": ">=18"

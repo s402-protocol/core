@@ -36,6 +36,18 @@ HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a pay
 
 **s402 is Sui-native by design.** These advantages come from Sui's object model, PTBs, and sub-second finality. They can't be replicated on EVM — and they don't need to be. x402 already handles EVM well. s402 handles Sui better.
 
+## Which Scheme Should I Use?
+
+| Your situation | Scheme | Gas per 1K calls | Latency |
+|---|---|---|---|
+| One-time API call, simplest path | **Exact** | $7.00 | ~400ms |
+| High-frequency API (10+ calls) | **Prepaid** | $0.014 | ~0ms per call |
+| Buyer needs dispute protection | **Escrow** | $7.00 | ~400ms |
+| Selling encrypted content | **Unlock** | $7.00 | ~400ms |
+| Real-time billing (per-second) | **Stream** | variable | ~400ms setup |
+
+**Quick decision:** Use **Prepaid** for AI agents making repeated API calls. Use **Exact** for everything else (it's the x402-compatible default). See the [full guide](https://s402-protocol.org/guide/which-scheme) for details.
+
 ## Architecture
 
 ```

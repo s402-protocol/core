@@ -45,6 +45,25 @@ export class s402ResourceServer {
    * Build payment requirements for a route.
    * Uses the first scheme in the config's schemes array.
    * Always includes "exact" in accepts for x402 compat.
+   *
+   * @param config - Per-route payment configuration (schemes, price, network, payTo, asset)
+   * @returns Payment requirements ready to encode for the 402 response
+   * @throws {s402Error} `INVALID_PAYLOAD` if price is not a valid non-negative integer string
+   *
+   * @example
+   * ```ts
+   * import { s402ResourceServer, encodePaymentRequired } from 's402';
+   *
+   * const server = new s402ResourceServer();
+   * const requirements = server.buildRequirements({
+   *   schemes: ['exact'],
+   *   price: '1000000',
+   *   network: 'sui:mainnet',
+   *   payTo: '0xYOUR_ADDRESS',
+   *   asset: '0x2::sui::SUI',
+   * });
+   * res.status(402).setHeader('payment-required', encodePaymentRequired(requirements));
+   * ```
    */
   buildRequirements(config: s402RouteConfig): s402PaymentRequirements {
     // Validate price early — catch bad config before it reaches the wire
@@ -120,6 +139,20 @@ export class s402ResourceServer {
    * Expiration-guarded verify + settle. This is the recommended path.
    * Rejects expired requirements, verifies the payload, then settles.
    * True atomicity comes from Sui PTBs in the scheme implementation.
+   *
+   * @param payload - Client's payment payload (from the `x-payment` header)
+   * @param requirements - The requirements this server originally sent
+   * @returns Settlement result with txDigest on success
+   * @throws {s402Error} `FACILITATOR_UNAVAILABLE` if no facilitator is configured
+   *
+   * @example
+   * ```ts
+   * const result = await server.process(payload, requirements);
+   * if (result.success) {
+   *   // Serve the protected resource
+   *   res.status(200).json({ data: 'paid content' });
+   * }
+   * ```
    */
   async process(
     payload: s402PaymentPayload,
