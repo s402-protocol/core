@@ -167,6 +167,10 @@ export function pickRequirementsFields(obj: Record<string, unknown>): s402Paymen
  * ```
  */
 export function decodePaymentRequired(header: string): s402PaymentRequirements {
+  if (typeof header !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `payment-required header must be a string, got ${typeof header}`);
+  }
   if (header.length > MAX_HEADER_BYTES) {
     throw new s402Error('INVALID_PAYLOAD',
       `payment-required header exceeds maximum size (${header.length} > ${MAX_HEADER_BYTES})`);
@@ -239,6 +243,10 @@ export function pickPayloadFields(obj: Record<string, unknown>): s402PaymentPayl
  * ```
  */
 export function decodePaymentPayload(header: string): s402PaymentPayload {
+  if (typeof header !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `x-payment header must be a string, got ${typeof header}`);
+  }
   if (header.length > MAX_HEADER_BYTES) {
     throw new s402Error('INVALID_PAYLOAD',
       `x-payment header exceeds maximum size (${header.length} > ${MAX_HEADER_BYTES})`);
@@ -274,6 +282,10 @@ export function pickSettleResponseFields(obj: Record<string, unknown>): s402Sett
 
 /** Decode settlement response from the `payment-response` header */
 export function decodeSettleResponse(header: string): s402SettleResponse {
+  if (typeof header !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `payment-response header must be a string, got ${typeof header}`);
+  }
   if (header.length > MAX_HEADER_BYTES) {
     throw new s402Error('INVALID_PAYLOAD',
       `payment-response header exceeds maximum size (${header.length} > ${MAX_HEADER_BYTES})`);
@@ -747,6 +759,10 @@ export function encodeRequirementsBody(requirements: s402PaymentRequirements): s
 
 /** Decode payment requirements from JSON string (from response body) */
 export function decodeRequirementsBody(body: string): s402PaymentRequirements {
+  if (typeof body !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 requirements body must be a string, got ${typeof body}`);
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -765,6 +781,10 @@ export function encodePayloadBody(payload: s402PaymentPayload): string {
 
 /** Decode payment payload from JSON string (from request body) */
 export function decodePayloadBody(body: string): s402PaymentPayload {
+  if (typeof body !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 payload body must be a string, got ${typeof body}`);
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -783,6 +803,10 @@ export function encodeSettleBody(response: s402SettleResponse): string {
 
 /** Decode settlement response from JSON string (from response body) */
 export function decodeSettleBody(body: string): s402SettleResponse {
+  if (typeof body !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 settle body must be a string, got ${typeof body}`);
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
