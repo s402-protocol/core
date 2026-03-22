@@ -114,7 +114,7 @@ const S402_SUB_OBJECT_KEYS: Record<string, Set<string>> = {
   mandate: new Set(['required', 'minPerTx', 'coinType']),
   stream: new Set(['ratePerSecond', 'budgetCap', 'minDeposit', 'streamSetupUrl']),
   escrow: new Set(['seller', 'arbiter', 'deadlineMs']),
-  unlock: new Set(['encryptionId', 'walrusBlobId', 'encryptionPackageId']),
+  unlock: new Set(['encryptionId', 'encryptedContentId', 'encryptionServiceId']),
   prepaid: new Set(['ratePerCall', 'maxCalls', 'minDeposit', 'withdrawalDelayMs', 'providerPubkey', 'disputeWindowMs']),
 };
 
@@ -438,8 +438,8 @@ export function validateUnlockShape(value: unknown): void {
   assertPlainObject(value, 'unlock');
   const obj = value as Record<string, unknown>;
   assertString(obj, 'encryptionId', 'unlock');
-  assertString(obj, 'walrusBlobId', 'unlock');
-  assertString(obj, 'encryptionPackageId', 'unlock');
+  assertString(obj, 'encryptedContentId', 'unlock');
+  assertString(obj, 'encryptionServiceId', 'unlock');
 }
 
 /**
@@ -518,9 +518,9 @@ export function validateRequirementsShape(obj: unknown): void {
   if (typeof record.asset !== 'string') missing.push('asset (string)');
   if (typeof record.amount !== 'string') {
     missing.push('amount (string)');
-  } else if (!isValidU64Amount(record.amount)) {
+  } else if (!isValidAmount(record.amount)) {
     throw new s402Error('INVALID_PAYLOAD',
-      `Invalid amount "${record.amount}": must be a non-negative integer string within u64 range`);
+      `Invalid amount "${record.amount}": must be a non-negative integer string`);
   }
   if (typeof record.payTo !== 'string') {
     missing.push('payTo (string)');

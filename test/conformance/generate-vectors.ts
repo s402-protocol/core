@@ -101,8 +101,8 @@ const WITH_UNLOCK: s402PaymentRequirements = {
   accepts: ['unlock'],
   unlock: {
     encryptionId: 'enc-abc-123',
-    walrusBlobId: 'blob-xyz-789',
-    encryptionPackageId: '0xpkg1234567890',
+    encryptedContentId: 'blob-xyz-789',
+    encryptionServiceId: '0xpkg1234567890',
   },
 };
 
@@ -1251,16 +1251,9 @@ function generateValidationReject(): TestVector[] {
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
 
-  // Amount exceeding u64 max (2^64)
-  vectors.push({
-    description: 'Rejects amount exceeding u64 max',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
-      amount: '18446744073709551616', payTo: '0xabc',
-    })) },
-    shouldReject: true,
-    expectedErrorCode: 'INVALID_PAYLOAD',
-  });
+  // S7: Wire format is chain-agnostic — amounts > u64 are valid (needed for EVM u256).
+  // Chain-specific magnitude bounds (u64, u256) belong in chain adapters (@sweefi/sui etc.).
+  // This vector was previously a rejection case but was changed in v0.2.4 to comply with S7.
 
   // Invalid base64 (not valid base64 characters)
   vectors.push({

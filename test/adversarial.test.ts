@@ -212,19 +212,20 @@ describe('adversarial: prototype pollution', () => {
 // ATK-4: Integer overflow via amount
 // ══════════════════════════════════════════════════════════════
 
-describe('adversarial: integer overflow', () => {
-  it('rejects amount exceeding u64 max (20 digits)', () => {
+describe('adversarial: amount format validation (S7: chain-agnostic — format only, no magnitude bounds)', () => {
+  it('accepts amount exceeding u64 max — magnitude bounds belong in chain adapters', () => {
+    // Wire format validates format only. 23-digit integer is a valid non-negative integer string.
     expect(() => validateRequirementsShape({
       ...VALID_REQUIREMENTS,
-      amount: '99999999999999999999999', // 23 digits >> u64
-    })).toThrow('Invalid amount');
+      amount: '99999999999999999999999', // 23 digits — valid format
+    })).not.toThrow();
   });
 
-  it('rejects amount at u64 max + 1', () => {
+  it('accepts amount at u64 max + 1 — needed for u256 chains (EVM)', () => {
     expect(() => validateRequirementsShape({
       ...VALID_REQUIREMENTS,
-      amount: '18446744073709551616', // u64 max + 1
-    })).toThrow('Invalid amount');
+      amount: '18446744073709551616', // u64 max + 1 — valid for EVM
+    })).not.toThrow();
   });
 
   it('accepts amount at exactly u64 max', () => {
@@ -234,11 +235,13 @@ describe('adversarial: integer overflow', () => {
     })).not.toThrow();
   });
 
-  it('rejects 100-digit number', () => {
+  it('accepts 100-digit number — valid non-negative integer string', () => {
+    // EVM u256 max is 78 digits. Even larger amounts are valid format.
+    // Chain adapters enforce their own magnitude bounds.
     expect(() => validateRequirementsShape({
       ...VALID_REQUIREMENTS,
-      amount: '1' + '0'.repeat(99), // 10^99
-    })).toThrow('Invalid amount');
+      amount: '1' + '0'.repeat(99), // 10^99 — valid format
+    })).not.toThrow();
   });
 });
 

@@ -142,8 +142,8 @@ export interface s402RouteConfig {
   // ── Unlock config (pay-to-decrypt) ──
   unlock?: {
     encryptionId: string;
-    walrusBlobId: string;
-    encryptionPackageId: string;
+    encryptedContentId: string;
+    encryptionServiceId: string;
   };
 
   // ── Prepaid config ──

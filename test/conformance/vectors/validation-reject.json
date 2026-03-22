@@ -176,14 +176,6 @@
     "expectedErrorCode": "INVALID_PAYLOAD"
   },
   {
-    "description": "Rejects amount exceeding u64 max",
-    "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTg0NDY3NDQwNzM3MDk1NTE2MTYiLCJwYXlUbyI6IjB4YWJjIn0="
-    },
-    "shouldReject": true,
-    "expectedErrorCode": "INVALID_PAYLOAD"
-  },
-  {
     "description": "Rejects invalid base64 header",
     "input": {
       "header": "!!!not+valid+base64!!!"

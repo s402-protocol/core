@@ -119,7 +119,7 @@ All three decode functions (`decodePaymentRequired`, `decodePaymentPayload`, `de
 - `mandate`: `required`, `minPerTx`, `coinType`
 - `stream`: `ratePerSecond`, `budgetCap`, `minDeposit`, `streamSetupUrl`
 - `escrow`: `seller`, `arbiter`, `deadlineMs`
-- `unlock`: `encryptionId`, `walrusBlobId`, `encryptionPackageId`
+- `unlock`: `encryptionId`, `encryptedContentId`, `encryptionServiceId`
 - `prepaid`: `ratePerCall`, `maxCalls`, `minDeposit`, `withdrawalDelayMs`, `providerPubkey`, `disputeWindowMs`
 
 **Payload known top-level keys:** `s402Version`, `scheme`, `payload`.

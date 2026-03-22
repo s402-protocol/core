@@ -15,7 +15,7 @@
  * C5:  typeof record.network !== 'string'             → missing "network (string)"
  * C6:  typeof record.asset !== 'string'               → missing "asset (string)"
  * C7:  typeof record.amount !== 'string'              → missing "amount (string)"
- * C8:  amount is string AND !isValidU64Amount()       → "Invalid amount"
+ * C8:  amount is string AND !isValidAmount()           → "Invalid amount" (format-only, S7: no magnitude bounds)
  * C9:  typeof record.payTo !== 'string'               → missing "payTo (string)"
  * C10: payTo.length === 0                             → "payTo must be non-empty"
  * C11: /[\x00-\x1f\x7f]/.test(network)               → "network contains control characters"
@@ -192,7 +192,7 @@ describe('mcdc: validateRequirementsShape — isolation tests', () => {
     expect(() => validateRequirementsShape(valid({ amount: 1000 }))).toThrow('amount');
   });
 
-  // C8: amount is string AND !isValidU64Amount()
+  // C8: amount is string AND !isValidAmount() — format-only check (S7: no chain-specific magnitude bounds)
   it('mcdc-mc8a: rejects non-numeric amount string', () => {
     expect(() => validateRequirementsShape(valid({ amount: 'abc' }))).toThrow('Invalid amount');
   });
@@ -209,8 +209,10 @@ describe('mcdc: validateRequirementsShape — isolation tests', () => {
     expect(() => validateRequirementsShape(valid({ amount: '1.5' }))).toThrow('Invalid amount');
   });
 
-  it('mcdc-mc8e: rejects amount exceeding u64 max', () => {
-    expect(() => validateRequirementsShape(valid({ amount: '18446744073709551616' }))).toThrow('Invalid amount');
+  it('mcdc-mc8e: accepts amount exceeding u64 max — S7: magnitude bounds belong in chain adapters', () => {
+    // Wire format validates format only (non-negative integer string).
+    // Chain-specific magnitude checks (u64 for Sui, u256 for EVM) belong in @sweefi/sui etc.
+    expect(() => validateRequirementsShape(valid({ amount: '18446744073709551616' }))).not.toThrow();
   });
 
   // C9: typeof payTo !== 'string'
@@ -518,7 +520,7 @@ describe('mcdc: validateEscrowShape — isolation tests', () => {
 });
 
 describe('mcdc: validateUnlockShape — isolation tests', () => {
-  const VALID_UNLOCK = { encryptionId: 'enc123', walrusBlobId: 'blob456', encryptionPackageId: '0xpkg' };
+  const VALID_UNLOCK = { encryptionId: 'enc123', encryptedContentId: 'blob456', encryptionServiceId: '0xpkg' };
 
   it('mcdc-hp: valid unlock passes', () => {
     expect(() => validateUnlockShape(VALID_UNLOCK)).not.toThrow();
@@ -532,12 +534,12 @@ describe('mcdc: validateUnlockShape — isolation tests', () => {
     expect(() => validateUnlockShape({ ...VALID_UNLOCK, encryptionId: 42 })).toThrow('encryptionId must be a string');
   });
 
-  it('mcdc-mc3: rejects non-string walrusBlobId', () => {
-    expect(() => validateUnlockShape({ ...VALID_UNLOCK, walrusBlobId: null })).toThrow('walrusBlobId must be a string');
+  it('mcdc-mc3: rejects non-string encryptedContentId', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, encryptedContentId: null })).toThrow('encryptedContentId must be a string');
   });
 
-  it('mcdc-mc4: rejects non-string encryptionPackageId', () => {
-    expect(() => validateUnlockShape({ ...VALID_UNLOCK, encryptionPackageId: false })).toThrow('encryptionPackageId must be a string');
+  it('mcdc-mc4: rejects non-string encryptionServiceId', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, encryptionServiceId: false })).toThrow('encryptionServiceId must be a string');
   });
 });
 
@@ -661,7 +663,7 @@ describe('mcdc: validateRequirementsShape — sub-object integration', () => {
 
   it('mcdc-mc34: accepts valid unlock sub-object within requirements', () => {
     expect(() => validateRequirementsShape(valid({
-      unlock: { encryptionId: 'enc', walrusBlobId: 'blob', encryptionPackageId: '0xpkg' },
+      unlock: { encryptionId: 'enc', encryptedContentId: 'blob', encryptionServiceId: '0xpkg' },
     }))).not.toThrow();
   });
 
@@ -707,8 +709,9 @@ describe('mcdc-bva: validateRequirementsShape — boundary values', () => {
     expect(() => validateRequirementsShape(valid({ amount: '18446744073709551615' }))).not.toThrow();
   });
 
-  it('bva: amount = "18446744073709551616" (u64 max + 1) rejects', () => {
-    expect(() => validateRequirementsShape(valid({ amount: '18446744073709551616' }))).toThrow('Invalid amount');
+  it('bva: amount = "18446744073709551616" (u64 max + 1) passes — S7: wire format is chain-agnostic', () => {
+    // u64 bounds checking belongs in chain adapters (@sweefi/sui), not in the protocol wire validator.
+    expect(() => validateRequirementsShape(valid({ amount: '18446744073709551616' }))).not.toThrow();
   });
 
   it('bva: amount = "1" (just above lower bound) passes', () => {

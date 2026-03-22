@@ -342,9 +342,10 @@ describe('FINDING 8: protocolFeeBps NaN handling (FIXED)', () => {
 // FINDING 9: amount field BigInt overflow (extremely large numbers)
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 9: amount field — extremely large values', () => {
-  it('rejects amounts far exceeding u64 max (M-2 fix: isValidU64Amount)', () => {
+  it('accepts amounts exceeding u64 max (S7: wire format is chain-agnostic, u64 bounds belong in chain adapters)', () => {
     // u64 max = 18446744073709551615 (20 digits)
-    // This is 100 digits — no u64 or u128 can hold this
+    // This is 100 digits — valid as a non-negative integer string.
+    // Chain-specific magnitude checks (u64, u256) belong in @sweefi/sui, @sweefi/evm, etc.
     const hugeAmount = '9'.repeat(100);
     expect(() => normalizeRequirements({
       s402Version: '1',
@@ -353,7 +354,7 @@ describe('FINDING 9: amount field — extremely large values', () => {
       asset: '0x2::sui::SUI',
       amount: hugeAmount,
       payTo: VALID_PAY_TO,
-    })).toThrow('must be a non-negative integer string within u64 range');
+    })).not.toThrow();
   });
 });
 

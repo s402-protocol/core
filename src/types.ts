@@ -1,13 +1,14 @@
 /**
- * s402 Protocol Types — Sui-native HTTP 402 transport layer
+ * s402 Protocol Types — Chain-agnostic HTTP 402 wire format
  *
- * s402 (small s) is a Sui-native HTTP 402 protocol that is wire-compatible
- * with x402's JSON format, extended with Sui-native capabilities:
- *   - Atomic PTBs eliminate the verify/settle temporal gap
+ * s402 (small s) is a chain-agnostic HTTP 402 protocol that is wire-compatible
+ * with x402's JSON format. The reference implementation targets Sui, but the
+ * protocol layer contains no chain-specific logic (see S7 invariant in AGENTS.md).
+ *
  *   - Five payment schemes: exact, stream, escrow, unlock, prepaid
  *   - AP2 mandate support for agent spending authorization
  *   - Direct settlement mode (no facilitator needed)
- *   - On-chain receipts as NFT proofs
+ *   - On-chain receipts as proofs
  *
  * Branding: protocol version field = s402Version (lowercase s).
  * TypeScript types use camelCase per TS convention.
@@ -138,10 +139,10 @@ export interface s402EscrowExtra {
 export interface s402UnlockExtra {
   /** Encryption ID for key servers */
   encryptionId: string;
-  /** Walrus blob ID containing the encrypted content */
-  walrusBlobId: string;
-  /** Encryption package ID on Sui */
-  encryptionPackageId: string;
+  /** Content identifier for the encrypted blob (e.g., Walrus blob ID, IPFS CID) */
+  encryptedContentId: string;
+  /** Identifier for the encryption service or module (e.g., Sui package ID, EVM contract address) */
+  encryptionServiceId: string;
 }
 
 /**

@@ -62,7 +62,7 @@
   {
     "description": "Decode unlock scheme",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVubG9jayJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJ1bmxvY2siOnsiZW5jcnlwdGlvbklkIjoiZW5jLWFiYy0xMjMiLCJ3YWxydXNCbG9iSWQiOiJibG9iLXh5ei03ODkiLCJlbmNyeXB0aW9uUGFja2FnZUlkIjoiMHhwa2cxMjM0NTY3ODkwIn19"
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVubG9jayJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJ1bmxvY2siOnsiZW5jcnlwdGlvbklkIjoiZW5jLWFiYy0xMjMiLCJlbmNyeXB0ZWRDb250ZW50SWQiOiJibG9iLXh5ei03ODkiLCJlbmNyeXB0aW9uU2VydmljZUlkIjoiMHhwa2cxMjM0NTY3ODkwIn19"
     },
     "expected": {
       "s402Version": "1",
@@ -75,8 +75,8 @@
       "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
       "unlock": {
         "encryptionId": "enc-abc-123",
-        "walrusBlobId": "blob-xyz-789",
-        "encryptionPackageId": "0xpkg1234567890"
+        "encryptedContentId": "blob-xyz-789",
+        "encryptionServiceId": "0xpkg1234567890"
       }
     },
     "shouldReject": false

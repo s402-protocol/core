@@ -3,9 +3,9 @@
 [![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
 
-**Sui-native HTTP 402 protocol.** Atomic settlement via Sui's Programmable Transaction Blocks (PTBs). Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
+**Chain-agnostic HTTP 402 protocol with a Sui-native reference implementation.** Five payment schemes for AI agent commerce. Wire-compatible with x402. Zero runtime dependencies. Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
-s402 is the Sui-native implementation of HTTP 402 (Payment Required) — an open protocol that lets AI agents pay for API calls in a single HTTP request with no per-call on-chain transaction. Unlike Coinbase's x402 on Base (EVM L2), s402 uses Sui's Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
+s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for five payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)). The reference implementation on Sui uses Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
 
 ```bash
 npm install s402
