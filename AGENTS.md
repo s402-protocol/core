@@ -31,7 +31,7 @@ src/
 
 ```bash
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (405 across 12 suites, incl. 133-vector conformance)
+pnpm run test       # Run tests (736 across 16 suites, incl. 132-vector conformance)
 pnpm run typecheck  # tsc --noEmit
 ```
 
@@ -46,11 +46,24 @@ pnpm run typecheck  # tsc --noEmit
 ## Sub-path exports
 
 ```typescript
-import { ... } from 's402';          // Everything
-import type { ... } from 's402/types';  // Types + constants
-import { ... } from 's402/http';     // HTTP encode/decode
-import { ... } from 's402/compat';   // Optional x402 migration aid
-import { ... } from 's402/errors';   // Error types
+import { ... } from 's402';              // Everything
+import type { ... } from 's402/types';   // Types + constants
+import { ... } from 's402/http';         // HTTP encode/decode
+import { ... } from 's402/compat';       // Optional x402 migration aid
+import { ... } from 's402/errors';       // Error types
+import { ... } from 's402/test-utils';   // Mock schemes for integration testing
+```
+
+## Examples
+
+The `examples/` directory contains runnable demos (not shipped to npm):
+
+```bash
+# Start the joke API server (mock — no Sui connection needed)
+npx tsx examples/joke-api/server.ts
+
+# In another terminal, run the auto-paying client
+npx tsx examples/joke-api/client.ts
 ```
 
 ## Documentation (VitePress)

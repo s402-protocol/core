@@ -88,6 +88,13 @@
         "default": "./dist/receipts.mjs"
       },
       "default": "./dist/receipts.mjs"
+    },
+    "./test-utils": {
+      "import": {
+        "types": "./dist/test-utils.d.mts",
+        "default": "./dist/test-utils.mjs"
+      },
+      "default": "./dist/test-utils.mjs"
     }
   },
   "scripts": {
