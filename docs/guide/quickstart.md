@@ -1,21 +1,28 @@
 ---
-description: Install s402 and add HTTP 402 payments to your API in minutes. TypeScript-first, zero runtime dependencies, works with any Sui wallet.
+description: Install s402 and add HTTP 402 payments to your API in minutes. TypeScript and Python. Zero runtime dependencies.
 ---
 
 # Quick Start
 
 ## Install
 
-```bash
+::: code-group
+
+```bash [TypeScript]
 npm install s402
 pnpm add s402
 bun add s402
-deno add npm:s402
 ```
 
-> **ESM-only.** Requires Node.js >= 18. CommonJS `require()` is not supported.
+```bash [Python]
+pip install s402
+```
 
-## Sub-path Imports
+:::
+
+> **TypeScript:** ESM-only. Requires Node.js >= 18. **Python:** Requires Python >= 3.10. Both have **zero runtime dependencies**.
+
+## Sub-path Imports (TypeScript)
 
 s402 provides focused sub-paths so you only import what you need:
 
@@ -144,6 +151,45 @@ const requirements = normalizeRequirements(rawJsonFromAnySource);
 // Convert for legacy x402 clients
 const x402Reqs = toX402Requirements(s402Requirements);
 ```
+
+## Python Quick Start
+
+The Python implementation has the same API surface — encode, decode, validate, normalize:
+
+```python
+from s402 import (
+    decode_payment_required,
+    encode_payment_payload,
+    S402_HEADERS,
+    S402Error,
+)
+
+# Decode a 402 response
+requirements = decode_payment_required(header_value)
+print(requirements["accepts"])  # ['exact', 'prepaid']
+print(requirements["amount"])   # '1000000'
+
+# Build and encode a payment
+payment = {
+    "s402Version": "1",
+    "scheme": "exact",
+    "payload": {
+        "transaction": "<base64 signed tx>",
+        "signature": "<base64 signature>",
+    },
+}
+header = encode_payment_payload(payment)
+
+# Handle errors
+try:
+    requirements = decode_payment_required(bad_header)
+except S402Error as e:
+    print(e.code)             # 'INVALID_PAYLOAD'
+    print(e.retryable)        # False
+    print(e.suggested_action) # 'Check payload format...'
+```
+
+Both implementations pass the same [132 conformance test vectors](/guide/conformance) — they produce byte-identical wire output.
 
 ## What's Next?
 

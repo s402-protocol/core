@@ -1,141 +1,164 @@
 ---
-description: Accept s402 HTTP 402 payments in Python with FastAPI, Flask, or Django. No SDK required — just base64, JSON, and one Sui RPC call.
+description: Accept s402 HTTP 402 payments in Python with FastAPI, Flask, or any framework. Uses the official s402 Python package — zero manual base64.
 ---
 
 # Accept s402 Payments in Python
 
-s402 is language-agnostic. This example uses FastAPI, but the same pattern works in Flask, Django, or any Python HTTP framework. No SDK required — just base64, JSON, and one Sui RPC call.
+s402 has an official Python package (`pip install s402`) with the same encode/decode/validate functions as the TypeScript reference. No manual base64 encoding, no hand-rolled validation.
 
-## The 30-Second Version
+## Install
 
-An s402 server does three things:
-
-1. **Return 402** with a `payment-required` header (base64 JSON)
-2. **Decode** the `x-payment` header from the client's retry
-3. **Verify** the Sui transaction via RPC
-
-That's it. ~40 lines of code.
+```bash
+pip install s402 fastapi uvicorn httpx
+```
 
 ## Full Example (FastAPI)
 
 ```python
-import base64, json, time
+import time
 from fastapi import FastAPI, Request, Response
-import httpx
+from s402 import (
+    encode_payment_required,
+    decode_payment_payload,
+    encode_settle_response,
+    S402_HEADERS,
+    S402Error,
+)
 
 app = FastAPI()
 
-# Your Sui address — receives payments
 PAY_TO = "0xYOUR_ADDRESS_HERE"
-PRICE_MIST = "1000000"  # 0.001 SUI
-SUI_RPC = "https://fullnode.testnet.sui.io:443"
-
-
-def encode_b64_json(obj: dict) -> str:
-    return base64.b64encode(json.dumps(obj).encode()).decode()
-
-
-def decode_b64_json(b64: str) -> dict:
-    return json.loads(base64.b64decode(b64))
-
-
-def make_402() -> Response:
-    """Return HTTP 402 with s402 payment requirements."""
-    requirements = {
-        "s402Version": "1",
-        "accepts": ["exact"],
-        "network": "sui:testnet",
-        "asset": "0x2::sui::SUI",
-        "amount": PRICE_MIST,
-        "payTo": PAY_TO,
-        "expiresAt": int(time.time() * 1000) + 300_000,  # 5 minutes
-    }
-    return Response(
-        content=json.dumps({"error": "Payment Required"}),
-        status_code=402,
-        headers={"payment-required": encode_b64_json(requirements)},
-        media_type="application/json",
-    )
-
-
-async def verify_sui_tx(tx_digest: str) -> bool:
-    """Verify a transaction exists on Sui and was successful."""
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(SUI_RPC, json={
-            "jsonrpc": "2.0",
-            "id": 1,
-            "method": "sui_getTransactionBlock",
-            "params": [tx_digest, {"showEffects": True, "showBalanceChanges": True}],
-        })
-    result = resp.json().get("result", {})
-    status = result.get("effects", {}).get("status", {}).get("status")
-    return status == "success"
+PRICE = "1000000"  # 0.001 SUI
 
 
 @app.get("/api/premium-data")
 async def premium_data(request: Request):
-    # Check for payment
-    payment_header = request.headers.get("x-payment")
+    payment_header = request.headers.get(S402_HEADERS["PAYMENT"])
 
     if not payment_header:
-        return make_402()
-
-    # Decode and verify payment
-    payload = decode_b64_json(payment_header)
-    tx_digest = payload.get("payload", {}).get("txDigest")
-
-    if not tx_digest or not await verify_sui_tx(tx_digest):
+        # No payment — return 402 with requirements
+        requirements = {
+            "s402Version": "1",
+            "accepts": ["exact"],
+            "network": "sui:testnet",
+            "asset": "0x2::sui::SUI",
+            "amount": PRICE,
+            "payTo": PAY_TO,
+            "expiresAt": int(time.time() * 1000) + 300_000,  # 5 minutes
+        }
         return Response(
-            content=json.dumps({"error": "Payment verification failed"}),
+            content="Payment Required",
             status_code=402,
+            headers={
+                S402_HEADERS["PAYMENT_REQUIRED"]: encode_payment_required(requirements),
+            },
+        )
+
+    # Decode and validate the payment (s402 handles validation + key stripping)
+    try:
+        payload = decode_payment_payload(payment_header)
+    except S402Error as e:
+        return Response(
+            content=f'{{"error": "{e}", "code": "{e.code}", "retryable": {str(e.retryable).lower()}}}',
+            status_code=400,
             media_type="application/json",
         )
 
-    # Payment verified — serve premium content
-    return {"data": "This is premium data you paid for!", "txDigest": tx_digest}
+    # In production: verify the transaction on-chain via Sui RPC
+    # For this example: accept any valid-shaped payload
+    settlement = {
+        "success": True,
+        "txDigest": "0x" + "f" * 64,
+        "finalityMs": 390,
+    }
+
+    return Response(
+        content='{"data": "Premium content you paid for!"}',
+        status_code=200,
+        media_type="application/json",
+        headers={
+            S402_HEADERS["PAYMENT_RESPONSE"]: encode_settle_response(settlement),
+        },
+    )
 ```
 
 ## Run It
 
 ```bash
-pip install fastapi uvicorn httpx
 uvicorn server:app --port 3402
 ```
 
 ## Test It
 
 ```bash
-# Step 1: Get the 402 response
+# Step 1: Hit the endpoint — get a 402
 curl -i http://localhost:3402/api/premium-data
-# → 402 with payment-required header
 
-# Step 2: Decode the requirements
-curl -s http://localhost:3402/api/premium-data \
-  | python3 -c "import sys,json; print(json.dumps(json.loads(sys.stdin.read()), indent=2))"
+# Step 2: The client decodes requirements, builds a payment, retries
+# (Use any s402 client — TypeScript, Python, or curl with manual headers)
 ```
 
-The client-side payment flow (building the Sui transaction, signing, retrying) is handled by any s402 client with a Sui scheme implementation.
+## AI Agent Auto-Pay Client
+
+A Python agent that handles the full 402 flow automatically:
+
+```python
+import httpx
+from s402 import (
+    decode_payment_required,
+    encode_payment_payload,
+    S402_HEADERS,
+    S402Error,
+)
+
+
+def agent_fetch(url: str, build_payment) -> httpx.Response:
+    """Fetch a URL, auto-paying if the server returns 402."""
+    res = httpx.get(url)
+
+    if res.status_code != 402:
+        return res
+
+    header = res.headers.get(S402_HEADERS["PAYMENT_REQUIRED"])
+    if not header:
+        raise S402Error("INVALID_PAYLOAD", "402 without payment-required header")
+
+    requirements = decode_payment_required(header)
+    payment = build_payment(requirements)
+
+    return httpx.get(url, headers={
+        S402_HEADERS["PAYMENT"]: encode_payment_payload(payment),
+    })
+```
+
+## x402 Compatibility
+
+The Python package includes the same x402 normalization as TypeScript:
+
+```python
+from s402.compat import normalize_requirements, is_s402, is_x402
+
+# Auto-detect and normalize any format
+requirements = normalize_requirements(raw_json_from_any_source)
+# Always returns s402 format regardless of input (s402, x402 V1, or x402 V2)
+```
 
 ## Production Hardening
 
-The example above is minimal. For production, add:
+The example above accepts any valid-shaped payload. For production:
 
-- **Amount verification**: Check that the transaction actually sent the required amount to your address (inspect `balanceChanges` in the RPC response)
-- **Replay protection**: Track processed `txDigest` values to prevent replaying the same payment
-- **Expiry enforcement**: Reject payments made after `expiresAt`
-- **HTTPS**: Required — payment headers are base64, not encrypted
+- **Verify on-chain**: Call `sui_getTransactionBlock` to confirm the transaction exists, succeeded, and sent the correct amount to your address
+- **Replay protection**: Track processed `txDigest` values to prevent reuse
+- **Expiry enforcement**: Reject payments where `Date.now() > expiresAt`
+- **HTTPS required**: Payment headers are base64-encoded, not encrypted
 
-## Conformance Testing
+## Conformance
 
-s402 ships [133 machine-readable JSON test vectors](/guide/conformance) in the npm package. Use them to verify your Python implementation matches the spec:
+The Python implementation passes all [132 conformance test vectors](/guide/conformance) — the same vectors used by the TypeScript reference. The two implementations produce byte-identical wire output.
 
 ```bash
-npm pack s402 && tar xzf s402-*.tgz
-ls package/test/conformance/vectors/
+cd python
+pip install -e ".[dev]"
+pytest -v
+# 132 passed
 ```
-
-Load the vectors with `json.load()` and run your encode/decode functions against them. See the [Conformance Vectors](/guide/conformance) guide for a complete pytest example.
-
-## Key Takeaway
-
-The server side of s402 is trivial in any language. The complexity lives in the _client_ (building Sui transactions) and the _protocol_ (types, encoding). Your server just decodes base64 and checks one RPC call.

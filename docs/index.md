@@ -4,8 +4,8 @@ hero:
   name: s402
   text: Your AI agent needs to pay for things.
   tagline: >-
-    The HTTP 402 payment protocol for Sui. One npm install. Five payment schemes.
-    From one-shot payments to prepaid API budgets — built for agents
+    Chain-agnostic HTTP 402 payment protocol. Five payment schemes.
+    TypeScript and Python implementations — built for agents
     that spend money autonomously.
   image:
     src: /images/hero.png
@@ -22,8 +22,8 @@ hero:
       link: /guide/why-s402
 features:
   - icon: ⚡
-    title: Tiny. Zero dependencies.
-    details: ~30 KB runtime. Pure TypeScript protocol layer. No Sui SDK, no crypto libs bundled. Import the types, build your own stack.
+    title: Tiny. Zero dependencies. Multi-language.
+    details: TypeScript (~30 KB) and Python implementations. No Sui SDK, no crypto libs bundled. Import the types, build your own stack.
   - icon: 🔌
     title: Works with x402 clients today
     details: An x402 client can talk to your s402 server using the exact scheme — zero code changes. Migrate incrementally.
@@ -65,8 +65,26 @@ async function agentFetch(url: string, buildPayment: PaymentBuilder) {
 }
 ```
 
-s402 defines the wire format — _what_ gets sent over HTTP. You bring your own Sui integration for the _how_ (PTB builders, signers, RPC calls).
+s402 defines the wire format — _what_ gets sent over HTTP. You bring your own chain SDK for the _how_ (PTB builders, signers, RPC calls).
+
+### Python
+
+```python
+import httpx
+from s402 import decode_payment_required, encode_payment_payload, S402_HEADERS
+
+res = httpx.get("https://api.example.com/premium-data")
+if res.status_code == 402:
+    requirements = decode_payment_required(res.headers[S402_HEADERS["PAYMENT_REQUIRED"]])
+    payment = build_payment(requirements)  # you bring the chain SDK
+    res = httpx.get(url, headers={S402_HEADERS["PAYMENT"]: encode_payment_payload(payment)})
+```
+
+```bash
+pip install s402   # Python — zero dependencies
+npm install s402   # TypeScript — zero dependencies
+```
 
 ---
 
-**v0.2.1** · Five payment schemes · 405 tests with [133-vector conformance suite](/guide/conformance) + property-based fuzzing · Apache-2.0 · [View on npm](https://www.npmjs.com/package/s402)
+**v0.2.3** · Five payment schemes · 868 tests across TypeScript and Python · [132-vector conformance suite](/guide/conformance) · Apache-2.0 · [npm](https://www.npmjs.com/package/s402) · [PyPI](https://pypi.org/project/s402/)

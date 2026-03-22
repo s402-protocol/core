@@ -1,14 +1,16 @@
 ---
-description: 133 machine-readable JSON test vectors for verifying s402 implementations in any language. Ship in the npm package — no TypeScript required.
+description: 132 machine-readable JSON test vectors for verifying s402 implementations in any language. Shared across TypeScript and Python — proven cross-language compatible.
 ---
 
 # Conformance Test Vectors
 
-s402 ships 133 machine-readable JSON test vectors that define correct protocol behavior. Use them to verify any s402 implementation — Go, Python, Rust, Java, or anything else — without reading a single line of TypeScript.
+s402 ships 132 machine-readable JSON test vectors that define correct protocol behavior. Both the [TypeScript](/guide/quickstart) and [Python](/guide/server-python) implementations pass all 132 vectors — producing byte-identical wire output. Use these vectors to verify any new implementation (Go, Rust, Java) without reading a single line of TypeScript or Python.
 
 ## Why This Matters
 
-Most protocols define behavior in prose. Prose is ambiguous. s402 defines behavior in **executable JSON vectors** that any language can load and run. If your implementation passes all 133 vectors, it's s402-compliant.
+Most protocols define behavior in prose. Prose is ambiguous. s402 defines behavior in **executable JSON vectors** that any language can load and run. If your implementation passes all 132 vectors, it's s402-compliant.
+
+The vectors live in `spec/vectors/` at the root of the monorepo. Both the TypeScript and Python test suites read from this single directory — one source of truth.
 
 The vectors cover:
 - **Encode/decode** — requirements, payloads, settle responses (header + body transport)

@@ -40,7 +40,7 @@ export default defineConfig({
       {
         text: 'Integrations',
         items: [
-          { text: 'Python (FastAPI)', link: '/guide/server-python' },
+          { text: 'Python', link: '/guide/server-python' },
           { text: 'Go (net/http)', link: '/guide/server-go' },
           { text: 'Conformance Vectors', link: '/guide/conformance' },
         ],
