@@ -143,9 +143,9 @@ Three design details:
 
 ## Cross-Language Conformance
 
-s402 ships [133 machine-readable JSON test vectors](/guide/conformance) that define correct behavior for all encode/decode paths, validation rules, and key-stripping boundaries. Any implementation in any language can load these vectors and verify compliance — without reading a single line of TypeScript.
+s402 ships [132 machine-readable JSON test vectors](/guide/conformance) that define correct behavior for all encode/decode paths, validation rules, and key-stripping boundaries. Both the TypeScript and Python implementations pass all 132 vectors — producing byte-identical wire output. Any new implementation in any language can load these vectors and verify compliance.
 
-The vectors are generated from source (never hand-written) and validated by 4 rounds of expert audit. They ship in the npm package alongside the TypeScript implementation.
+The vectors live in `spec/vectors/` at the root of the monorepo. They are generated from source (never hand-written) and validated by multiple rounds of expert audit.
 
 ## Forward Compatibility
 

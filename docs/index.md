@@ -55,7 +55,7 @@ async function agentFetch(url: string, buildPayment: PaymentBuilder) {
   const requirements = extractRequirementsFromResponse(res);
   if (!requirements) throw new Error('Invalid 402 response');
 
-  // 2. Build and sign a payment (you bring the Sui SDK)
+  // 2. Build and sign a payment (you bring the chain SDK)
   const payment = await buildPayment(requirements);
 
   // 3. Retry with payment attached
@@ -73,7 +73,8 @@ s402 defines the wire format — _what_ gets sent over HTTP. You bring your own 
 import httpx
 from s402 import decode_payment_required, encode_payment_payload, S402_HEADERS
 
-res = httpx.get("https://api.example.com/premium-data")
+url = "https://api.example.com/premium-data"
+res = httpx.get(url)
 if res.status_code == 402:
     requirements = decode_payment_required(res.headers[S402_HEADERS["PAYMENT_REQUIRED"]])
     payment = build_payment(requirements)  # you bring the chain SDK
@@ -87,4 +88,4 @@ npm install s402   # TypeScript — zero dependencies
 
 ---
 
-**v0.2.3** · Five payment schemes · 868 tests across TypeScript and Python · [132-vector conformance suite](/guide/conformance) · Apache-2.0 · [npm](https://www.npmjs.com/package/s402) · [PyPI](https://pypi.org/project/s402/)
+**v0.2.3** · Five payment schemes · 868 tests across TypeScript and Python · [132-vector conformance suite](/guide/conformance) · Apache-2.0 · [npm](https://www.npmjs.com/package/s402)

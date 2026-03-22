@@ -149,7 +149,7 @@ The example above accepts any valid-shaped payload. For production:
 
 - **Verify on-chain**: Call `sui_getTransactionBlock` to confirm the transaction exists, succeeded, and sent the correct amount to your address
 - **Replay protection**: Track processed `txDigest` values to prevent reuse
-- **Expiry enforcement**: Reject payments where `Date.now() > expiresAt`
+- **Expiry enforcement**: Reject payments where `time.time() * 1000 > expiresAt`
 - **HTTPS required**: Payment headers are base64-encoded, not encrypted
 
 ## Conformance

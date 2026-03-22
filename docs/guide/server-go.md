@@ -172,7 +172,7 @@ The example above is minimal. For production, add:
 
 ## Conformance Testing
 
-s402 ships [133 machine-readable JSON test vectors](/guide/conformance) in the npm package. Use them to verify your Go implementation matches the spec — no TypeScript required:
+s402 ships [132 machine-readable JSON test vectors](/guide/conformance) in `spec/vectors/`. Use them to verify your Go implementation matches the spec — no TypeScript required:
 
 ```bash
 npm pack s402 && tar xzf s402-*.tgz
