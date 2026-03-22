@@ -2,12 +2,32 @@
 
 ## What is this?
 
-`s402` is a chain-agnostic HTTP 402 payment protocol. It defines types, HTTP encoding/decoding, and error handling for five payment schemes. Optional x402 compat layer available via `s402/compat`. **Zero runtime dependencies.**
+`s402` is a chain-agnostic HTTP 402 payment protocol. This repo is a **monorepo** containing the protocol specification, conformance test vectors, and implementations in multiple languages.
 
-## Architecture
+## Repository Structure
 
 ```
-src/
+s402-protocol/core
+├── spec/vectors/          — 132 conformance test vectors (THE protocol spec, language-agnostic)
+├── docs/                  — VitePress docs site (s402-protocol.org) + wire format specification
+├── typescript/            — TypeScript reference implementation (npm: s402)
+│   ├── src/               — 11 source files, zero runtime deps
+│   ├── test/              — 736 tests (adversarial, fuzz, MC/DC, conformance)
+│   └── examples/          — Runnable joke-api demo
+├── python/                — Python implementation (pip: s402)
+│   ├── src/s402/          — 5 source files, zero runtime deps
+│   └── tests/             — Conformance test runner (reads spec/vectors/)
+├── AGENTS.md              — This file (repo-level)
+├── LICENSE                — Apache-2.0
+└── CONTRIBUTING.md        — How to contribute
+```
+
+Both implementations read conformance vectors from `spec/vectors/` — one canonical source of truth.
+
+## TypeScript Implementation
+
+```
+typescript/src/
   index.ts        — Barrel export (public API)
   types.ts        — All protocol types, interfaces, constants
   scheme.ts       — Client/Server/Facilitator scheme interfaces
@@ -17,6 +37,8 @@ src/
   http.ts         — Base64 encode/decode for HTTP headers + canonical validators
   compat.ts       — Optional x402 migration aid (opt-in, not ambient)
   errors.ts       — Typed error codes with recovery hints
+  receipts.ts     — Signed usage receipt header format/parse
+  test-utils.ts   — Mock schemes for integration testing
 ```
 
 ## Key rules
@@ -30,20 +52,28 @@ src/
 ## Commands
 
 ```bash
+# TypeScript (run from typescript/)
+cd typescript
 pnpm run build      # Build with tsdown
 pnpm run test       # Run tests (736 across 16 suites, incl. 132-vector conformance)
 pnpm run typecheck  # tsc --noEmit
+
+# Python (run from python/)
+cd python
+pip install -e ".[dev]"
+pytest              # Run 132 conformance tests
 ```
 
 ## Conformance test suite
 
-`test/conformance/` contains 133 machine-readable JSON test vectors across 12 files. These are the **product** — cross-language implementors (Go, Python, Rust) use them to verify s402 conformance without this TypeScript runner. The vectors ship in the npm package.
+`spec/vectors/` contains 132 machine-readable JSON test vectors across 12 files. These are the **product** — both the TypeScript and Python implementations read from this single directory. Cross-language implementors (Go, Rust) use these same vectors to verify s402 conformance.
 
 - **Generator**: `npx tsx test/conformance/generate-vectors.ts` — regenerate after any encode/decode changes
-- **Runner**: `test/conformance/conformance.test.ts` — vitest runner that proves s402 passes its own spec
-- **Docs**: `test/conformance/README.md` — cross-language implementation guide
+- **TS Runner**: `typescript/test/conformance/conformance.test.ts`
+- **Python Runner**: `python/tests/test_conformance.py`
+- **Docs**: `typescript/test/conformance/README.md` — cross-language implementation guide
 
-## Sub-path exports
+## Sub-path exports (TypeScript)
 
 ```typescript
 import { ... } from 's402';              // Everything
@@ -56,14 +86,15 @@ import { ... } from 's402/test-utils';   // Mock schemes for integration testing
 
 ## Examples
 
-The `examples/` directory contains runnable demos (not shipped to npm):
-
 ```bash
-# Start the joke API server (mock — no Sui connection needed)
-npx tsx examples/joke-api/server.ts
+# TypeScript: joke API server + client (mock — no Sui connection needed)
+cd typescript
+npx tsx examples/joke-api/server.ts    # terminal 1
+npx tsx examples/joke-api/client.ts    # terminal 2
 
-# In another terminal, run the auto-paying client
-npx tsx examples/joke-api/client.ts
+# Python: agent client talking to the TS server
+cd python
+python examples/agent_client.py        # terminal 2 (after starting TS server)
 ```
 
 ## Documentation (VitePress)

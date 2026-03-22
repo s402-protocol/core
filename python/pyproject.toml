@@ -1,0 +1,36 @@
+[project]
+name = "s402"
+version = "0.1.0"
+description = "s402 — Chain-agnostic HTTP 402 wire format for AI agent payments. Zero dependencies."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+authors = [{ name = "SweeInc", email = "daniel@sweeinc.com" }]
+keywords = ["http-402", "payments", "ai-agent", "micropayments", "x402", "machine-to-machine"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: Apache Software License",
+    "Programming Language :: Python :: 3",
+    "Topic :: Internet :: WWW/HTTP",
+    "Topic :: Office/Business :: Financial",
+    "Typing :: Typed",
+]
+
+[project.urls]
+Homepage = "https://s402-protocol.org"
+Repository = "https://github.com/s402-protocol/s402-python"
+Specification = "https://s402-protocol.org/specification"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/s402"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]

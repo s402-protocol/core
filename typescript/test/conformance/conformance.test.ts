@@ -39,7 +39,7 @@ import type {
 
 // ── Helpers ──────────────────────────────────────
 
-const VECTORS_DIR = join(import.meta.dirname, 'vectors');
+const VECTORS_DIR = join(import.meta.dirname, '..', '..', '..', 'spec', 'vectors');
 
 interface TestVector {
   description: string;
