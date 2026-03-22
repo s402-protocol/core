@@ -54,7 +54,15 @@ export interface s402PaymentRequirements {
   amount: string;
   /** Recipient address */
   payTo: string;
-  /** Facilitator URL (optional for direct settlement) */
+  /**
+   * Facilitator URL (optional for direct settlement).
+   *
+   * Validated at the wire layer for protocol (`https:` or `http:` only) and
+   * embedded credentials (rejected). Consumers that fetch this URL MUST apply
+   * their own hostname/IP restrictions to prevent SSRF (block RFC 1918 private
+   * addresses, link-local 169.254.x.x, loopback, cloud metadata endpoints).
+   * DNS-based SSRF cannot be caught at URL parse time.
+   */
   facilitatorUrl?: string;
 
   // ── s402 extensions (not in x402) ──

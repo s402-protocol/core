@@ -607,6 +607,12 @@ export function validateRequirementsShape(obj: unknown): void {
         throw new s402Error('INVALID_PAYLOAD',
           `facilitatorUrl must use https:// or http://, got "${url.protocol}"`);
       }
+      // Reject embedded credentials — they leak via logs, error messages, and Referrer headers.
+      // RFC 3986 §3.2.1 deprecated userinfo in HTTP(S) URIs.
+      if (url.username || url.password) {
+        throw new s402Error('INVALID_PAYLOAD',
+          'facilitatorUrl must not contain embedded credentials (user:password@)');
+      }
     } catch (e) {
       if (e instanceof s402Error) throw e;
       throw new s402Error('INVALID_PAYLOAD',

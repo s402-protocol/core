@@ -204,7 +204,14 @@ export class s402Facilitator {
     }
 
     // H-2: Deduplicate concurrent identical payloads — prevents free resource access
-    // if two identical requests arrive before either reaches scheme.settle()
+    // if two identical requests arrive before either reaches scheme.settle().
+    //
+    // Safety: JSON.stringify is canonical here because all payloads entering process()
+    // go through decodePaymentPayload() → pickPayloadFields(), which rebuilds the object
+    // by iterating an ordered Set allowlist. The output always has keys in the same order
+    // (s402Version, scheme, payload.transaction, payload.signature, ...) regardless of
+    // the input JSON key order. This was verified empirically — two clients sending the
+    // same payment with different JSON key order produce identical dedup keys after decode.
     const dedupeKey = JSON.stringify(payload);
     if (this.inFlight.has(dedupeKey)) {
       return { success: false, error: 'Duplicate payment request already in flight', errorCode: 'INVALID_PAYLOAD' };

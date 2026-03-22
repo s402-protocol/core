@@ -97,6 +97,10 @@ export function fromX402Requirements(x402: x402PaymentRequirements): s402Payment
         throw new s402Error('INVALID_PAYLOAD',
           `facilitatorUrl must use https:// or http://, got "${url.protocol}"`);
       }
+      if (url.username || url.password) {
+        throw new s402Error('INVALID_PAYLOAD',
+          'facilitatorUrl must not contain embedded credentials (user:password@)');
+      }
     } catch (e) {
       if (e instanceof s402Error) throw e;
       throw new s402Error('INVALID_PAYLOAD', 'facilitatorUrl is not a valid URL');
