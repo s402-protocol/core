@@ -1,0 +1,632 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>s402 Demo API — Pay for APIs with AI Agents</title>
+  <meta name="description" content="Try the s402 protocol: AI agents pay for API calls using SUI. No signup, no API keys — just fetch and pay." />
+  <style>
+    /* ── Reset & Base ────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0b0b11;
+      --bg-card: #13131a;
+      --bg-code: #1a1a24;
+      --gold: #d4af37;
+      --gold-dim: #9a7d23;
+      --gold-glow: rgba(212, 175, 55, 0.15);
+      --text: #e8e8ed;
+      --text-muted: #8888a0;
+      --text-dim: #555570;
+      --green: #22c55e;
+      --red: #ef4444;
+      --blue: #3b82f6;
+      --border: #222233;
+      --radius: 12px;
+      --font: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+      --mono: 'SF Mono', 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    a { color: var(--gold); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ──────────────────────────────────── */
+    .container { max-width: 960px; margin: 0 auto; padding: 0 24px; }
+
+    section {
+      padding: 80px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    section:last-of-type { border-bottom: none; }
+
+    h2 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: var(--text);
+    }
+
+    h2 .accent { color: var(--gold); }
+
+    .section-sub {
+      color: var(--text-muted);
+      font-size: 1.05rem;
+      margin-bottom: 40px;
+      max-width: 600px;
+    }
+
+    /* ── Hero ────────────────────────────────────── */
+    .hero {
+      padding: 120px 0 80px;
+      text-align: center;
+    }
+
+    .hero-badge {
+      display: inline-block;
+      padding: 6px 16px;
+      border: 1px solid var(--gold-dim);
+      border-radius: 20px;
+      font-size: 0.8rem;
+      color: var(--gold);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      background: var(--gold-glow);
+    }
+
+    .hero h1 {
+      font-size: clamp(2.5rem, 6vw, 4rem);
+      font-weight: 800;
+      line-height: 1.1;
+      margin-bottom: 20px;
+      letter-spacing: -0.02em;
+    }
+
+    .hero h1 .gold { color: var(--gold); }
+
+    .hero p {
+      font-size: 1.15rem;
+      color: var(--text-muted);
+      max-width: 560px;
+      margin: 0 auto 36px;
+    }
+
+    .hero-cta {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 28px;
+      background: var(--gold);
+      color: #0b0b11;
+      font-weight: 700;
+      font-size: 0.95rem;
+      border-radius: 8px;
+      transition: background 0.2s;
+    }
+
+    .hero-cta:hover { background: #e0bf45; text-decoration: none; }
+
+    /* ── Flow ────────────────────────────────────── */
+    .flow-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 24px;
+    }
+
+    .flow-step {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 28px 24px;
+      text-align: center;
+      position: relative;
+    }
+
+    .flow-step .step-num {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 36px;
+      height: 36px;
+      border-radius: 50%;
+      background: var(--gold-glow);
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      font-weight: 700;
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+    }
+
+    .flow-step h3 {
+      font-size: 1rem;
+      margin-bottom: 8px;
+      color: var(--text);
+    }
+
+    .flow-step p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    .flow-step .status-code {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+    }
+
+    .status-402 { background: rgba(239, 68, 68, 0.15); color: var(--red); }
+    .status-200 { background: rgba(34, 197, 94, 0.15); color: var(--green); }
+
+    /* ── Endpoints ───────────────────────────────── */
+    .endpoint-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 20px;
+    }
+
+    .endpoint-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 24px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .endpoint-card:hover {
+      border-color: var(--gold-dim);
+      box-shadow: 0 0 30px var(--gold-glow);
+    }
+
+    .endpoint-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      margin-bottom: 12px;
+    }
+
+    .endpoint-name {
+      font-weight: 700;
+      font-size: 1.05rem;
+    }
+
+    .endpoint-price {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--gold);
+      background: var(--gold-glow);
+      padding: 4px 10px;
+      border-radius: 6px;
+      white-space: nowrap;
+    }
+
+    .endpoint-desc {
+      color: var(--text-muted);
+      font-size: 0.9rem;
+      margin-bottom: 16px;
+    }
+
+    .endpoint-path {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      background: var(--bg-code);
+      padding: 8px 12px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .endpoint-path .method {
+      color: var(--green);
+      font-weight: 600;
+    }
+
+    .endpoint-free {
+      border-color: rgba(34, 197, 94, 0.3);
+    }
+
+    .endpoint-free .endpoint-price {
+      color: var(--green);
+      background: rgba(34, 197, 94, 0.1);
+    }
+
+    /* ── Setup ───────────────────────────────────── */
+    .setup-steps {
+      display: flex;
+      flex-direction: column;
+      gap: 28px;
+    }
+
+    .setup-step {
+      display: grid;
+      grid-template-columns: 36px 1fr;
+      gap: 16px;
+    }
+
+    .setup-step .num {
+      width: 36px;
+      height: 36px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      background: var(--gold-glow);
+      border: 1px solid var(--gold-dim);
+      color: var(--gold);
+      font-weight: 700;
+      font-size: 0.85rem;
+      flex-shrink: 0;
+    }
+
+    .setup-step h3 {
+      font-size: 1rem;
+      margin-bottom: 8px;
+    }
+
+    .setup-step p {
+      font-size: 0.9rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+
+    pre {
+      background: var(--bg-code);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px 20px;
+      overflow-x: auto;
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      line-height: 1.7;
+      color: var(--text);
+      position: relative;
+    }
+
+    pre .comment { color: var(--text-dim); }
+    pre .string { color: #a5d6ff; }
+    pre .key { color: var(--gold); }
+    pre .value { color: var(--green); }
+
+    .copy-btn {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      padding: 4px 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      cursor: pointer;
+      font-family: var(--font);
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .copy-btn:hover { color: var(--gold); border-color: var(--gold-dim); }
+
+    /* ── Protocol ────────────────────────────────── */
+    .protocol-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 16px;
+    }
+
+    .protocol-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    .protocol-card h3 {
+      font-size: 0.95rem;
+      margin-bottom: 6px;
+      color: var(--gold);
+    }
+
+    .protocol-card p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      line-height: 1.5;
+    }
+
+    /* ── Footer ──────────────────────────────────── */
+    footer {
+      padding: 40px 0;
+      text-align: center;
+      color: var(--text-dim);
+      font-size: 0.85rem;
+    }
+
+    footer a { color: var(--gold-dim); }
+
+    .footer-links {
+      display: flex;
+      gap: 24px;
+      justify-content: center;
+      margin-bottom: 16px;
+    }
+
+    /* ── Responsive ──────────────────────────────── */
+    @media (max-width: 640px) {
+      section { padding: 48px 0; }
+      .hero { padding: 80px 0 48px; }
+      .hero h1 { font-size: 2rem; }
+      .flow-grid { grid-template-columns: 1fr; }
+      .setup-step { grid-template-columns: 1fr; }
+      .setup-step .num { margin-bottom: -8px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="app">
+    <!-- Hero -->
+    <section class="hero">
+      <div class="container">
+        <div class="hero-badge">s402 Protocol Demo</div>
+        <h1>APIs that <span class="gold">get paid</span><br />by AI agents</h1>
+        <p>
+          This demo server charges for endpoints using the
+          <a href="https://s402-protocol.org">s402 protocol</a>.
+          Point your AI agent at it and watch the magic happen.
+        </p>
+        <a href="#setup" class="hero-cta">Get Started &darr;</a>
+      </div>
+    </section>
+
+    <!-- How It Works -->
+    <section id="flow">
+      <div class="container">
+        <h2>How <span class="accent">s402</span> works</h2>
+        <p class="section-sub">
+          Three steps. No API keys. No signup. No credit card.
+        </p>
+        <div class="flow-grid">
+          <div class="flow-step">
+            <div class="step-num">1</div>
+            <h3>Agent requests data</h3>
+            <p>
+              Your AI agent calls <code>s402_fetch(url)</code>
+              like a normal API request.
+            </p>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">2</div>
+            <h3>Server demands payment</h3>
+            <p>
+              The API returns <span class="status-code status-402">402</span>
+              with price, network, and accepted payment schemes.
+            </p>
+          </div>
+          <div class="flow-step">
+            <div class="step-num">3</div>
+            <h3>Agent pays &amp; gets data</h3>
+            <p>
+              s402-mcp signs a Sui transaction, retries the request,
+              and returns <span class="status-code status-200">200</span> + receipt.
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Endpoints -->
+    <section id="endpoints">
+      <div class="container">
+        <h2>Demo <span class="accent">Endpoints</span></h2>
+        <p class="section-sub">
+          Try these endpoints with s402-mcp or any s402-compatible client.
+        </p>
+        <div class="endpoint-grid">
+          <!-- Free -->
+          <div class="endpoint-card endpoint-free">
+            <div class="endpoint-header">
+              <span class="endpoint-name">Catalog</span>
+              <span class="endpoint-price">free</span>
+            </div>
+            <p class="endpoint-desc">
+              Lists all available endpoints with prices. Agents use this to discover what's available.
+            </p>
+            <div class="endpoint-path">
+              <span class="method">GET</span> /api/catalog
+            </div>
+          </div>
+          <!-- Joke -->
+          <div class="endpoint-card">
+            <div class="endpoint-header">
+              <span class="endpoint-name">Programmer Joke</span>
+              <span class="endpoint-price">0.001 SUI</span>
+            </div>
+            <p class="endpoint-desc">
+              A random programmer joke to brighten your day. The cheapest endpoint — great for testing.
+            </p>
+            <div class="endpoint-path">
+              <span class="method">GET</span> /api/joke
+            </div>
+          </div>
+          <!-- Wisdom -->
+          <div class="endpoint-card">
+            <div class="endpoint-header">
+              <span class="endpoint-name">Tech Wisdom</span>
+              <span class="endpoint-price">0.005 SUI</span>
+            </div>
+            <p class="endpoint-desc">
+              Timeless quotes from the legends of computing — Dijkstra, Torvalds, Kay, Hopper.
+            </p>
+            <div class="endpoint-path">
+              <span class="method">GET</span> /api/wisdom
+            </div>
+          </div>
+          <!-- Alpha -->
+          <div class="endpoint-card">
+            <div class="endpoint-header">
+              <span class="endpoint-name">Agent Alpha</span>
+              <span class="endpoint-price">0.01 SUI</span>
+            </div>
+            <p class="endpoint-desc">
+              Insights on AI agent payments, the s402 protocol, and the future of machine commerce.
+            </p>
+            <div class="endpoint-path">
+              <span class="method">GET</span> /api/alpha
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Setup -->
+    <section id="setup">
+      <div class="container">
+        <h2>Try it in <span class="accent">30 seconds</span></h2>
+        <p class="section-sub">
+          Add s402-mcp to Claude Code and ask it to fetch a paid endpoint.
+        </p>
+        <div class="setup-steps">
+          <!-- Step 1 -->
+          <div class="setup-step">
+            <div class="num">1</div>
+            <div>
+              <h3>Add s402-mcp to your Claude Code config</h3>
+              <p>
+                Add this to <code>~/.claude/settings.json</code> under <code>mcpServers</code>:
+              </p>
+              <pre><code>{
+  <span class="key">"mcpServers"</span>: {
+    <span class="key">"s402"</span>: {
+      <span class="key">"command"</span>: <span class="string">"npx"</span>,
+      <span class="key">"args"</span>: [<span class="string">"s402-mcp"</span>],
+      <span class="key">"env"</span>: {
+        <span class="key">"S402_PRIVATE_KEY"</span>: <span class="string">"suiprivkey1..."</span>,
+        <span class="key">"S402_NETWORK"</span>: <span class="string">"sui:testnet"</span>
+      }
+    }
+  }
+}</code><button class="copy-btn" onclick="copyConfig()">Copy</button></pre>
+            </div>
+          </div>
+          <!-- Step 2 -->
+          <div class="setup-step">
+            <div class="num">2</div>
+            <div>
+              <h3>Get testnet SUI</h3>
+              <p>
+                Generate a keypair and fund it from the faucet:
+              </p>
+              <pre><code><span class="comment"># Generate a new keypair</span>
+sui keytool generate ed25519
+
+<span class="comment"># Fund it on testnet</span>
+sui client faucet --address &lt;your-address&gt; --network testnet</code></pre>
+            </div>
+          </div>
+          <!-- Step 3 -->
+          <div class="setup-step">
+            <div class="num">3</div>
+            <div>
+              <h3>Ask your agent to fetch a paid endpoint</h3>
+              <p>
+                In Claude Code, just ask:
+              </p>
+              <pre><code><span class="comment"># In Claude Code, type:</span>
+<span class="string">"Fetch me a joke from https://demo.s402-protocol.org/api/joke"</span>
+
+<span class="comment"># s402-mcp handles the 402 negotiation automatically.</span>
+<span class="comment"># Your agent pays, gets the joke, and shows you the receipt.</span></code></pre>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Protocol -->
+    <section id="protocol">
+      <div class="container">
+        <h2>The <span class="accent">s402</span> protocol</h2>
+        <p class="section-sub">
+          A chain-agnostic HTTP 402 wire format. Five payment schemes. Zero runtime dependencies.
+          Wire-compatible with x402 (Coinbase).
+        </p>
+        <div class="protocol-grid">
+          <div class="protocol-card">
+            <h3>Exact</h3>
+            <p>One-shot payment. Sign a transaction, send it in the header, get your data. Simplest scheme.</p>
+          </div>
+          <div class="protocol-card">
+            <h3>Prepaid</h3>
+            <p>Deposit upfront, then make thousands of calls. 500x cheaper per-call for high-frequency access.</p>
+          </div>
+          <div class="protocol-card">
+            <h3>Stream</h3>
+            <p>Per-second billing. Pay for exactly what you use, in real time. Perfect for long-running queries.</p>
+          </div>
+          <div class="protocol-card">
+            <h3>Escrow</h3>
+            <p>Time-locked vault with dispute resolution. Buyer protection for high-value API calls.</p>
+          </div>
+          <div class="protocol-card">
+            <h3>Unlock</h3>
+            <p>Pay-to-decrypt. Content is encrypted on the wire, key is released after settlement.</p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div class="container">
+        <div class="footer-links">
+          <a href="https://s402-protocol.org">Protocol Spec</a>
+          <a href="https://github.com/s402-protocol/core">GitHub</a>
+          <a href="https://www.npmjs.com/package/s402">npm</a>
+          <a href="https://www.npmjs.com/package/s402-mcp">s402-mcp</a>
+        </div>
+        <p>
+          Built by <a href="https://sweeinc.com">Swee Inc</a> &middot;
+          Powered by <a href="https://sui.io">Sui</a> &middot;
+          Apache-2.0
+        </p>
+      </div>
+    </footer>
+  </div>
+
+  <script>
+    function copyConfig() {
+      const config = JSON.stringify({
+        mcpServers: {
+          s402: {
+            command: 'npx',
+            args: ['s402-mcp'],
+            env: {
+              S402_PRIVATE_KEY: 'suiprivkey1...',
+              S402_NETWORK: 'sui:testnet',
+            },
+          },
+        },
+      }, null, 2);
+      navigator.clipboard.writeText(config).then(() => {
+        const btn = document.querySelector('.copy-btn');
+        btn.textContent = 'Copied!';
+        setTimeout(() => { btn.textContent = 'Copy'; }, 2000);
+      });
+    }
+  </script>
+</body>
+</html>

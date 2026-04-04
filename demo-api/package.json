@@ -1,0 +1,24 @@
+{
+  "name": "s402-demo-api",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Demo API showcasing the s402 protocol — pay for endpoints with SUI",
+  "scripts": {
+    "dev": "tsx src/server.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "s402": "^0.2.3"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

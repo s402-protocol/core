@@ -1,0 +1,58 @@
+{
+  "name": "s402-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "MCP server for s402 — let AI agents pay for APIs on Sui",
+  "license": "Apache-2.0",
+  "author": "SweeInc <daniel@sweeinc.com>",
+  "homepage": "https://s402-protocol.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s402-protocol/core.git",
+    "directory": "mcp-server"
+  },
+  "bugs": {
+    "url": "https://github.com/s402-protocol/core/issues"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "s402",
+    "sui",
+    "payments",
+    "ai-agent",
+    "http-402",
+    "claude-code"
+  ],
+  "bin": "./dist/index.js",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "build": "tsc && chmod +x dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "prepublishOnly": "pnpm run build && pnpm run typecheck && pnpm run test"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@mysten/sui": "^1.21.0",
+    "s402": "^0.2.3",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
