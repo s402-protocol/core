@@ -1,0 +1,33 @@
+{
+  "name": "io.github.s402-protocol/s402-mcp",
+  "description": "MCP server that lets AI agents pay for APIs using the s402 protocol on Sui. Handles HTTP 402 negotiation automatically — discover price, sign transaction, pay, get data.",
+  "version": "0.1.1",
+  "packages": [
+    {
+      "registry_name": "npm",
+      "name": "s402-mcp",
+      "version": "0.1.1"
+    }
+  ],
+  "tools": [
+    {
+      "name": "s402_fetch",
+      "description": "Fetch a URL with automatic s402/x402 payment handling. If the server returns 402, signs a Sui transaction and retries with payment."
+    },
+    {
+      "name": "s402_check_price",
+      "description": "Check what a URL costs without paying. Returns price, accepted schemes, and whether you can afford it."
+    },
+    {
+      "name": "s402_balance",
+      "description": "Check your Sui wallet balance and session spending."
+    }
+  ],
+  "_meta": {
+    "homepage": "https://s402-protocol.org",
+    "repository": "https://github.com/s402-protocol/core",
+    "license": "Apache-2.0",
+    "author": "SweeInc",
+    "keywords": ["payments", "sui", "http-402", "micropayments", "ai-agent", "x402-compatible"]
+  }
+}
