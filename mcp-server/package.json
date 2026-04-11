@@ -45,7 +45,7 @@
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@mysten/sui": "^1.21.0",
     "open": "^11.0.0",
-    "s402": "^0.2.3",
+    "s402": "file:../typescript",
     "zod": "^3.24.0"
   },
   "devDependencies": {

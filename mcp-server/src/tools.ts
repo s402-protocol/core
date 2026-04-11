@@ -204,12 +204,13 @@ function extractRequirements(
 // ═══════════════════════════════════════════════════════════
 
 export function registerTools(server: McpServer, config: S402Config): void {
-  // Wire up s402 client with Sui exact scheme
+  // Wire up s402 client with Sui exact scheme. We keep a direct reference to
+  // the scheme (in addition to registering it) so we can invoke its
+  // `verifySettlement` helper after the facilitator returns a receipt — the
+  // client-side causal-binding check that closes ADR-001 Decision 1.
+  const exactScheme = createSuiExactScheme(config.keypair, config.client);
   const paymentClient = new s402Client();
-  paymentClient.register(
-    config.network,
-    createSuiExactScheme(config.keypair, config.client),
-  );
+  paymentClient.register(config.network, exactScheme);
 
   // Session spend tracking (cumulative across all tool calls)
   let sessionSpend = 0n;
@@ -448,6 +449,51 @@ export function registerTools(server: McpServer, config: S402Config): void {
         const receipt = receiptHeader
           ? decodeSettleResponse(receiptHeader)
           : null;
+
+        // 8a. CAUSAL-BINDING CHECK (ADR-001 Decision 1).
+        //
+        // Before treating the payment as settled, verify that the tx digest the
+        // facilitator claims it broadcast is actually derived from the exact
+        // signed bytes we sent. Sui's tx digest is a deterministic hash of
+        // (BCS-encoded TransactionData || signatures), so we can recompute it
+        // locally with zero network calls. If it doesn't match, the facilitator
+        // either broadcast something different or is lying about what it
+        // broadcast — either way the payment is non-settled.
+        //
+        // See spec/allium/digest-assertion.allium for the behavioral contract.
+        if (receipt && receipt.success && exactScheme.verifySettlement) {
+          const verification = exactScheme.verifySettlement(payload, receipt);
+          if (!verification.verified) {
+            // Assume worst case: our signed bytes may still have been broadcast
+            // under a different digest. Track the spend so the session budget
+            // is honest about what left the wallet.
+            sessionSpend += amount;
+            return jsonResponse(
+              {
+                error:
+                  'Facilitator returned a settlement receipt whose tx digest ' +
+                  'does not match our signed payload. The payment is NOT ' +
+                  'considered settled. Do not retry.',
+                status: paidRes.status,
+                paid: 'unverified',
+                code: 'DIGEST_MISMATCH',
+                expectedDigest: verification.expectedDigest,
+                actualDigest: verification.actualDigest,
+                reason: verification.reason,
+                payment: {
+                  amount: requirements.amount,
+                  amountSui: mistToSui(amount),
+                  network: requirements.network,
+                  payTo: requirements.payTo,
+                },
+                suggestion:
+                  'Investigate this facilitator before using it again. ' +
+                  'Check s402_balance to confirm whether funds actually moved.',
+              },
+              true,
+            );
+          }
+        }
 
         // Track session spend
         sessionSpend += amount;

@@ -14,18 +14,41 @@ This ADR exists to capture four decisions that should not be re-derived by futur
 
 ## Decision
 
-### Decision 1 — Facilitator Trust Model: Clients Must Independently Verify
+### Decision 1 — Facilitator Trust Model: Clients Must Independently Bind the Settlement to Their Signed Payload
 
-**Rule:** A client MUST NOT mark a payment as complete based solely on a facilitator's `SettleResponse`. The client MUST independently verify the on-chain transaction digest against the chain's ledger before treating the payment as settled.
+**Rule:** A client MUST NOT mark a payment as complete based solely on a facilitator's `SettleResponse`. For any scheme in which the client signs the full transaction before sending it to the facilitator (currently: `exact`, `stream`, `escrow`, `unlock-TX1`), the client MUST verify that the facilitator-reported tx digest is **causally bound** to the exact bytes the client signed — before treating the payment as settled.
 
-**Mechanism:**
-- Every `SettleResponse` from a facilitator MUST include a chain-native transaction digest (e.g., Sui tx digest, EVM tx hash)
-- The client MUST call the appropriate chain RPC to confirm the digest exists, includes the expected payee, amount, and asset, and has reached the finality threshold the resource server requested
-- If the verification fails, the client MUST raise `SETTLEMENT_UNVERIFIED` and treat the payment as non-settled — the request is NOT retried automatically, because retries would double-pay
+**Mechanism — local, offline, zero-RPC (revised 2026-04-11):**
 
-This elevates the currently-implicit assumption ("facilitators are honest") to an explicit invariant candidate (**S8: Facilitator accountability**) which will be added to `INVARIANTS.md` in v0.3.
+The `exact` scheme (and any scheme following the same client-signs-full-transaction pattern) gets this for free, because Sui's tx digest is a deterministic blake2b hash of the BCS-encoded transaction bytes:
 
-**Why this matters for scale:** At 1 facilitator, trust is a config choice. At 500 facilitators across compliance jurisdictions, wallet providers, and chains, trust-by-allowlist becomes the client's only defense — AND the allowlist is only as good as the verification step behind it. Without independent chain verification, a malicious facilitator can issue fake settlement acknowledgments and the resource server has no way to detect the fraud until users complain on Twitter.
+```
+digest = base58(blake2b_256("TransactionData::" || bcs_bytes))
+```
+
+The client already holds `bcs_bytes` — it just signed them. Therefore:
+
+- Every `SettleResponse` from a facilitator MUST include a chain-native transaction digest
+- The client's scheme implementation MUST expose a `verifySettlement(payload, settleResponse)` function that recomputes the expected digest from the signed payload bytes and compares it to the facilitator's reported digest. For Sui, this is a single call to `TransactionDataBuilder.getDigestFromBytes()` — **no chain RPC required**
+- If the digests do not match, the client MUST raise `DIGEST_MISMATCH` and treat the payment as non-settled — the request is NOT retried automatically, because retries would double-pay. A mismatch means the facilitator either broadcast a different transaction than the one the client signed, or is lying about what it broadcast; either is grounds to stop trusting that facilitator
+- Optional belt-and-suspenders: an RPC roundtrip to the chain can additionally confirm the digest exists on the ledger and has reached the desired finality threshold. This is **not required by the wire protocol** and is layered on top by implementations that want defense-in-depth against facilitator-side censorship (rather than facilitator-side fraud)
+
+This elevates the currently-implicit assumption ("facilitators are honest") to an explicit invariant (**S8: Facilitator Accountability**), now in `INVARIANTS.md` with the above mechanism as its proof.
+
+**Why a local digest check, not an RPC roundtrip:** An earlier draft of this decision (pre-vet, April 2026 council) mandated that clients MUST call chain RPC to confirm the tx digest exists on-ledger. Vet Agent Beta pointed out that this is unnecessary for schemes where the client signs the full transaction: since Sui's digest is a pure function of the signed bytes, any substitution by the facilitator is detectable *without any network call*. The RPC roundtrip is still allowed (and recommended for high-stakes settlements where the client also wants to detect facilitator-side censorship or reorgs), but making it a protocol-level MUST would (a) add per-payment latency for a check the client can already do offline, (b) make every facilitator-using client hard-dependent on RPC availability, and (c) violate S7 (chain-agnostic protocol surface) by requiring chain-specific verification logic in every s402 implementation.
+
+**Why this matters for scale:** At 1 facilitator, trust is a config choice. At 500 facilitators across compliance jurisdictions, wallet providers, and chains, trust-by-allowlist becomes the client's only defense — AND the allowlist is only as good as the verification step behind it. Without causal binding, a malicious facilitator can issue fake settlement acknowledgments referencing unrelated real on-chain transactions and the resource server has no way to detect the fraud until users complain on Twitter. The offline digest check eliminates this attack surface for client-signed schemes with a ~3-line client assertion, scales linearly with zero network cost, and survives the 500-facilitator future.
+
+**Scheme coverage (live status, per INVARIANTS.md S8):**
+
+| Scheme | Status | Notes |
+|---|---|---|
+| exact       | IMPLEMENTED | `mcp-server/src/sui-exact.ts` `verifySettlement` |
+| stream      | TODO | Same pattern as exact (client signs TX1) |
+| escrow      | TODO | Same pattern as exact |
+| unlock-TX1  | TODO | Same pattern as exact |
+| unlock-TX2  | OPEN    | Facilitator-constructed — needs a separate attestation mechanism; filed as v0.3 follow-up |
+| prepaid     | v0.2 signed receipts | Uses a different mechanism (receipt chain), not digest binding |
 
 ### Decision 2 — Receipts Are Scheme-Internal: Wire Protocol Makes No Cardinality Guarantees
 
@@ -118,9 +141,15 @@ When a deprecation criterion is met, the extension moves to `docs/extensions/dep
 
 ## Follow-ups
 
-- [ ] Add S8 (Facilitator accountability) to `INVARIANTS.md` with the Decision 1 mechanism as proof
-- [ ] Add `tx_digest` field to `SettleResponse` wire type (breaking change for facilitators)
-- [ ] Create `docs/extensions/` directory with README describing the documentation requirement
-- [ ] Add boundary test that fails if any `extensions` key is unprefixed (mirrors the S7 boundary test)
-- [ ] Write conformance test vectors for "facilitator returns tx_digest for an invalid on-chain state" — client must reject
-- [ ] Schedule council review of INVARIANTS.md at 1K / 1M / 1B payments/sec to surface any decisions this ADR missed
+- [x] Add S7 (chain-agnostic protocol surface) to `INVARIANTS.md` — previously referenced here but missing from file. Done 2026-04-11.
+- [x] Add S8 (Facilitator accountability) to `INVARIANTS.md` with the Decision 1 mechanism as proof. Done 2026-04-11.
+- [x] Implement `verifySettlement` for the `exact` scheme (`mcp-server/src/sui-exact.ts`). Done 2026-04-11.
+- [x] Wire `verifySettlement` into the 402-retry completion path (`mcp-server/src/tools.ts`). Done 2026-04-11.
+- [x] Add `DIGEST_MISMATCH` to `errors.ts`. Done 2026-04-11.
+- [x] Write Allium behavioral spec for the digest-assertion rule. See `spec/allium/digest-assertion.allium`. Done 2026-04-11.
+- [ ] Implement `verifySettlement` for `stream`, `escrow`, `unlock-TX1` schemes (same pattern).
+- [ ] Design separate attestation mechanism for `unlock-TX2` (facilitator-constructed) — open question, filed for v0.3.
+- [ ] Write conformance test vectors for "facilitator returns a substituted tx_digest" — client must reject with `DIGEST_MISMATCH`.
+- [ ] Create `docs/extensions/` directory with README describing the documentation requirement.
+- [ ] Add boundary test that fails if any `extensions` key is unprefixed (mirrors the S7 boundary test).
+- [x] Schedule council review of INVARIANTS.md at 1K / 1M / 1B payments/sec. Ran C3 on 2026-04-11; vetted on 2026-04-11. Recommendations ingested: ship the 3 load-bearing fixes (this ADR patch, S1 proof fix, S7/S8 backfill), defer or reject the rest. Target performance envelope deliberately capped at **~10K payments/sec** rather than the council's original 1M/sec framing — see `knowledge/scale-fragility-council-v03.md`.

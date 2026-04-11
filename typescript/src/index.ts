@@ -43,6 +43,7 @@ export type {
   s402FacilitatorScheme,
   s402DirectScheme,
   s402RouteConfig,
+  s402SettlementVerification,
 } from './scheme.js';
 
 // Client

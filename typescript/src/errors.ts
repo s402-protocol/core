@@ -23,6 +23,7 @@ export const s402ErrorCode = {
   REQUIREMENTS_EXPIRED: 'REQUIREMENTS_EXPIRED',
   VERIFICATION_FAILED: 'VERIFICATION_FAILED',
   SETTLEMENT_FAILED: 'SETTLEMENT_FAILED',
+  DIGEST_MISMATCH: 'DIGEST_MISMATCH',
 } as const;
 
 export type s402ErrorCodeType = (typeof s402ErrorCode)[keyof typeof s402ErrorCode];
@@ -95,6 +96,12 @@ const ERROR_HINTS: Record<s402ErrorCodeType, { retryable: boolean; suggestedActi
   SETTLEMENT_FAILED: {
     retryable: true,
     suggestedAction: 'Transient RPC failure during settlement — retry in a few seconds',
+  },
+  DIGEST_MISMATCH: {
+    retryable: false,
+    suggestedAction:
+      'Facilitator returned a transaction digest that does not match the signed payload. ' +
+      'Do NOT retry — treat payment as non-settled and investigate the facilitator.',
   },
 };
 

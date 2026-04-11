@@ -1,0 +1,220 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// S8 — Facilitator Accountability (Causal Binding of Settlements)
+//
+// Version:     s402 v0.3.0
+// Status:      ACTIVE
+// Invariant:   INVARIANTS.md § S8
+// ADR:         docs/adr/001-protocol-boundaries.md § Decision 1
+// Implements:  typescript/src/scheme.ts (s402ClientScheme.verifySettlement),
+//              mcp-server/src/sui-exact.ts (verifySettlement for `exact`),
+//              mcp-server/src/tools.ts (caller — s402_fetch)
+// Derived from: 2026-04-11 scale-fragility council (C3) + vet arbiter
+//
+// This file is an Allium behavioral spec. It describes WHAT the protocol
+// guarantees, not HOW any single implementation achieves it. If the Sui SDK
+// rewires its digest helper, the TypeScript code changes — but this spec
+// does not, because the behavioral contract is unchanged.
+// ═══════════════════════════════════════════════════════════════════════════
+
+// ───────────────────────────────────────────────────────────────────────────
+// Actors
+// ───────────────────────────────────────────────────────────────────────────
+
+actor Client {
+    role: "The party that holds the signing key for the payment asset. In
+           s402's client-signs-the-full-transaction schemes (exact, stream,
+           escrow, unlock-TX1) the client is the ONLY party that can
+           produce a valid signature over the transaction bytes."
+}
+
+actor Facilitator {
+    role: "The party that broadcasts the signed transaction to chain on the
+           client's behalf. The facilitator NEVER signs — it only relays.
+           The facilitator is trusted for liveness (it may drop messages)
+           but NOT for integrity (it cannot forge settlements)."
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Entities
+// ───────────────────────────────────────────────────────────────────────────
+
+entity SignedPayload {
+    scheme:          exact | stream | escrow | unlock | prepaid
+    transaction:     Bytes        // BCS-encoded transaction data
+    signature:       Bytes        // Ed25519 signature over transaction
+    owner:           Client       // The actor that holds the signing key
+}
+
+entity SettleResponse {
+    success:         Boolean
+    txDigest:        Digest?      // Chain-native transaction hash
+    reportedBy:      Facilitator  // Which facilitator produced this response
+}
+
+entity Digest {
+    value:           String       // base58-encoded blake2b_256 hash on Sui
+}
+
+entity SettlementOutcome {
+    state:           settled | non_settled | unverified
+    boundTo:         SignedPayload
+    witnessedBy:     Client
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Derived values — pure functions of protocol state
+// ───────────────────────────────────────────────────────────────────────────
+
+derived expectedDigest(p: SignedPayload): Digest {
+    // For any client-signed scheme, the expected chain digest is a
+    // deterministic function of the signed bytes. No chain state, no RPC,
+    // no network epoch, no gas estimation required. This is the whole
+    // reason S8 is cheap: the binding already exists, cryptographically.
+    description: "The chain digest that MUST correspond to p if p is
+                  honestly broadcast. For Sui, this is the base58 encoding
+                  of blake2b_256 over the BCS transaction bytes. Pure
+                  function — contains no randomness, no timestamps, and
+                  no external state."
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Rules
+// ───────────────────────────────────────────────────────────────────────────
+
+rule ClientSignsLocally {
+    when:     Client.createsPayment(requirements)
+    requires: requirements.scheme in {exact, stream, escrow, unlock}
+    ensures:
+        let p = SignedPayload.created(
+            scheme    = requirements.scheme,
+            owner     = Client,
+            signature = Client.sign(p.transaction)
+        )
+    rationale:
+        "The client MUST sign locally. No s402 client-signed scheme is
+         conformant if it delegates signing to any other actor — doing so
+         would defeat S8's cryptographic binding and admit the Stripe-shaped
+         facilitator-constructs-payment threat model the council's original
+         S13 was drafted to address."
+}
+
+rule FacilitatorBroadcasts {
+    when:     Facilitator.receives(p: SignedPayload)
+    requires: p.signature is_valid_for p.transaction
+    ensures:
+        let response = SettleResponse.created(
+            success    = (broadcast_to_chain(p) succeeded),
+            txDigest   = chain_digest_of(p)    // MUST equal expectedDigest(p)
+        )
+    rationale:
+        "The facilitator is trusted to relay, not to invent. It may fail
+         to broadcast (liveness issue, handled separately by retry logic)
+         but it MUST NOT return a txDigest that does not correspond to
+         the exact bytes it received. If it does, rule ClientVerifiesDigest
+         will catch it."
+}
+
+rule ClientVerifiesDigest {
+    when:     Client.receives(response: SettleResponse, for p: SignedPayload)
+    requires: response.success = true
+    requires: p.scheme in {exact, stream, escrow, unlock}   // client-signed schemes
+    ensures:
+        let expected = expectedDigest(p)
+        let outcome  = if response.txDigest = expected
+                       then SettlementOutcome.created(state = settled,      boundTo = p)
+                       else SettlementOutcome.created(state = non_settled,  boundTo = p)
+    rationale:
+        "This is the load-bearing rule. The client MUST recompute
+         expectedDigest(p) locally and compare it to response.txDigest
+         BEFORE treating the payment as settled. The check is offline,
+         synchronous, pure — no RPC, no network, no chain state. A
+         mismatch proves the facilitator broadcast different bytes or
+         is lying; either way, the payment is non_settled."
+}
+
+rule DigestMismatchStopsRetry {
+    when:     SettlementOutcome.state = non_settled
+    requires: outcome.boundTo was produced by a successful sign + submit
+    ensures:
+        Client.doesNotRetry(outcome.boundTo)
+        Client.raises(DIGEST_MISMATCH, with evidence = {
+            expected: expectedDigest(outcome.boundTo),
+            actual:   response.txDigest
+        })
+    rationale:
+        "Retrying on DIGEST_MISMATCH is DANGEROUS. The signed bytes MAY
+         have actually landed on chain under expectedDigest(p) — the
+         facilitator may simply be lying about what it broadcast. Retrying
+         with a new signed payload would double-pay. Non-retry is the
+         correct failure mode. The client SHOULD stop trusting the
+         facilitator at this point."
+}
+
+rule NoTxDigestMeansUnverified {
+    when:     Client.receives(response: SettleResponse, for p: SignedPayload)
+    requires: response.success = true
+    requires: response.txDigest = null
+    ensures:
+        SettlementOutcome.created(state = unverified, boundTo = p)
+    rationale:
+        "A response that claims success but carries no txDigest cannot be
+         verified. The client MUST treat this as non-settled for safety
+         purposes, but MAY fall back to other verification mechanisms
+         (e.g. direct RPC query for recent transactions by sender). This
+         rule exists to prevent silent acceptance of facilitators that
+         downgrade the contract by omitting the digest."
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Non-rules — properties that are DELIBERATELY NOT guaranteed
+// ───────────────────────────────────────────────────────────────────────────
+
+non_rule {
+    name: "Chain RPC availability"
+    statement:
+        "The protocol does NOT require the client to be able to reach
+         chain RPC at settlement-verification time. The digest check is
+         purely offline. Clients that additionally want to defend against
+         facilitator-side censorship (not just fraud) MAY add an RPC-level
+         existence check on top, but this is implementation choice, not a
+         protocol requirement."
+    rationale:
+        "Making RPC a MUST creates a protocol-wide hard dependency on
+         chain RPC uptime, violates S7 (chain-agnosticism) by requiring
+         chain-specific verification in every s402 implementation, and
+         adds per-payment latency for a check the client can already do
+         offline via expectedDigest."
+}
+
+non_rule {
+    name: "Facilitator liveness"
+    statement:
+        "The protocol does NOT guarantee the facilitator will broadcast.
+         A facilitator that drops the payload entirely does not violate
+         S8 — it simply fails to produce a SettleResponse, and the client
+         times out. S8 is about integrity (did the reported settlement
+         match the signed bytes?), not about liveness (did it settle at
+         all?). Liveness is handled by timeout + retry semantics in a
+         separate rule class."
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Open questions — scheme coverage
+// ───────────────────────────────────────────────────────────────────────────
+
+open_question UnlockTX2 {
+    statement:
+        "The unlock scheme's second transaction (TX2) is constructed by
+         the facilitator after TX1 settles. The client does NOT sign TX2
+         before broadcast. Therefore expectedDigest is undefined for TX2
+         — there is no pre-sign commitment for the client to compare
+         against."
+    options_considered:
+        "- Attestation from chain RPC (undermines offline check)
+         - Move-level shared object binding TX2's outputs to TX1's hash
+         - Facilitator-side signed receipt chain (like prepaid)
+         - Accept that unlock-TX2 has a different trust model from TX1"
+    status:
+        "Filed as a v0.3 follow-up against ADR-001. Blocks full S8
+         coverage for the unlock scheme."
+}

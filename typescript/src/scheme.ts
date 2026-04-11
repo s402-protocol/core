@@ -19,6 +19,27 @@ import type {
 // Client-side scheme (builds payment payloads)
 // ══════════════════════════════════════════════════════════════
 
+/**
+ * Result of client-side settlement verification.
+ *
+ * See `s402ClientScheme.verifySettlement` — this is the outcome of the
+ * client independently checking that the facilitator's returned digest
+ * is causally bound to the signed payload the client actually sent.
+ */
+export interface s402SettlementVerification {
+  /** True iff the facilitator's digest matches the one derived from the signed payload bytes. */
+  verified: boolean;
+  /** The digest the client computed locally from its own signed bytes. */
+  expectedDigest: string;
+  /** The digest the facilitator returned (copied from SettleResponse). */
+  actualDigest: string | null;
+  /**
+   * Human-readable reason when `verified` is false. Present only on mismatch,
+   * unknown-digest, or when the scheme cannot verify the settlement locally.
+   */
+  reason?: string;
+}
+
 /** Implemented by each scheme on the client side */
 export interface s402ClientScheme {
   /** Which scheme this implements */
@@ -28,6 +49,30 @@ export interface s402ClientScheme {
   createPayment(
     requirements: s402PaymentRequirements,
   ): Promise<s402PaymentPayload>;
+
+  /**
+   * Verify that the facilitator's `SettleResponse` is causally bound to the
+   * signed payload the client actually sent.
+   *
+   * For schemes where the client signs the full transaction before sending
+   * (exact, stream, escrow, unlock-TX1), this is a **local, offline check**:
+   * derive the expected tx digest from the signed bytes and compare it to the
+   * digest the facilitator returned. No RPC call required. This closes the
+   * causal-binding hole identified in the April 2026 scale-fragility review
+   * (see `knowledge/scale-fragility-council-v03.md`): a malicious facilitator
+   * cannot substitute an unrelated-but-real tx digest, because that other
+   * digest would correspond to different signed bytes the client never
+   * produced.
+   *
+   * Optional for backward-compatibility. Schemes that cannot verify locally
+   * (e.g. unlock-TX2, which is facilitator-constructed) should return
+   * `{ verified: false, reason: 'scheme does not support local verification' }`
+   * and rely on other attestation mechanisms.
+   */
+  verifySettlement?(
+    payload: s402PaymentPayload,
+    settleResponse: s402SettleResponse,
+  ): s402SettlementVerification;
 }
 
 // ══════════════════════════════════════════════════════════════

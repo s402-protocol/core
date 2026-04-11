@@ -21,8 +21,8 @@ importers:
         specifier: ^11.0.0
         version: 11.0.0
       s402:
-        specifier: ^0.2.3
-        version: 0.2.3
+        specifier: file:../typescript
+        version: file:../typescript
       zod:
         specifier: ^3.24.0
         version: 3.25.76
@@ -959,8 +959,8 @@ packages:
     resolution: {integrity: sha512-DPe5pVFaAsinSaV6QjQ6gdiedWDcRCbUuiQfQa2wmWV7+xC9bGulGI8+TdRmoFkAPaBXk8CrAbnlY2ISniJ47Q==}
     engines: {node: '>=18'}
 
-  s402@0.2.3:
-    resolution: {integrity: sha512-dG7ysemOZH9avcK6/Evt577JDBWIyJMo6rndA3LN94lelpAsjGqNX43JPsUXt+qrhpc2NIeuu2zSeREfIqrvjg==}
+  s402@file:../typescript:
+    resolution: {directory: ../typescript, type: directory}
     engines: {node: '>=18'}
 
   safer-buffer@2.1.2:
@@ -2016,7 +2016,7 @@ snapshots:
 
   run-applescript@7.1.0: {}
 
-  s402@0.2.3: {}
+  s402@file:../typescript: {}
 
   safer-buffer@2.1.2: {}
 
