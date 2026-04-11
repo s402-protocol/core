@@ -43,12 +43,14 @@ This elevates the currently-implicit assumption ("facilitators are honest") to a
 
 | Scheme | Status | Notes |
 |---|---|---|
-| exact       | IMPLEMENTED | `mcp-server/src/sui-exact.ts` `verifySettlement` |
-| stream      | TODO | Same pattern as exact (client signs TX1) |
-| escrow      | TODO | Same pattern as exact |
-| unlock-TX1  | TODO | Same pattern as exact |
-| unlock-TX2  | OPEN    | Facilitator-constructed — needs a separate attestation mechanism; filed as v0.3 follow-up |
-| prepaid     | v0.2 signed receipts | Uses a different mechanism (receipt chain), not digest binding |
+| exact       | IMPLEMENTED | `mcp-server/src/sui-exact.ts` `verifySettlement`. Unique among the five — uses Sui framework primitives (`splitCoins` + `transferObjects`), no custom Move module required. |
+| stream      | NOT YET IMPLEMENTED | Needs a `streaming_meter` Move module + `sui-stream.ts` adapter. `verifySettlement` is mechanical (template in INVARIANTS.md § S8). |
+| escrow      | NOT YET IMPLEMENTED | Needs an `escrow` Move module with lock/release/refund + `sui-escrow.ts` adapter. Same `verifySettlement` template. |
+| unlock-TX1  | NOT YET IMPLEMENTED | Needs an `unlock_receipt` Move module + `sui-unlock.ts` adapter + Seal key-server integration (for TX2). S8 coverage of TX1 itself is mechanical once the adapter exists. |
+| unlock-TX2  | OPEN    | Facilitator-constructed after TX1 settles — needs a separate attestation mechanism because the client has no pre-sign commitment for TX2. Filed as v0.3 follow-up; see `spec/allium/s8-facilitator-accountability.allium` § `open_question UnlockTX2`. |
+| prepaid     | NOT YET IMPLEMENTED | Needs a `prepaid_balance` Move module with deposit/claim/dispute lifecycle. v0.2 uses a receipt-chain mechanism (not digest binding) for the claim path, but the deposit-phase adapter is still missing. |
+
+**Implementation note.** The "NOT YET IMPLEMENTED" rows above do NOT mean "verifySettlement is the only missing piece." They mean **both the Move contract AND the TypeScript adapter are missing**. `exact` is architecturally unique because Sui framework functions ARE the scheme — the other four require custom Move shared-object state machines that don't exist yet in this repo. See INVARIANTS.md § S8 for the distinction and the verifySettlement pattern template.
 
 ### Decision 2 — Receipts Are Scheme-Internal: Wire Protocol Makes No Cardinality Guarantees
 
