@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.4.0] - 2026-04-11
+
+### Changed
+- **BREAKING: `verifySettlement` is now required on `s402ClientScheme` (DAN-280).** The `?` was removed — every scheme implementation MUST provide `verifySettlement()`. Schemes that cannot verify locally (e.g. unlock-TX2) should return `{ verified: false, reason: '...' }`. All 5 SweeFi adapters already implement this method; only custom third-party implementations that relied on the optional marker will need updating.
+- Updated JSDoc: `@since 0.4.0 — required (was optional in 0.3.0)`
+- `mockExactClientScheme()` in `test-utils.ts` now includes `verifySettlement()` returning `{ verified: false }` with reason `'mock scheme'`
+
+### Added
+- **S8 conformance test vectors (DAN-282).** `spec/vectors/settlement-verification.json` — 7 chain-agnostic test vectors covering the `verifySettlement` interface contract: matching digest, mismatched digest (malicious facilitator), settle failed, missing txDigest, invalid base64, stream scheme, and non-verifiable scheme. Each vector includes `expectedShape`, `invariants`, and implementation `notes`.
+
+### Compatibility
+- **BREAKING for 0.3.x consumers**: implementations that omitted `verifySettlement` will now fail type-checking. Add a stub returning `{ verified: false, expectedDigest: '', actualDigest: null, reason: 'not implemented' }` to restore compilation.
+- Wire format: unchanged from v0.3.0.
+
 ## [0.3.0] - 2026-04-11
 
 This release closes the facilitator causal-binding hole identified in the April 2026 scale-fragility review, and establishes s402 as a pure chain-agnostic protocol repo (no Sui code anywhere). Chain-specific implementations now live in downstream adapter repos — the canonical Sui reference is `@sweefi/sui` in the SweeFi monorepo.
@@ -158,6 +172,7 @@ _Version bump for npm publish after license change._
 - Property-based fuzz testing via fast-check
 - 207 tests, zero runtime dependencies
 
+[0.4.0]: https://github.com/s402-protocol/core/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/s402-protocol/core/compare/v0.2.3...v0.3.0
 [0.2.1]: https://github.com/s402-protocol/core/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/s402-protocol/core/compare/v0.1.8...v0.2.0

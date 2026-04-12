@@ -58,6 +58,53 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+  boundary-check:
+    name: S7 Chain-Agnostic Boundary
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Grep for chain-specific patterns in s402 src/
+        run: |
+          VIOLATIONS=0
+
+          # Sui SDK imports
+          if grep -rn '@mysten/sui' typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+            echo "::error::Found @mysten/sui imports in s402 src/ — these belong in @sweefi/sui"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Sui coin type literal
+          if grep -rn '0x2::sui::SUI' typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+            echo "::error::Found Sui coin type literal in s402 src/"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Solana SDK imports
+          if grep -rn '@solana/web3' typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+            echo "::error::Found @solana/web3 imports in s402 src/"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Ethers.js imports
+          if grep -rn "from ['\"]ethers['\"]" typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+            echo "::error::Found ethers imports in s402 src/"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          # Viem imports
+          if grep -rn "from ['\"]viem['\"]" typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+            echo "::error::Found viem imports in s402 src/"
+            VIOLATIONS=$((VIOLATIONS + 1))
+          fi
+
+          if [ "$VIOLATIONS" -gt 0 ]; then
+            echo "::error::$VIOLATIONS chain-specific pattern(s) found in s402 src/. See ADR-002 and INVARIANTS.md S7."
+            exit 1
+          fi
+
+          echo "✓ No chain-specific patterns found in s402 src/"
+
   test-python:
     name: Python (${{ matrix.python-version }})
     runs-on: ubuntu-latest

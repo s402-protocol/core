@@ -361,14 +361,14 @@ this at ~2^128 work — infeasible by any current or projected compute.  ∎
 
 | Scheme | Client signs? | S8 verification method | Status |
 |--------|---------------|------------------------|--------|
-| exact       | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/exact/client.ts` pending per ADR-002. The `ExactSuiClientScheme` class exists in SweeFi; `verifySettlement` just needs to be added using the template below |
-| stream      | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/stream/client.ts` pending. Move module `stream.move` already deployed on SweeFi testnet v11 |
-| escrow      | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/escrow/client.ts` pending. Move module `escrow.move` already deployed on SweeFi testnet v11 |
-| unlock TX1  | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/unlock/client.ts` pending. TX1 only — TX2 is facilitator-constructed and falls under the open question below |
+| exact       | Yes           | Local digest comparison     | IMPLEMENTED in `sweefi/packages/sui/src/s402/exact/client.ts` via shared `verifySuiSettlement` helper. Wired into `createS402Client` fetch path. See SweeFi ADR-010. |
+| stream      | Yes           | Local digest comparison     | IMPLEMENTED in `sweefi/packages/sui/src/s402/stream/client.ts` via shared `verifySuiSettlement` helper. |
+| escrow      | Yes           | Local digest comparison     | IMPLEMENTED in `sweefi/packages/sui/src/s402/escrow/client.ts` via shared `verifySuiSettlement` helper. |
+| unlock TX1  | Yes           | Local digest comparison     | IMPLEMENTED in `sweefi/packages/sui/src/s402/unlock/client.ts` via shared `verifySuiSettlement` helper. TX1 only — TX2 is facilitator-constructed and falls under the open question below. |
 | unlock TX2  | **No — facilitator constructs** | Attestation-based (TBD)     | OPEN QUESTION (blocks full S8 coverage for the unlock scheme — see the Allium spec's `open_question UnlockTX2` block) |
-| prepaid     | Signed receipts | Receipt-chain verification | DIFFERENT MECHANISM — prepaid uses a facilitator-signed receipt chain, not client-signed tx digests. The current `s402ClientScheme.verifySettlement` shape does not apply directly; prepaid needs its own receipt-validation surface, which is a separate follow-up |
+| prepaid     | Yes (deposit TX) | Local digest comparison | IMPLEMENTED in `sweefi/packages/sui/src/s402/prepaid/client.ts` via shared `verifySuiSettlement` helper. The deposit TX is client-signed — S8 applies. Receipt-chain verification for the claim phase is a separate concern. |
 
-⚠️ **Implementation distinction (important).** The `exact` scheme is architecturally unique: it uses Sui framework primitives (`splitCoins`, `transferObjects`) and therefore requires no custom Move module. The other four schemes are shared-object state machines that require custom Move contracts (`stream.move`, `escrow.move`, `unlock_receipt`, `prepaid.move`). Per ADR-002, SweeFi testnet v11 already has all five Move modules deployed and all five TypeScript scheme classes implemented (`ExactSuiClientScheme`, `StreamSuiClientScheme`, etc. in `sweefi/packages/sui/src/s402/*/client.ts`). The only missing piece for the four client-signed schemes is the `verifySettlement` method itself — a mechanical back-port using the template below.
+⚠️ **Implementation distinction (important).** The `exact` scheme is architecturally unique: it uses Sui framework primitives (`splitCoins`, `transferObjects`) and therefore requires no custom Move module. The other four schemes are shared-object state machines that require custom Move contracts (`stream.move`, `escrow.move`, `unlock_receipt`, `prepaid.move`). All five TypeScript scheme classes in `sweefi/packages/sui/src/s402/*/client.ts` now implement `verifySettlement` via a shared `verifySuiSettlement()` helper in `sweefi/packages/sui/src/s402/verify.ts`. The `createS402Client` fetch wrapper calls this automatically after every successful settlement. See SweeFi ADR-010 for the design decision.
 
 ⚠️ **Known gap: unlock-TX2.** `unlock-TX2` is constructed by the facilitator after TX1 settles (see `s402UnlockPayload` comments in types.ts:270-288). S8 as stated does NOT cover this transaction. This is the single narrow case where the April 2026 council's original S13 "causal binding" proposal would bite, and it needs a separate invariant in v0.3. Filed as a follow-up against ADR-001.
 
@@ -393,7 +393,7 @@ verifySettlement(
 
   // Recompute the digest from OUR signed bytes — pure, offline, no RPC.
   // This is the commitment the client made to the facilitator at signing time.
-  const signedBytes = fromB64(payload.payload.transaction);
+  const signedBytes = fromBase64(payload.payload.transaction);
   const expectedDigest = TransactionDataBuilder.getDigestFromBytes(signedBytes);
 
   const actualDigest = settleResponse.txDigest ?? null;

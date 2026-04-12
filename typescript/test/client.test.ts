@@ -21,6 +21,9 @@ function mockExactScheme(): s402ClientScheme {
         },
       };
     },
+    verifySettlement() {
+      return { verified: false, expectedDigest: '', actualDigest: null, reason: 'mock scheme' };
+    },
   };
 }
 
@@ -36,6 +39,9 @@ function mockStreamScheme(): s402ClientScheme {
           signature: 'mock-sig',
         },
       };
+    },
+    verifySettlement() {
+      return { verified: false, expectedDigest: '', actualDigest: null, reason: 'mock scheme' };
     },
   };
 }

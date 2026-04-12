@@ -42,6 +42,9 @@ function mockClientScheme(): s402ClientScheme {
         },
       };
     },
+    verifySettlement() {
+      return { verified: false, expectedDigest: '', actualDigest: null, reason: 'mock scheme' };
+    },
   };
 }
 

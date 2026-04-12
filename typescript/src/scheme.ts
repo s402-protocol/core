@@ -55,21 +55,22 @@ export interface s402ClientScheme {
    * signed payload the client actually sent.
    *
    * For schemes where the client signs the full transaction before sending
-   * (exact, stream, escrow, unlock-TX1), this is a **local, offline check**:
-   * derive the expected tx digest from the signed bytes and compare it to the
-   * digest the facilitator returned. No RPC call required. This closes the
-   * causal-binding hole identified in the April 2026 scale-fragility review
-   * (see `knowledge/scale-fragility-council-v03.md`): a malicious facilitator
-   * cannot substitute an unrelated-but-real tx digest, because that other
-   * digest would correspond to different signed bytes the client never
+   * (exact, stream, escrow, prepaid, unlock-TX1), this is a **local, offline
+   * check**: derive the expected tx digest from the signed bytes and compare it
+   * to the digest the facilitator returned. No RPC call required. This closes
+   * the causal-binding hole identified in the April 2026 S8 review: a malicious
+   * facilitator cannot substitute an unrelated-but-real tx digest, because that
+   * other digest would correspond to different signed bytes the client never
    * produced.
    *
-   * Optional for backward-compatibility. Schemes that cannot verify locally
+   * Every scheme MUST implement this method. Schemes that cannot verify locally
    * (e.g. unlock-TX2, which is facilitator-constructed) should return
    * `{ verified: false, reason: 'scheme does not support local verification' }`
    * and rely on other attestation mechanisms.
+   *
+   * @since 0.4.0 — required (was optional in 0.3.0)
    */
-  verifySettlement?(
+  verifySettlement(
     payload: s402PaymentPayload,
     settleResponse: s402SettleResponse,
   ): s402SettlementVerification;

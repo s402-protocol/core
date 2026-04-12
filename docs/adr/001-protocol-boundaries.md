@@ -41,7 +41,7 @@ This elevates the currently-implicit assumption ("facilitators are honest") to a
 
 **Scheme coverage (live status, per INVARIANTS.md S8):**
 
-> **[Updated 2026-04-11 — ADR-002 supersedes this table.]** Per ADR-002, all Sui-specific implementations now live in `sweefi/packages/sui/src/s402/*/client.ts`. The `mcp-server/` paths below are historical — that directory was deleted. SweeFi testnet v11 has all 5 Move modules deployed and all 5 TS adapter classes implemented; only `verifySettlement` is missing from each. See `INVARIANTS.md` § S8 scope table for current status.
+> **[Updated 2026-04-11 — ADR-002 supersedes this table.]** Per ADR-002, all Sui-specific implementations now live in `sweefi/packages/sui/src/s402/*/client.ts`. The `mcp-server/` paths below are historical — that directory was deleted. All 5 client-signed schemes now have `verifySettlement()` implemented via shared `verifySuiSettlement` helper, wired into `createS402Client`. See SweeFi ADR-010 and `INVARIANTS.md` § S8 scope table for current status.
 
 | Scheme | Status | Notes |
 |---|---|---|
@@ -52,7 +52,7 @@ This elevates the currently-implicit assumption ("facilitators are honest") to a
 | unlock-TX2  | OPEN    | Facilitator-constructed after TX1 settles — needs a separate attestation mechanism because the client has no pre-sign commitment for TX2. Filed as v0.3 follow-up; see `spec/allium/s8-facilitator-accountability.allium` § `open_question UnlockTX2`. |
 | prepaid     | IMPLEMENTED (SweeFi) | Move module + TS adapter exist in SweeFi. Uses a receipt-chain mechanism (not digest binding) for the claim path — `verifySettlement` shape differs from the other four. |
 
-**Implementation note.** The ~~"NOT YET IMPLEMENTED"~~ "IMPLEMENTED (SweeFi)" rows above reflect that SweeFi testnet v11 has all Move contracts deployed and all TypeScript adapter classes implemented — but none of them have the `verifySettlement` method yet. That is a mechanical back-port tracked in Linear. See INVARIANTS.md § S8 for the distinction and the verifySettlement pattern template.
+**Implementation note.** All 5 client-signed schemes now have `verifySettlement()` implemented (done 2026-04-11). Each adapter delegates to a shared `verifySuiSettlement()` helper in `sweefi/packages/sui/src/s402/verify.ts`. The `createS402Client` fetch wrapper calls it automatically after every successful `SettleResponse`. See SweeFi ADR-010 for the full decision record.
 
 ### Decision 2 — Receipts Are Scheme-Internal: Wire Protocol Makes No Cardinality Guarantees
 
@@ -151,7 +151,7 @@ When a deprecation criterion is met, the extension moves to `docs/extensions/dep
 - [x] Wire `verifySettlement` into the 402-retry completion path (originally `mcp-server/src/tools.ts` — path removed in ADR-002; retry path now in `@sweefi/mcp`). Done 2026-04-11.
 - [x] Add `DIGEST_MISMATCH` to `errors.ts`. Done 2026-04-11.
 - [x] Write Allium behavioral spec for the digest-assertion rule. See `spec/allium/s8-facilitator-accountability.allium`. Done 2026-04-11.
-- [ ] Implement `verifySettlement` for `stream`, `escrow`, `unlock-TX1` schemes (same pattern).
+- [x] Implement `verifySettlement` for `stream`, `escrow`, `unlock-TX1` schemes (same pattern). Done 2026-04-11 — all delegate to shared `verifySuiSettlement` helper in `sweefi/packages/sui/src/s402/verify.ts`. See SweeFi ADR-010.
 - [ ] Design separate attestation mechanism for `unlock-TX2` (facilitator-constructed) — open question, filed for v0.3.
 - [ ] Write conformance test vectors for "facilitator returns a substituted tx_digest" — client must reject with `DIGEST_MISMATCH`.
 - [ ] Create `docs/extensions/` directory with README describing the documentation requirement.

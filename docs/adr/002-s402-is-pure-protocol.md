@@ -121,8 +121,8 @@ An adapter author in a new chain reads `typescript/src/scheme.ts` + `spec/vector
 - [ ] **This session:** Prepare `s402@0.3.0` CHANGELOG entry + `pnpm publish --dry-run` gauntlet
 - [ ] **Manual (Danny):** `pnpm publish` from `s402/typescript/` to ship v0.3.0
 - [ ] **Manual (Danny):** `npm deprecate s402-mcp "..."` and optionally publish a final `s402-mcp@0.1.2` with a MOVED banner
-- [ ] **Next session (SweeFi):** Back-port `verifySettlement` into all five scheme client classes in `sweefi/packages/sui/src/s402/*/client.ts`. Bump `s402` dep from `^0.2.0` to `^0.3.0`.
-- [ ] **Next session (SweeFi):** File `sweefi/docs/adr/010-facilitator-causal-binding.md` mirroring S8 in SweeFi's ADR style, referencing this ADR and s402 ADR-001 as the source
+- [x] **Next session (SweeFi):** Back-port `verifySettlement` into all five scheme client classes in `sweefi/packages/sui/src/s402/*/client.ts`. Bump `s402` dep from `^0.2.0` to `^0.3.0`. Done 2026-04-11.
+- [x] **Next session (SweeFi):** File `sweefi/docs/adr/010-facilitator-causal-binding.md` mirroring S8 in SweeFi's ADR style, referencing this ADR and s402 ADR-001 as the source. Done 2026-04-11.
 - [ ] **Next session (SweeFi):** Wire s402 conformance test vectors into SweeFi CI so protocol changes are caught automatically
 - [ ] **Follow-up:** Add repo-level CI guard — fail if any file under `s402/` (outside `demo-api/` and `docs/`) imports a chain-specific SDK
 - [ ] **Follow-up:** Update `s402/README.md` with a "Reference implementations" section linking SweeFi

@@ -1,0 +1,180 @@
+[
+  {
+    "description": "Matching digest — verified is true, digests equal",
+    "payload": {
+      "s402Version": "1",
+      "scheme": "exact",
+      "payload": {
+        "transaction": "dHgtYnl0ZXMtaGVyZQ==",
+        "signature": "c2lnLWJ5dGVzLWhlcmU="
+      }
+    },
+    "settleResponse": {
+      "success": true,
+      "txDigest": "KNOWN_DIGEST_ABC123"
+    },
+    "expectedShape": {
+      "verified": "boolean",
+      "expectedDigest": "string",
+      "actualDigest": "string|null"
+    },
+    "invariants": [
+      "IF verified === true THEN expectedDigest === actualDigest",
+      "actualDigest MUST equal settleResponse.txDigest"
+    ],
+    "notes": "The implementation derives expectedDigest from payload.payload.transaction using a chain-specific algorithm. If the facilitator returned the correct digest, verified MUST be true."
+  },
+  {
+    "description": "Mismatched digest — verified is false with DIGEST_MISMATCH reason",
+    "payload": {
+      "s402Version": "1",
+      "scheme": "exact",
+      "payload": {
+        "transaction": "dHgtYnl0ZXMtaGVyZQ==",
+        "signature": "c2lnLWJ5dGVzLWhlcmU="
+      }
+    },
+    "settleResponse": {
+      "success": true,
+      "txDigest": "WRONG_DIGEST_XYZ789"
+    },
+    "expectedShape": {
+      "verified": "boolean",
+      "expectedDigest": "string",
+      "actualDigest": "string|null"
+    },
+    "invariants": [
+      "verified MUST be false",
+      "expectedDigest MUST NOT equal actualDigest",
+      "actualDigest MUST equal settleResponse.txDigest",
+      "reason SHOULD contain 'DIGEST_MISMATCH' or indicate the mismatch"
+    ],
+    "notes": "A malicious facilitator returns a real but unrelated digest. The client detects the mismatch locally without any RPC call."
+  },
+  {
+    "description": "Settle failed — no txDigest available",
+    "payload": {
+      "s402Version": "1",
+      "scheme": "exact",
+      "payload": {
+        "transaction": "dHgtYnl0ZXMtaGVyZQ==",
+        "signature": "c2lnLWJ5dGVzLWhlcmU="
+      }
+    },
+    "settleResponse": {
+      "success": false,
+      "error": "Insufficient gas"
+    },
+    "expectedShape": {
+      "verified": "boolean",
+      "expectedDigest": "string",
+      "actualDigest": "string|null"
+    },
+    "invariants": [
+      "verified MUST be false",
+      "actualDigest MUST be null (no digest was returned)",
+      "reason SHOULD indicate no digest was available"
+    ],
+    "notes": "When settlement fails, there is no digest to verify. The implementation should handle this gracefully rather than throwing."
+  },
+  {
+    "description": "Settle succeeded but txDigest is undefined",
+    "payload": {
+      "s402Version": "1",
+      "scheme": "exact",
+      "payload": {
+        "transaction": "dHgtYnl0ZXMtaGVyZQ==",
+        "signature": "c2lnLWJ5dGVzLWhlcmU="
+      }
+    },
+    "settleResponse": {
+      "success": true
+    },
+    "expectedShape": {
+      "verified": "boolean",
+      "expectedDigest": "string",
+      "actualDigest": "string|null"
+    },
+    "invariants": [
+      "verified MUST be false",
+      "actualDigest MUST be null",
+      "reason SHOULD indicate missing digest"
+    ],
+    "notes": "Edge case: facilitator reports success but omits the digest. This should be treated as unverifiable — the client cannot confirm settlement."
+  },
+  {
+    "description": "Invalid base64 in payload transaction bytes",
+    "payload": {
+      "s402Version": "1",
+      "scheme": "exact",
+      "payload": {
+        "transaction": "!!!NOT-BASE64!!!",
+        "signature": "c2lnLWJ5dGVzLWhlcmU="
+      }
+    },
+    "settleResponse": {
+      "success": true,
+      "txDigest": "SOME_DIGEST"
+    },
+    "expectedShape": {
+      "verified": "boolean",
+      "expectedDigest": "string",
+      "actualDigest": "string|null"
+    },
+    "invariants": [
+      "verified MUST be false",
+      "MUST NOT throw — return a verification result with reason"
+    ],
+    "notes": "Malformed input must fail gracefully. Implementations MUST catch decode errors and return { verified: false } rather than propagating exceptions."
+  },
+  {
+    "description": "Stream scheme — same verification contract applies",
+    "payload": {
+      "s402Version": "1",
+      "scheme": "stream",
+      "payload": {
+        "transaction": "c3RyZWFtLXR4LWJ5dGVz",
+        "signature": "c3RyZWFtLXNpZw=="
+      }
+    },
+    "settleResponse": {
+      "success": true,
+      "txDigest": "STREAM_DIGEST_123"
+    },
+    "expectedShape": {
+      "verified": "boolean",
+      "expectedDigest": "string",
+      "actualDigest": "string|null"
+    },
+    "invariants": [
+      "IF verified === true THEN expectedDigest === actualDigest",
+      "actualDigest MUST equal settleResponse.txDigest"
+    ],
+    "notes": "The S8 invariant applies to ALL client-signed schemes, not just exact. Stream, escrow, prepaid, and unlock-TX1 all sign full transactions before sending to the facilitator."
+  },
+  {
+    "description": "Scheme that cannot verify locally (e.g. unlock-TX2)",
+    "payload": {
+      "s402Version": "1",
+      "scheme": "unlock",
+      "payload": {
+        "transaction": "",
+        "signature": ""
+      }
+    },
+    "settleResponse": {
+      "success": true,
+      "txDigest": "FACILITATOR_BUILT_TX"
+    },
+    "expectedShape": {
+      "verified": "boolean",
+      "expectedDigest": "string",
+      "actualDigest": "string|null"
+    },
+    "invariants": [
+      "verified MUST be false",
+      "reason MUST be present and explain why verification is not possible"
+    ],
+    "notes": "For schemes where the facilitator constructs the transaction (e.g. unlock phase 2), the client has no signed bytes to derive a digest from. The implementation MUST return { verified: false } with a reason, not throw."
+  }
+]
