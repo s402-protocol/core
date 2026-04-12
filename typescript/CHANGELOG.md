@@ -31,8 +31,8 @@ This release closes the facilitator causal-binding hole identified in the April 
 ### Compatibility
 
 - **TypeScript type compatibility**: `verifySettlement` is optional on `s402ClientScheme`, and `DIGEST_MISMATCH` is a purely additive enum member. Existing adapter implementations compile unchanged against `^0.3.0`.
-- **Wire format**: unchanged from v0.2.3. The 133 conformance test vectors in `test/conformance/vectors/` still pass byte-for-byte against v0.3.0.
-- **Minor-bump rationale**: the 0.2.1 → 0.3.0 jump reflects the semantic significance of adding a new safety invariant (S8) and the repo-level architectural decisions (ADR-001/002), not a breaking wire-format change. Under semver 0.x, minor bumps are treated as breaking by `^0.x.y` ranges — consumers should expect to opt-in explicitly.
+- **Wire format**: unchanged from v0.2.3. The 132 conformance test vectors in `test/conformance/vectors/` still pass byte-for-byte against v0.3.0.
+- **Minor-bump rationale**: the 0.2.3 → 0.3.0 jump reflects the semantic significance of adding a new safety invariant (S8) and the repo-level architectural decisions (ADR-001/002), not a breaking wire-format change. Under semver 0.x, minor bumps are treated as breaking by `^0.x.y` ranges — consumers should expect to opt-in explicitly.
 
 ## [0.2.1] - 2026-03-02
 

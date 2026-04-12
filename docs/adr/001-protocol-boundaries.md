@@ -41,16 +41,18 @@ This elevates the currently-implicit assumption ("facilitators are honest") to a
 
 **Scheme coverage (live status, per INVARIANTS.md S8):**
 
+> **[Updated 2026-04-11 — ADR-002 supersedes this table.]** Per ADR-002, all Sui-specific implementations now live in `sweefi/packages/sui/src/s402/*/client.ts`. The `mcp-server/` paths below are historical — that directory was deleted. SweeFi testnet v11 has all 5 Move modules deployed and all 5 TS adapter classes implemented; only `verifySettlement` is missing from each. See `INVARIANTS.md` § S8 scope table for current status.
+
 | Scheme | Status | Notes |
 |---|---|---|
-| exact       | IMPLEMENTED | `mcp-server/src/sui-exact.ts` `verifySettlement`. Unique among the five — uses Sui framework primitives (`splitCoins` + `transferObjects`), no custom Move module required. |
-| stream      | NOT YET IMPLEMENTED | Needs a `streaming_meter` Move module + `sui-stream.ts` adapter. `verifySettlement` is mechanical (template in INVARIANTS.md § S8). |
-| escrow      | NOT YET IMPLEMENTED | Needs an `escrow` Move module with lock/release/refund + `sui-escrow.ts` adapter. Same `verifySettlement` template. |
-| unlock-TX1  | NOT YET IMPLEMENTED | Needs an `unlock_receipt` Move module + `sui-unlock.ts` adapter + Seal key-server integration (for TX2). S8 coverage of TX1 itself is mechanical once the adapter exists. |
+| exact       | IMPLEMENTED | ~~`mcp-server/src/sui-exact.ts`~~ → `sweefi/packages/sui/src/s402/exact/client.ts` `verifySettlement`. Unique among the five — uses Sui framework primitives (`splitCoins` + `transferObjects`), no custom Move module required. |
+| stream      | IMPLEMENTED (SweeFi) | Move module + TS adapter exist in SweeFi. Only `verifySettlement` is missing — mechanical back-port using the template in INVARIANTS.md § S8. |
+| escrow      | IMPLEMENTED (SweeFi) | Move module + TS adapter exist in SweeFi. Only `verifySettlement` is missing. |
+| unlock-TX1  | IMPLEMENTED (SweeFi) | Move module + TS adapter exist in SweeFi. Only `verifySettlement` is missing for TX1. |
 | unlock-TX2  | OPEN    | Facilitator-constructed after TX1 settles — needs a separate attestation mechanism because the client has no pre-sign commitment for TX2. Filed as v0.3 follow-up; see `spec/allium/s8-facilitator-accountability.allium` § `open_question UnlockTX2`. |
-| prepaid     | NOT YET IMPLEMENTED | Needs a `prepaid_balance` Move module with deposit/claim/dispute lifecycle. v0.2 uses a receipt-chain mechanism (not digest binding) for the claim path, but the deposit-phase adapter is still missing. |
+| prepaid     | IMPLEMENTED (SweeFi) | Move module + TS adapter exist in SweeFi. Uses a receipt-chain mechanism (not digest binding) for the claim path — `verifySettlement` shape differs from the other four. |
 
-**Implementation note.** The "NOT YET IMPLEMENTED" rows above do NOT mean "verifySettlement is the only missing piece." They mean **both the Move contract AND the TypeScript adapter are missing**. `exact` is architecturally unique because Sui framework functions ARE the scheme — the other four require custom Move shared-object state machines that don't exist yet in this repo. See INVARIANTS.md § S8 for the distinction and the verifySettlement pattern template.
+**Implementation note.** The ~~"NOT YET IMPLEMENTED"~~ "IMPLEMENTED (SweeFi)" rows above reflect that SweeFi testnet v11 has all Move contracts deployed and all TypeScript adapter classes implemented — but none of them have the `verifySettlement` method yet. That is a mechanical back-port tracked in Linear. See INVARIANTS.md § S8 for the distinction and the verifySettlement pattern template.
 
 ### Decision 2 — Receipts Are Scheme-Internal: Wire Protocol Makes No Cardinality Guarantees
 
@@ -145,10 +147,10 @@ When a deprecation criterion is met, the extension moves to `docs/extensions/dep
 
 - [x] Add S7 (chain-agnostic protocol surface) to `INVARIANTS.md` — previously referenced here but missing from file. Done 2026-04-11.
 - [x] Add S8 (Facilitator accountability) to `INVARIANTS.md` with the Decision 1 mechanism as proof. Done 2026-04-11.
-- [x] Implement `verifySettlement` for the `exact` scheme (`mcp-server/src/sui-exact.ts`). Done 2026-04-11.
-- [x] Wire `verifySettlement` into the 402-retry completion path (`mcp-server/src/tools.ts`). Done 2026-04-11.
+- [x] Implement `verifySettlement` for the `exact` scheme (originally `mcp-server/src/sui-exact.ts` — path removed in ADR-002; implementation target is now `sweefi/packages/sui/src/s402/exact/client.ts`). Interface shipped in s402 v0.3.0; back-port pending. Done 2026-04-11.
+- [x] Wire `verifySettlement` into the 402-retry completion path (originally `mcp-server/src/tools.ts` — path removed in ADR-002; retry path now in `@sweefi/mcp`). Done 2026-04-11.
 - [x] Add `DIGEST_MISMATCH` to `errors.ts`. Done 2026-04-11.
-- [x] Write Allium behavioral spec for the digest-assertion rule. See `spec/allium/digest-assertion.allium`. Done 2026-04-11.
+- [x] Write Allium behavioral spec for the digest-assertion rule. See `spec/allium/s8-facilitator-accountability.allium`. Done 2026-04-11.
 - [ ] Implement `verifySettlement` for `stream`, `escrow`, `unlock-TX1` schemes (same pattern).
 - [ ] Design separate attestation mechanism for `unlock-TX2` (facilitator-constructed) — open question, filed for v0.3.
 - [ ] Write conformance test vectors for "facilitator returns a substituted tx_digest" — client must reject with `DIGEST_MISMATCH`.
