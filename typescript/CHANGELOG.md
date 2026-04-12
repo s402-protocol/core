@@ -31,7 +31,7 @@ This release closes the facilitator causal-binding hole identified in the April 
 ### Compatibility
 
 - **TypeScript type compatibility**: `verifySettlement` is optional on `s402ClientScheme`, and `DIGEST_MISMATCH` is a purely additive enum member. Existing adapter implementations compile unchanged against `^0.3.0`.
-- **Wire format**: unchanged from v0.2.1. The 133 conformance test vectors in `test/conformance/vectors/` still pass byte-for-byte against v0.3.0.
+- **Wire format**: unchanged from v0.2.3. The 133 conformance test vectors in `test/conformance/vectors/` still pass byte-for-byte against v0.3.0.
 - **Minor-bump rationale**: the 0.2.1 → 0.3.0 jump reflects the semantic significance of adding a new safety invariant (S8) and the repo-level architectural decisions (ADR-001/002), not a breaking wire-format change. Under semver 0.x, minor bumps are treated as breaking by `^0.x.y` ranges — consumers should expect to opt-in explicitly.
 
 ## [0.2.1] - 2026-03-02
@@ -158,7 +158,7 @@ _Version bump for npm publish after license change._
 - Property-based fuzz testing via fast-check
 - 207 tests, zero runtime dependencies
 
-[0.3.0]: https://github.com/s402-protocol/core/compare/v0.2.1...v0.3.0
+[0.3.0]: https://github.com/s402-protocol/core/compare/v0.2.3...v0.3.0
 [0.2.1]: https://github.com/s402-protocol/core/compare/v0.2.0...v0.2.1
 [0.2.0]: https://github.com/s402-protocol/core/compare/v0.1.8...v0.2.0
 [0.1.8]: https://github.com/s402-protocol/core/compare/v0.1.7...v0.1.8

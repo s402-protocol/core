@@ -1,0 +1,7 @@
+# Files copied from repo root by scripts/prepare-publish.sh for npm pack.
+# Canonical sources live at the repo root (README.md, LICENSE, SECURITY.md)
+# and spec/vectors/ (conformance vectors). See prepare-publish.sh for details.
+/README.md
+/LICENSE
+/SECURITY.md
+/test/conformance/vectors/
