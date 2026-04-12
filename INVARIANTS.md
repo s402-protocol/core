@@ -29,13 +29,13 @@ process(P) → reject (never settles on-chain)
 Layer 1 — process() (facilitator.ts):
   if (payload.expiresAt < Date.now()) → reject with PAYMENT_EXPIRED
 
-Layer 2 — verify() (scheme-specific):
-  Each FacilitatorScheme.verify() independently checks expiresAt
-  before submitting any RPC call.
+Layer 2 — verify() (facilitator-level):
+  The facilitator's verify() independently checks expiresAt
+  before dispatching to scheme.verify().
 
-Layer 3 — settle() (scheme-specific):
-  Each FacilitatorScheme.settle() checks expiresAt one final time
-  before constructing the PTB.
+Layer 3 — settle() (facilitator-level):
+  The facilitator's settle() checks expiresAt one final time
+  before dispatching to scheme.settle().
 
 For a stale payment to settle, ALL THREE layers must fail simultaneously.
 
@@ -212,7 +212,7 @@ without parsing error message strings.  ∎
 ```
 facilitator.ts process() maintains an in-flight Set (H-2 hardening):
 
-  const key = hash(payload)
+  const key = JSON.stringify(payload)
   if (inflight.has(key)) → reject with DUPLICATE_PAYMENT
   inflight.add(key)
   try { verify() → settle() }
