@@ -9,6 +9,7 @@ import {
   detectProtocol,
   extractRequirementsFromResponse,
   isValidAmount,
+  isValidU64Amount,
   S402_CONTENT_TYPE,
   encodeRequirementsBody,
   decodeRequirementsBody,
@@ -65,6 +66,37 @@ describe('isValidAmount barrel export', () => {
     expect(isValidAmount('abc')).toBe(false);
     expect(isValidAmount('')).toBe(false);
     expect(isValidAmount('1.5')).toBe(false);
+  });
+});
+
+describe('isValidU64Amount boundary values', () => {
+  it('accepts exact u64 max (2^64 - 1)', () => {
+    expect(isValidU64Amount('18446744073709551615')).toBe(true);
+  });
+
+  it('rejects u64 max + 1', () => {
+    expect(isValidU64Amount('18446744073709551616')).toBe(false);
+  });
+
+  it('rejects u64 max - 1 digit length but lexicographically greater', () => {
+    // 20-digit number starting with '2' > u64 max starting with '1'
+    expect(isValidU64Amount('20000000000000000000')).toBe(false);
+  });
+
+  it('accepts u64 max - 1', () => {
+    expect(isValidU64Amount('18446744073709551614')).toBe(true);
+  });
+
+  it('accepts zero', () => {
+    expect(isValidU64Amount('0')).toBe(true);
+  });
+
+  it('rejects negative numbers', () => {
+    expect(isValidU64Amount('-1')).toBe(false);
+  });
+
+  it('rejects values longer than 20 digits', () => {
+    expect(isValidU64Amount('184467440737095516150')).toBe(false); // 21 digits
   });
 });
 
