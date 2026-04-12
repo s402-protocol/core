@@ -3,7 +3,7 @@
 [![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
 
-**Chain-agnostic HTTP 402 protocol with a Sui-native reference implementation.** Five payment schemes for AI agent commerce. Wire-compatible with x402. Zero runtime dependencies. Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
+**Chain-agnostic HTTP 402 protocol.** Five payment schemes for AI agent commerce. Wire-compatible with x402. Zero runtime dependencies. Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
 s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for five payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)). The reference implementation on Sui uses Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
 

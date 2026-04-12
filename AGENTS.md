@@ -202,7 +202,7 @@ The canonical validators (`validateRequirementsShape`, `pickRequirementsFields`)
 
 ### Safety Invariants
 
-s402 has **7 formally proven invariants** in `INVARIANTS.md`. Read these before modifying payment processing, error handling, or scheme dispatch:
+s402 has **8 formally proven invariants** in `INVARIANTS.md`. Read these before modifying payment processing, error handling, or scheme dispatch:
 
 | ID | Property | Type | What it protects |
 |----|----------|------|------------------|
@@ -213,6 +213,7 @@ s402 has **7 formally proven invariants** in `INVARIANTS.md`. Read these before 
 | S5 | Concurrent payment dedup | Safety | Identical payloads produce at most one settlement |
 | S6 | x402 compatibility roundtrip | Structural | s402 → x402 → s402 preserves all x402 fields |
 | S7 | Chain-agnostic boundary | Safety | s402 core contains ZERO chain-specific logic (see below) |
+| S8 | Facilitator accountability | Safety | Client-side causal-binding check detects digest substitution |
 
 **If you change `facilitator.ts`, `http.ts`, or `errors.ts`, re-verify the relevant invariant.**
 
