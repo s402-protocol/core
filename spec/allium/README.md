@@ -43,7 +43,7 @@ would be a bad slug because it names the mechanism rather than the property.
 
 ## How to update
 
-Allium specs are append-only like ADRs. When a rule changes, write a new
-spec file and mark the old one superseded in a frontmatter comment. Never
-edit a rule body in place — that destroys the history of what the protocol
-promised at each version.
+Allium specs describe the **current** behavioral contract. When a rule
+changes, update the spec in place — git history preserves prior versions.
+Update the `Version:` line in the header to match the s402 release that
+changed the behavior.

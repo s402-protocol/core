@@ -1,23 +1,20 @@
 // ═══════════════════════════════════════════════════════════════════════════
 // S8 — Facilitator Accountability (Causal Binding of Settlements)
 //
-// Version:     s402 v0.3.0
+// Version:     s402 v0.4.0
 // Status:      ACTIVE
 // Invariant:   INVARIANTS.md § S8
 // ADR:         docs/adr/001-protocol-boundaries.md § Decision 1
 //              docs/adr/002-s402-is-pure-protocol.md (repo-level enforcement)
-// Interface:   typescript/src/scheme.ts — s402ClientScheme.verifySettlement
-// Target impls (downstream, in sibling repos):
-//              sweefi/packages/sui/src/s402/exact/client.ts     (planned)
-//              sweefi/packages/sui/src/s402/stream/client.ts    (planned)
-//              sweefi/packages/sui/src/s402/escrow/client.ts    (planned)
-//              sweefi/packages/sui/src/s402/prepaid/client.ts   (planned)
-//              sweefi/packages/sui/src/s402/unlock/client.ts    (planned, TX1 only)
-// Note: Prior to 2026-04-11, a reference implementation lived at
-//       s402/mcp-server/src/sui-exact.ts. That folder was removed in ADR-002
-//       to restore the chain-agnostic repo boundary; the pattern template in
-//       INVARIANTS.md § S8 preserves the exact-scheme verifySettlement logic
-//       for the back-port into SweeFi's adapters.
+// Interface:   typescript/src/scheme.ts — s402ClientScheme.verifySettlement (REQUIRED since v0.4.0)
+// Implementations (downstream, in sibling repos — all via shared verifySuiSettlement helper):
+//              sweefi/packages/sui/src/s402/exact/client.ts     (IMPLEMENTED)
+//              sweefi/packages/sui/src/s402/stream/client.ts    (IMPLEMENTED)
+//              sweefi/packages/sui/src/s402/escrow/client.ts    (IMPLEMENTED)
+//              sweefi/packages/sui/src/s402/prepaid/client.ts   (IMPLEMENTED)
+//              sweefi/packages/sui/src/s402/unlock/client.ts    (IMPLEMENTED, TX1 only)
+// Shared helper: sweefi/packages/sui/src/s402/verify.ts — verifySuiSettlement()
+// Design record: sweefi/docs/adr/010-facilitator-causal-binding.md
 // Derived from: 2026-04-11 scale-fragility council (C3) + vet arbiter
 //
 // This file is an Allium behavioral spec. It describes WHAT the protocol
@@ -33,8 +30,10 @@
 actor Client {
     role: "The party that holds the signing key for the payment asset. In
            s402's client-signs-the-full-transaction schemes (exact, stream,
-           escrow, unlock-TX1) the client is the ONLY party that can
-           produce a valid signature over the transaction bytes."
+           escrow, prepaid, unlock-TX1) the client is the ONLY party that
+           can produce a valid signature over the transaction bytes.
+           Every s402ClientScheme implementation MUST provide
+           verifySettlement() (required since v0.4.0)."
 }
 
 actor Facilitator {
@@ -93,7 +92,7 @@ derived expectedDigest(p: SignedPayload): Digest {
 
 rule ClientSignsLocally {
     when:     Client.createsPayment(requirements)
-    requires: requirements.scheme in {exact, stream, escrow, unlock}
+    requires: requirements.scheme in {exact, stream, escrow, prepaid, unlock}
     ensures:
         let p = SignedPayload.created(
             scheme    = requirements.scheme,
@@ -103,9 +102,9 @@ rule ClientSignsLocally {
     rationale:
         "The client MUST sign locally. No s402 client-signed scheme is
          conformant if it delegates signing to any other actor — doing so
-         would defeat S8's cryptographic binding and admit the Stripe-shaped
-         facilitator-constructs-payment threat model the council's original
-         S13 was drafted to address."
+         would defeat S8's cryptographic binding. For prepaid, this covers
+         the deposit transaction; the claim path uses a separate
+         receipt-chain mechanism."
 }
 
 rule FacilitatorBroadcasts {
@@ -127,7 +126,7 @@ rule FacilitatorBroadcasts {
 rule ClientVerifiesDigest {
     when:     Client.receives(response: SettleResponse, for p: SignedPayload)
     requires: response.success = true
-    requires: p.scheme in {exact, stream, escrow, unlock}   // client-signed schemes
+    requires: p.scheme in {exact, stream, escrow, prepaid, unlock}   // client-signed schemes
     ensures:
         let expected = expectedDigest(p)
         let outcome  = if response.txDigest = expected
@@ -225,6 +224,6 @@ open_question UnlockTX2 {
          - Facilitator-side signed receipt chain (like prepaid)
          - Accept that unlock-TX2 has a different trust model from TX1"
     status:
-        "Filed as a v0.3 follow-up against ADR-001. Blocks full S8
-         coverage for the unlock scheme."
+        "Open — blocks full S8 coverage for the unlock scheme. See
+         ADR-001 follow-up checklist and INVARIANTS.md § S8 scope table."
 }
