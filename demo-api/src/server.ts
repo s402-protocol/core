@@ -297,7 +297,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
         totalPayments,
         totalRevenue: totalRevenue.toString(),
       },
-      tryIt: 'Configure s402-mcp in Claude Code, then ask it to fetch any endpoint above.',
+      tryIt: 'Configure @sweefi/mcp in Claude Code, then ask it to fetch any endpoint above.',
     });
     return;
   }

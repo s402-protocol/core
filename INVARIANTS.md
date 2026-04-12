@@ -306,7 +306,7 @@ string literal. The boundary test is defense against the common case
 (imports + regexes), not against adversarial contributors.  ∎
 ```
 
-**Scope note**: S7 applies ONLY to `typescript/src/`, not to `typescript/test/`, `typescript/examples/`, or downstream packages. The `mcp-server/` package may import chain SDKs freely — it is a Sui-specific application of the chain-agnostic protocol.
+**Scope note**: S7 applies ONLY to `typescript/src/`, not to `typescript/test/` or `typescript/examples/`. Chain-specific code lives in downstream implementation repos (e.g., `@sweefi/sui` for the Sui implementation) which consume this package from npm and add chain validation on top. Per ADR-002, the s402 repo itself contains NO chain-specific imports at the repo level — the protocol-pure boundary is enforced repo-wide, not just inside `src/`.
 
 ---
 
@@ -326,7 +326,9 @@ client.treats_as_settled(payment)  ⟹  actual == expected
 
 ```
 In the `exact` scheme, the client builds and signs the Transaction locally
-(see mcp-server/src/sui-exact.ts:34-46). The signed payload consists of
+in its chain-specific adapter (the canonical Sui reference is planned for
+`sweefi/packages/sui/src/s402/exact/client.ts`, which consumes this package
+from npm and implements `s402ClientScheme`). The signed payload consists of
 {transaction: base64(bcs_bytes), signature: base64(ed25519_sig)}.
 
 Sui's transaction digest is defined as:
@@ -353,20 +355,20 @@ This is a blake2b-256 collision. Current cryptographic consensus places
 this at ~2^128 work — infeasible by any current or projected compute.  ∎
 ```
 
-**Implementation**: `s402ClientScheme.verifySettlement` (optional interface method in `typescript/src/scheme.ts`). The `exact` scheme implements it in `mcp-server/src/sui-exact.ts`. Callers MUST invoke it after decoding `SettleResponse` and before recording a payment as settled. `mcp-server/src/tools.ts` does this at the 402-retry completion point.
+**Implementation**: `s402ClientScheme.verifySettlement` is an optional interface method in `typescript/src/scheme.ts`. Concrete implementations live in downstream adapter repos — the canonical Sui implementation is planned for `sweefi/packages/sui/src/s402/{exact,stream,escrow,unlock}/client.ts` and will be tracked in SweeFi's own ADR-010. Callers MUST invoke `verifySettlement` after decoding `SettleResponse` and before recording a payment as settled. Every client-signed Sui scheme adapter should copy the implementation template below — the digest check is identical across schemes because the Sui transaction digest is a pure function of the BCS-encoded signed bytes.
 
 **Scope — which schemes does S8 cover today?**
 
 | Scheme | Client signs? | S8 verification method | Status |
 |--------|---------------|------------------------|--------|
-| exact       | Yes           | Local digest comparison     | IMPLEMENTED (Sui adapter uses framework primitives — `splitCoins` + `transferObjects`; no custom Move module required) |
-| stream      | Yes           | Local digest comparison     | NOT YET IMPLEMENTED (requires a `streaming_meter` Move module and a `sui-stream.ts` adapter; the `verifySettlement` implementation is mechanical — see the template below) |
-| escrow      | Yes           | Local digest comparison     | NOT YET IMPLEMENTED (requires an `escrow` Move module with lock/release/refund semantics and a `sui-escrow.ts` adapter) |
-| unlock TX1  | Yes           | Local digest comparison     | NOT YET IMPLEMENTED (requires an `unlock_receipt` Move module, a `sui-unlock.ts` adapter, AND Seal key-server integration for TX2 — the S8 coverage of TX1 itself is mechanical once the adapter exists) |
+| exact       | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/exact/client.ts` pending per ADR-002. The `ExactSuiClientScheme` class exists in SweeFi; `verifySettlement` just needs to be added using the template below |
+| stream      | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/stream/client.ts` pending. Move module `stream.move` already deployed on SweeFi testnet v11 |
+| escrow      | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/escrow/client.ts` pending. Move module `escrow.move` already deployed on SweeFi testnet v11 |
+| unlock TX1  | Yes           | Local digest comparison     | INTERFACE SHIPPED (s402 v0.3.0); back-port into `sweefi/packages/sui/src/s402/unlock/client.ts` pending. TX1 only — TX2 is facilitator-constructed and falls under the open question below |
 | unlock TX2  | **No — facilitator constructs** | Attestation-based (TBD)     | OPEN QUESTION (blocks full S8 coverage for the unlock scheme — see the Allium spec's `open_question UnlockTX2` block) |
-| prepaid     | Signed receipts | Receipt-chain verification | NOT YET IMPLEMENTED — v0.2 mechanism is different (receipt chain, not digest binding). Needs a `prepaid_balance` Move module with dispute-window semantics. |
+| prepaid     | Signed receipts | Receipt-chain verification | DIFFERENT MECHANISM — prepaid uses a facilitator-signed receipt chain, not client-signed tx digests. The current `s402ClientScheme.verifySettlement` shape does not apply directly; prepaid needs its own receipt-validation surface, which is a separate follow-up |
 
-⚠️ **Implementation distinction (important).** The `exact` scheme is architecturally unique: it uses Sui framework primitives (`splitCoins`, `transferObjects`) and therefore requires no custom Move module. The other four schemes are shared-object state machines that require custom Move contracts (`StreamingMeter`, `Escrow`, `unlock_receipt`, `PrepaidBalance`) to be written, deployed, and their package IDs hardcoded into their respective adapters. "NOT YET IMPLEMENTED" here means both the Move module AND the TypeScript adapter are missing, not that a thin `verifySettlement` patch is pending on existing code.
+⚠️ **Implementation distinction (important).** The `exact` scheme is architecturally unique: it uses Sui framework primitives (`splitCoins`, `transferObjects`) and therefore requires no custom Move module. The other four schemes are shared-object state machines that require custom Move contracts (`stream.move`, `escrow.move`, `unlock_receipt`, `prepaid.move`). Per ADR-002, SweeFi testnet v11 already has all five Move modules deployed and all five TypeScript scheme classes implemented (`ExactSuiClientScheme`, `StreamSuiClientScheme`, etc. in `sweefi/packages/sui/src/s402/*/client.ts`). The only missing piece for the four client-signed schemes is the `verifySettlement` method itself — a mechanical back-port using the template below.
 
 ⚠️ **Known gap: unlock-TX2.** `unlock-TX2` is constructed by the facilitator after TX1 settles (see `s402UnlockPayload` comments in types.ts:270-288). S8 as stated does NOT cover this transaction. This is the single narrow case where the April 2026 council's original S13 "causal binding" proposal would bite, and it needs a separate invariant in v0.3. Filed as a follow-up against ADR-001.
 

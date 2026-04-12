@@ -420,7 +420,7 @@
             <div class="step-num">3</div>
             <h3>Agent pays &amp; gets data</h3>
             <p>
-              s402-mcp signs a Sui transaction, retries the request,
+              @sweefi/mcp signs a Sui transaction, retries the request,
               and returns <span class="status-code status-200">200</span> + receipt.
             </p>
           </div>
@@ -433,7 +433,7 @@
       <div class="container">
         <h2>Demo <span class="accent">Endpoints</span></h2>
         <p class="section-sub">
-          Try these endpoints with s402-mcp or any s402-compatible client.
+          Try these endpoints with @sweefi/mcp or any s402-compatible client.
         </p>
         <div class="endpoint-grid">
           <!-- Free -->
@@ -497,25 +497,25 @@
       <div class="container">
         <h2>Try it in <span class="accent">30 seconds</span></h2>
         <p class="section-sub">
-          Add s402-mcp to Claude Code and ask it to fetch a paid endpoint.
+          Add @sweefi/mcp to Claude Code and ask it to fetch a paid endpoint.
         </p>
         <div class="setup-steps">
           <!-- Step 1 -->
           <div class="setup-step">
             <div class="num">1</div>
             <div>
-              <h3>Add s402-mcp to your Claude Code config</h3>
+              <h3>Add @sweefi/mcp to your Claude Code config</h3>
               <p>
                 Add this to <code>~/.claude/settings.json</code> under <code>mcpServers</code>:
               </p>
               <pre><code>{
   <span class="key">"mcpServers"</span>: {
-    <span class="key">"s402"</span>: {
+    <span class="key">"sweefi"</span>: {
       <span class="key">"command"</span>: <span class="string">"npx"</span>,
-      <span class="key">"args"</span>: [<span class="string">"s402-mcp"</span>],
+      <span class="key">"args"</span>: [<span class="string">"@sweefi/mcp"</span>],
       <span class="key">"env"</span>: {
-        <span class="key">"S402_PRIVATE_KEY"</span>: <span class="string">"suiprivkey1..."</span>,
-        <span class="key">"S402_NETWORK"</span>: <span class="string">"sui:testnet"</span>
+        <span class="key">"SUI_PRIVATE_KEY"</span>: <span class="string">"suiprivkey1..."</span>,
+        <span class="key">"SUI_NETWORK"</span>: <span class="string">"testnet"</span>
       }
     }
   }
@@ -548,7 +548,7 @@ sui client faucet --address &lt;your-address&gt; --network testnet</code></pre>
               <pre><code><span class="comment"># In Claude Code, type:</span>
 <span class="string">"Fetch me a joke from https://demo.s402-protocol.org/api/joke"</span>
 
-<span class="comment"># s402-mcp handles the 402 negotiation automatically.</span>
+<span class="comment"># @sweefi/mcp handles the 402 negotiation automatically.</span>
 <span class="comment"># Your agent pays, gets the joke, and shows you the receipt.</span></code></pre>
             </div>
           </div>
@@ -596,7 +596,7 @@ sui client faucet --address &lt;your-address&gt; --network testnet</code></pre>
           <a href="https://s402-protocol.org">Protocol Spec</a>
           <a href="https://github.com/s402-protocol/core">GitHub</a>
           <a href="https://www.npmjs.com/package/s402">npm</a>
-          <a href="https://www.npmjs.com/package/s402-mcp">s402-mcp</a>
+          <a href="https://www.npmjs.com/package/@sweefi/mcp">@sweefi/mcp</a>
         </div>
         <p>
           Built by <a href="https://sweeinc.com">Swee Inc</a> &middot;
@@ -611,12 +611,12 @@ sui client faucet --address &lt;your-address&gt; --network testnet</code></pre>
     function copyConfig() {
       const config = JSON.stringify({
         mcpServers: {
-          s402: {
+          sweefi: {
             command: 'npx',
-            args: ['s402-mcp'],
+            args: ['@sweefi/mcp'],
             env: {
-              S402_PRIVATE_KEY: 'suiprivkey1...',
-              S402_NETWORK: 'sui:testnet',
+              SUI_PRIVATE_KEY: 'suiprivkey1...',
+              SUI_NETWORK: 'testnet',
             },
           },
         },
