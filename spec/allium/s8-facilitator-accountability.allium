@@ -5,9 +5,19 @@
 // Status:      ACTIVE
 // Invariant:   INVARIANTS.md § S8
 // ADR:         docs/adr/001-protocol-boundaries.md § Decision 1
-// Implements:  typescript/src/scheme.ts (s402ClientScheme.verifySettlement),
-//              mcp-server/src/sui-exact.ts (verifySettlement for `exact`),
-//              mcp-server/src/tools.ts (caller — s402_fetch)
+//              docs/adr/002-s402-is-pure-protocol.md (repo-level enforcement)
+// Interface:   typescript/src/scheme.ts — s402ClientScheme.verifySettlement
+// Target impls (downstream, in sibling repos):
+//              sweefi/packages/sui/src/s402/exact/client.ts     (planned)
+//              sweefi/packages/sui/src/s402/stream/client.ts    (planned)
+//              sweefi/packages/sui/src/s402/escrow/client.ts    (planned)
+//              sweefi/packages/sui/src/s402/prepaid/client.ts   (planned)
+//              sweefi/packages/sui/src/s402/unlock/client.ts    (planned, TX1 only)
+// Note: Prior to 2026-04-11, a reference implementation lived at
+//       s402/mcp-server/src/sui-exact.ts. That folder was removed in ADR-002
+//       to restore the chain-agnostic repo boundary; the pattern template in
+//       INVARIANTS.md § S8 preserves the exact-scheme verifySettlement logic
+//       for the back-port into SweeFi's adapters.
 // Derived from: 2026-04-11 scale-fragility council (C3) + vet arbiter
 //
 // This file is an Allium behavioral spec. It describes WHAT the protocol

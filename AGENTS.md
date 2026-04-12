@@ -241,9 +241,30 @@ s402 has **7 formally proven invariants** in `INVARIANTS.md`. Read these before 
 - Added validation that is too strict or too loose
 - Made assumptions that aren't documented in this file
 
-**Before modifying existing code:** Verify it against the invariants (S1-S7) above. If you find a violation, fix it — don't perpetuate it. If a prior AI added something that looks wrong, it probably is wrong.
+**Before modifying existing code:** Verify it against the invariants (S1-S8) above. If you find a violation, fix it — don't perpetuate it. If a prior AI added something that looks wrong, it probably is wrong.
 
 **Before adding new validation:** Ask: "Is this chain-specific?" If yes, it belongs in `@sweefi/sui`, not here. The `test/boundary.test.ts` test will catch you if you get this wrong.
+
+### Cross-Repo Awareness: Grep Sibling Projects Before Implementing (CRITICAL for AI Agents)
+
+**Before implementing a new scheme, adapter, Move module, or subsystem in this repo, grep sibling projects under `../../projects/` for the name.** Parallel drift across repos is one of the most expensive failure modes in an AI-driven workflow — two repos evolve along independent tracks, each internally coherent, and the cost of reconciliation later is vastly higher than the cost of a 30-second check up front.
+
+**Sibling repos to check first:**
+- `../../projects/sweefi-project/sweefi/contracts/sources/` — Move modules for all five schemes
+- `../../projects/sweefi-project/sweefi/packages/sui/src/s402/` — Sui adapter client/facilitator/server classes
+- `../../projects/sweefi-project/sweefi/packages/mcp/` — the canonical Sui MCP server (`@sweefi/mcp`)
+- `../../projects/sweefi-project/sweefi/STATUS.md` — deployment state, testnet package ID, test counts
+
+**Concrete check commands:**
+```bash
+ls ../../projects/sweefi-project/sweefi/contracts/sources/
+ls ../../projects/sweefi-project/sweefi/packages/sui/src/s402/
+grep -r "yourFeatureName" ../../projects/sweefi-project/sweefi/packages/
+```
+
+**Why this rule exists:** In April 2026, an AI session was about to implement `stream.move`, `escrow.move`, `prepaid.move`, and an unlock scheme adapter from scratch inside `s402/mcp-server/` — all of which already existed in `sweefi/contracts/sources/` and `sweefi/packages/sui/src/s402/`, tested with 1,775 passing tests and deployed to Sui testnet v11 with live demo transactions. The only reason the duplication was caught was a human asking "isn't this the wrong level for an MCP server?" A single `ls` of the sweefi folder 30 seconds earlier would have prevented a lengthy detour. See ADR-002 for the full incident writeup.
+
+**Corollary rule:** If you find that sibling code already implements what you were about to build, STOP. Do not rebuild. Either (a) improve the sibling implementation in place if the gap is there, or (b) consume the sibling package as a dependency, or (c) escalate to Danny with the discovery. Duplicating existing work is worse than building nothing — it creates divergent implementations that have to be reconciled at higher cost later.
 
 ### Error Design: Machines First
 
