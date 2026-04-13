@@ -8,7 +8,7 @@ description: s402 Wire Format Specification v1 — the formal, field-by-field de
 
 This document defines the s402 wire format — the exact encoding, field definitions, validation rules, and error semantics for the s402 HTTP 402 payment protocol. It is the authoritative reference for any implementation in any language.
 
-The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (132 vectors across 12 files).
+The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (161 vectors across 13 files).
 
 ## 1. Terminology
 
@@ -21,7 +21,7 @@ The key words "MUST", "MUST NOT", "REQUIRED", "SHALL", "SHOULD", "SHOULD NOT", "
 | **Facilitator** | A service that verifies and settles payment transactions on-chain on behalf of the Resource Server. Optional — direct settlement bypasses the Facilitator. |
 | **Requirements** | The JSON object sent by the server in a 402 response describing what payment is needed. |
 | **Payload** | The JSON object sent by the client containing a signed payment transaction. |
-| **Scheme** | A payment pattern (exact, prepaid, stream, escrow, unlock) defining the on-chain lifecycle. |
+| **Scheme** | A payment pattern (exact, upto, prepaid, stream, escrow, unlock) defining the on-chain lifecycle. |
 | **Base units** | The smallest denomination of a currency (e.g., MIST for SUI, wei for ETH, lamports for SOL). |
 
 ## 2. Protocol Overview
@@ -127,10 +127,12 @@ The Payment Requirements object is sent by the Resource Server in the `payment-r
 | `receiptRequired` | boolean | — | Whether the server requires an on-chain receipt. |
 | `settlementMode` | string | `"facilitator"` or `"direct"` | Settlement mode preference. |
 | `mandate` | object | See §4.5. | AP2 mandate requirements. |
-| `stream` | object | See §4.6. | Stream-specific parameters. Present when `accepts` includes `"stream"`. |
-| `escrow` | object | See §4.7. | Escrow-specific parameters. Present when `accepts` includes `"escrow"`. |
-| `unlock` | object | See §4.8. | Unlock-specific parameters. Present when `accepts` includes `"unlock"`. |
-| `prepaid` | object | See §4.9. | Prepaid-specific parameters. Present when `accepts` includes `"prepaid"`. |
+| `upto` | object | See §4.6. | Upto-specific parameters. Present when `accepts` includes `"upto"`. |
+| `settlementOverrides` | object | See §4.6. | Settlement overrides for upto scheme (server provides actual amount). |
+| `stream` | object | See §4.7. | Stream-specific parameters. Present when `accepts` includes `"stream"`. |
+| `escrow` | object | See §4.8. | Escrow-specific parameters. Present when `accepts` includes `"escrow"`. |
+| `unlock` | object | See §4.9. | Unlock-specific parameters. Present when `accepts` includes `"unlock"`. |
+| `prepaid` | object | See §4.10. | Prepaid-specific parameters. Present when `accepts` includes `"prepaid"`. |
 | `extensions` | object | Opaque key-value bag. | Forward-compatible extensibility. Consumers MUST treat extension values as untrusted input. See §4.10. |
 
 ### 4.3 Amount Format
@@ -172,7 +174,24 @@ Used for AP2 (Agent Payment Authorization) mandate requirements.
 | `minPerTx` | string | No | Amount format (§4.3) | Minimum per-transaction spending limit the mandate must allow. |
 | `coinType` | string | No | — | Coin type the mandate must authorize. Must match `asset`. |
 
-### 4.6 Stream Sub-Object
+### 4.6 Upto Sub-Object
+
+Required when `accepts` includes `"upto"`.
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| `maxAmount` | string | Yes | Amount format (§4.3) | Maximum authorized amount in base units. Client deposits this; actual may be less. |
+| `settlementDeadlineMs` | string | Yes | Amount format (§4.3). Must be in the future. | Deadline for settlement (ms since epoch). After this, payer can reclaim via `expire()`. |
+| `estimatedAmount` | string | No | Amount format (§4.3). Must be ≤ `maxAmount`. | Server's estimated cost (advisory). Helps clients set a tight `settlementCeiling`. |
+| `usageReportUrl` | string | No | — | URL where the client can query usage/metering data (informational). |
+
+**Settlement Overrides Sub-Object** (used at settle-time):
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| `actualAmount` | string | Yes | Amount format (§4.3). Must be ≤ `maxAmount`. | Actual amount to settle, based on observed usage. |
+
+### 4.7 Stream Sub-Object
 
 Required when `accepts` includes `"stream"`.
 
@@ -183,7 +202,7 @@ Required when `accepts` includes `"stream"`.
 | `minDeposit` | string | Yes | Amount format (§4.3) | Minimum initial deposit in base units. |
 | `streamSetupUrl` | string | No | — | URL for stream status checks. |
 
-### 4.7 Escrow Sub-Object
+### 4.8 Escrow Sub-Object
 
 Required when `accepts` includes `"escrow"`.
 
@@ -193,7 +212,7 @@ Required when `accepts` includes `"escrow"`.
 | `deadlineMs` | string | Yes | Amount format (§4.3) | Escrow deadline as Unix timestamp in milliseconds. |
 | `arbiter` | string | No | — | Arbiter address for dispute resolution. |
 
-### 4.8 Unlock Sub-Object
+### 4.9 Unlock Sub-Object
 
 Required when `accepts` includes `"unlock"`.
 
@@ -203,7 +222,7 @@ Required when `accepts` includes `"unlock"`.
 | `encryptedContentId` | string | Yes | — | Identifier for the encrypted content (e.g., Walrus blob ID, IPFS CID). |
 | `encryptionServiceId` | string | Yes | — | Identifier for the encryption service or module (e.g., Sui package ID, EVM contract address). |
 
-### 4.9 Prepaid Sub-Object
+### 4.10 Prepaid Sub-Object
 
 Required when `accepts` includes `"prepaid"`.
 
@@ -218,7 +237,7 @@ Required when `accepts` includes `"prepaid"`.
 
 **Pairing invariant**: `providerPubkey` and `disputeWindowMs` MUST both be present (v0.2 mode) or both absent (v0.1 mode). Implementations MUST reject requirements where only one is present.
 
-### 4.10 Extensions Field
+### 4.11 Extensions Field
 
 The `extensions` field is an opaque key-value bag for forward-compatible extensibility. Implementations:
 
@@ -239,7 +258,7 @@ The Payment Payload is sent by the client in the `x-payment` header (or request 
 | Field | Type | Required | Constraints | Description |
 |-------|------|----------|-------------|-------------|
 | `s402Version` | string | No | If present, MUST be `"1"` | Protocol version. Optional on payloads for x402 interop. |
-| `scheme` | string | Yes | One of: `"exact"`, `"stream"`, `"escrow"`, `"unlock"`, `"prepaid"` | The payment scheme being used. MUST be in the server's `accepts` array. |
+| `scheme` | string | Yes | One of: `"exact"`, `"upto"`, `"stream"`, `"escrow"`, `"unlock"`, `"prepaid"` | The payment scheme being used. MUST be in the server's `accepts` array. |
 | `payload` | object | Yes | Scheme-specific inner fields. See below. | The scheme-specific payment data. |
 
 ### 5.2 Payload Inner Fields by Scheme
@@ -250,6 +269,15 @@ The Payment Payload is sent by the client in the `x-payment` header (or request 
 |-------|------|----------|-------------|
 | `payload.transaction` | string | Yes | Base64-encoded signed transaction bytes. |
 | `payload.signature` | string | Yes | Base64-encoded signature. |
+
+**Upto** (`scheme: "upto"`):
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `payload.transaction` | string | Yes | Base64-encoded signed deposit transaction (creates UptoDeposit on-chain). |
+| `payload.signature` | string | Yes | Base64-encoded signature. |
+| `payload.maxAmount` | string | Yes | Maximum authorized amount. Must match `requirements.upto.maxAmount`. |
+| `payload.settlementCeiling` | string | No | Client-chosen settlement ceiling (on-chain enforced). Must be ≤ `maxAmount`. |
 
 **Stream** (`scheme: "stream"`):
 
@@ -292,6 +320,8 @@ The Settlement Response is sent by the server in the `payment-response` header o
 | `txDigest` | string | No | — | On-chain transaction digest/hash. |
 | `receiptId` | string | No | — | On-chain receipt object ID. |
 | `finalityMs` | number | No | Finite number. | Time to finality in milliseconds. |
+| `actualAmount` | string | No | — | Actual amount settled in base units (upto scheme). |
+| `depositId` | string | No | — | UptoDeposit object ID (upto scheme). |
 | `streamId` | string | No | — | Stream object ID (stream scheme). |
 | `escrowId` | string | No | — | Escrow object ID (escrow scheme). |
 | `balanceId` | string | No | — | PrepaidBalance object ID (prepaid scheme). |
@@ -359,7 +389,7 @@ Servers MAY advertise s402 support at `/.well-known/s402.json`:
 ```json
 {
   "s402Version": "1",
-  "schemes": ["exact", "stream", "escrow", "unlock", "prepaid"],
+  "schemes": ["exact", "upto", "stream", "escrow", "unlock", "prepaid"],
   "networks": ["sui:mainnet"],
   "assets": ["0x2::sui::SUI"],
   "facilitatorUrl": "https://facilitator.example.com",
@@ -390,11 +420,13 @@ This is a defense-in-depth measure at the HTTP trust boundary — it prevents un
 
 ### 10.1 Known Requirements Keys
 
-`s402Version`, `accepts`, `network`, `asset`, `amount`, `payTo`, `facilitatorUrl`, `mandate`, `protocolFeeBps`, `protocolFeeAddress`, `receiptRequired`, `settlementMode`, `expiresAt`, `stream`, `escrow`, `unlock`, `prepaid`, `extensions`
+`s402Version`, `accepts`, `network`, `asset`, `amount`, `payTo`, `facilitatorUrl`, `mandate`, `protocolFeeBps`, `protocolFeeAddress`, `receiptRequired`, `settlementMode`, `expiresAt`, `upto`, `stream`, `escrow`, `unlock`, `prepaid`, `settlementOverrides`, `extensions`
 
 Sub-object known keys:
 
 - **mandate**: `required`, `minPerTx`, `coinType`
+- **upto**: `maxAmount`, `settlementDeadlineMs`, `estimatedAmount`, `usageReportUrl`
+- **settlementOverrides**: `actualAmount`
 - **stream**: `ratePerSecond`, `budgetCap`, `minDeposit`, `streamSetupUrl`
 - **escrow**: `seller`, `arbiter`, `deadlineMs`
 - **unlock**: `encryptionId`, `encryptedContentId`, `encryptionServiceId`
@@ -407,12 +439,13 @@ Top-level: `s402Version`, `scheme`, `payload`
 Inner payload keys per scheme:
 
 - **exact, stream, escrow**: `transaction`, `signature`
+- **upto**: `transaction`, `signature`, `maxAmount`, `settlementCeiling`
 - **unlock**: `transaction`, `signature`, `encryptionId`
 - **prepaid**: `transaction`, `signature`, `ratePerCall`, `maxCalls`
 
 ### 10.3 Known Settlement Response Keys
 
-`success`, `txDigest`, `receiptId`, `finalityMs`, `streamId`, `escrowId`, `balanceId`, `error`, `errorCode`
+`success`, `txDigest`, `receiptId`, `finalityMs`, `actualAmount`, `depositId`, `streamId`, `escrowId`, `balanceId`, `error`, `errorCode`
 
 ## 11. x402 Compatibility
 
@@ -471,9 +504,9 @@ An implementation is **s402-conformant** if it:
 2. Validates all required fields per §4.1, §5.1, and §6
 3. Rejects malformed input with the appropriate error code from §8
 4. Strips unknown keys on decode per §10
-5. Passes the 132 machine-readable conformance test vectors shipped in the `s402` npm package
+5. Passes the 161 machine-readable conformance test vectors shipped in the `s402` npm package
 
-The conformance vectors cover: encode, decode, body transport, x402 compat normalization, receipt format/parse, validation rejection, key stripping, and roundtrip identity. See the [Conformance Vectors guide](/guide/conformance) for the vector format and implementation instructions.
+The conformance vectors cover: encode, decode, body transport, x402 compat normalization, receipt format/parse, settlement verification, validation rejection, key stripping, and roundtrip identity. See the [Conformance Vectors guide](/guide/conformance) for the vector format and implementation instructions.
 
 ---
 

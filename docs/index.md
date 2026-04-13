@@ -4,7 +4,7 @@ hero:
   name: s402
   text: Your AI agent needs to pay for things.
   tagline: >-
-    Chain-agnostic HTTP 402 payment protocol. Five payment schemes.
+    Chain-agnostic HTTP 402 payment protocol. Six payment schemes.
     TypeScript and Python implementations — built for agents
     that spend money autonomously.
   image:
@@ -28,8 +28,8 @@ features:
     title: Works with x402 clients today
     details: An x402 client can talk to your s402 server using the exact scheme — zero code changes. Migrate incrementally.
   - icon: 🧩
-    title: Pay once, prepay, escrow, stream, or encrypt
-    details: One-shot transfers for simple calls. Prepaid deposits for 500x gas savings. Escrow for trustless commerce. Streams for real-time billing. Unlock for pay-to-decrypt.
+    title: Pay once, cap it, prepay, escrow, stream, or encrypt
+    details: One-shot transfers for simple calls. Capped variable-amount payments. Prepaid deposits for 500x gas savings. Escrow for trustless commerce. Streams for real-time billing. Unlock for pay-to-decrypt.
   - icon: 🤖
     title: Built for agents that self-recover
     details: Every error includes retryable and suggestedAction. Your agent knows whether to retry, top up, or switch schemes — no human needed.
@@ -88,4 +88,4 @@ npm install s402   # TypeScript — zero dependencies
 
 ---
 
-**v0.2.3** · Five payment schemes · 868 tests across TypeScript and Python · [132-vector conformance suite](/guide/conformance) · Apache-2.0 · [npm](https://www.npmjs.com/package/s402)
+**v0.5.0** · Six payment schemes · 831 tests · [161-vector conformance suite](/guide/conformance) · Apache-2.0 · [npm](https://www.npmjs.com/package/s402)

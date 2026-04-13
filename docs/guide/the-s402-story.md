@@ -47,7 +47,7 @@ x402 proved the concept works. But it was built for one specific blockchain fami
 
 - **Atomic transactions**: Instead of "verify... wait... settle" (two steps with a gap), Sui can do both in a single transaction that either fully succeeds or fully fails. No gap. No risk.
 - **Sub-second finality**: Sui confirms transactions in ~400 milliseconds. Ethereum takes 12+ seconds. That's the difference between a conversation and a phone call with long pauses.
-- **Five payment models**: Not just "pay once per request," but also subscriptions (prepaid), escrow (safe trades), streaming (pay per second), and pay-to-decrypt (buy encrypted content).
+- **Six payment models**: Not just "pay once per request," but also variable-amount (upto), subscriptions (prepaid), escrow (safe trades), streaming (pay per second), and pay-to-decrypt (buy encrypted content).
 
 ### Why does this matter?
 
@@ -290,13 +290,14 @@ The `payment-response` header contains the settlement result:
 
 Done. The whole exchange took less than a second.
 
-### The five payment schemes
+### The six payment schemes
 
-s402 doesn't just do one-shot payments. It supports five different payment *shapes*, each designed for a different economic relationship:
+s402 doesn't just do one-shot payments. It supports six different payment *shapes*, each designed for a different economic relationship:
 
 | Scheme | When to use it | Real-world analogy |
 |--------|---------------|-------------------|
 | **Exact** | One-time purchase | Buying a coffee |
+| **Upto** | Variable-amount metered billing | A restaurant bill — you authorize your card, they charge what you ate |
 | **Prepaid** | High-frequency API access | A subway card you load with credit |
 | **Escrow** | Trustless commerce | An eBay purchase with buyer protection |
 | **Unlock** | Pay-to-decrypt content | Buying a movie on iTunes |
@@ -372,10 +373,10 @@ The type system is the heart of s402. Let's walk through it piece by piece.
 // A "union type" means a value can be one of several options.
 // Think of it like a dropdown menu — you pick exactly one.
 //
-// This defines the five payment schemes s402 supports.
+// This defines the six payment schemes s402 supports.
 // The `type` keyword means this exists only at compile time —
 // it disappears completely when TypeScript compiles to JavaScript.
-export type s402Scheme = 'exact' | 'stream' | 'escrow' | 'unlock' | 'prepaid';
+export type s402Scheme = 'exact' | 'upto' | 'prepaid' | 'stream' | 'escrow' | 'unlock';
 ```
 
 **Payment requirements — what the server sends in a 402 response:**

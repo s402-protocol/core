@@ -1,5 +1,5 @@
 ---
-description: s402 whitepaper — the economics, architecture, and design rationale for the HTTP 402 payment protocol for Sui. Five schemes, zero runtime dependencies, $0.014 per 1,000 calls.
+description: s402 whitepaper — the economics, architecture, and design rationale for the HTTP 402 payment protocol for Sui. Six schemes, zero runtime dependencies, $0.014 per 1,000 calls.
 ---
 
 # s402: An Internet-Native Payment Protocol for Autonomous Agents
@@ -145,15 +145,25 @@ The facilitator's `process()` method enforces three independent guards: an expir
 
 ---
 
-## 5. Five Irreducible Payment Primitives
+## 5. Six Irreducible Payment Primitives
 
-s402 defines five payment schemes. The number is not arbitrary — each encodes a distinct class of economic relationship that cannot be expressed as another scheme plus additional logic.
+s402 defines six payment schemes. The number is not arbitrary — each encodes a distinct class of economic relationship that cannot be expressed as another scheme plus additional logic.
 
 ### Exact — The Handshake
 
 One payment, one resource. A signed transaction transfers value atomically from client to server via a PTB. Settlement is immediate. The facilitator verifies the signature, runs a dry-run simulation, and broadcasts the transaction in a single atomic operation.
 
 This is x402's model, made atomic by Sui's PTBs. Use it for simple API calls, for x402 interoperability, for situations where the per-call cost is acceptable. The gas cost is approximately $0.007 per request — negligible when each request carries meaningful value.
+
+### Upto — The Estimate
+
+The client authorizes a maximum amount; the server reports actual usage; the facilitator settles the precise amount. Remainder is refunded on-chain. This is variable-amount settlement — the agent says "I'll pay up to X," the server charges what you actually used.
+
+The client can tighten its exposure via `settlementCeiling` — an on-chain-enforced cap the client chooses at payment time, potentially much tighter than the server's `maxAmount`. The Move contract rejects any settlement exceeding the ceiling. If the facilitator doesn't settle before the deadline, the client reclaims the full deposit via `expire()`.
+
+This is x402's model made explicit. x402 uses `maxAmountRequired` with implicit variable settlement — but without on-chain ceiling enforcement, the client has no protection against the facilitator settling the full maximum. s402's Upto makes the trust model transparent: `estimatedAmount` (server advisory) → `settlementCeiling` (client-enforced cap) → `actualAmount` (facilitator-reported usage).
+
+Use it for metered APIs (tokens consumed, compute time used), variable-pricing endpoints, and any scenario where the exact cost isn't known until after the work is done.
 
 ### Prepaid — The Budget
 
@@ -189,9 +199,9 @@ Content is encrypted at rest using Sui SEAL and Walrus distributed storage. Paym
 
 This scheme is for information commerce: paywalled research, encrypted datasets, licensed software, proprietary model weights. Once information is disclosed, it cannot be undisclosed — the atomic payment model is not a convenience but a correctness requirement.
 
-### Why Not Six?
+### Why Not Seven?
 
-The auction mechanism was considered and rejected. An auction decomposes into price discovery (a coordination problem, not a payment primitive) plus settlement (one of the five existing schemes). The `extensions` field allows auction price signals to be included in requirements without s402 encoding the coordination logic. Primitives that decompose are not primitives.
+The auction mechanism was considered and rejected. An auction decomposes into price discovery (a coordination problem, not a payment primitive) plus settlement (one of the six existing schemes). The `extensions` field allows auction price signals to be included in requirements without s402 encoding the coordination logic. Primitives that decompose are not primitives.
 
 ---
 
@@ -303,10 +313,10 @@ The compat package is a deliberate sub-path import (`s402/compat`), not part of 
 
 ## 10. Implementation
 
-The `s402` npm package (v0.1.8, Apache-2.0) is the protocol layer:
+The `s402` npm package (v0.5.0, Apache-2.0) is the protocol layer:
 
-- **2,079 lines** of TypeScript — types, encoding logic, scheme dispatch, error model
-- **2,915 lines** of tests — 245 total, including property-based fuzzing with arbitrarily generated payloads
+- **TypeScript** — types, encoding logic, scheme dispatch, error model, extension system
+- **831 tests** including property-based fuzzing, MC/DC coverage, and 161-vector conformance suite
 - **Zero runtime dependencies** — pure TypeScript using only built-in APIs (`TextEncoder`, `btoa/atob`, `JSON`)
 - **Sub-path exports** — import only what you need: `s402/types`, `s402/http`, `s402/errors`, `s402/compat`
 
@@ -379,7 +389,7 @@ The future is using it now.
 - Solana Transaction Fees — solana.com/docs/core/fees (~$0.00025/tx)
 
 **s402 Implementation**
-- s402 npm package v0.1.8 — npmjs.com/package/s402
+- s402 npm package v0.5.0 — npmjs.com/package/s402
 - s402 Protocol documentation — s402-protocol.org
 - s402 Source repository — github.com/s402-protocol/core
 

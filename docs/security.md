@@ -84,6 +84,12 @@ This prevents clients from guessing whether to retry. If `retryable` is `false`,
 - One transaction per request. No state between calls.
 - The facilitator **must** call `waitForTransaction()` before returning success. Without finality confirmation, the server could grant access for a transaction that gets reverted.
 
+### Upto
+- Variable-amount settlement with on-chain cap enforcement.
+- `settlementCeiling` (client-chosen) is enforced by the Move contract — the facilitator cannot settle above this amount.
+- Deadline-based expiry: if the facilitator doesn't settle before `settlementDeadlineMs`, the payer reclaims the full deposit via `expire()`.
+- The server reports `actualAmount` at settle-time. The server is trusted to report honest usage; the facilitator enforces `actualAmount ≤ min(maxAmount, settlementCeiling)`.
+
 ### Prepaid
 
 **Provider-side enforcement (trustless):**

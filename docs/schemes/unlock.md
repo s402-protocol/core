@@ -97,8 +97,8 @@ const requirements: s402PaymentRequirements = {
   payTo: '0xseller...',
   unlock: {
     encryptionId: '0xabc...',
-    walrusBlobId: 'blob_xyz...',
-    encryptionPackageId: '0xseal_pkg...',
+    encryptedContentId: 'blob_xyz...',
+    encryptionServiceId: '0xseal_pkg...',
   },
   escrow: {
     seller: '0xseller...',

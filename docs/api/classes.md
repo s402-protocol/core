@@ -233,7 +233,7 @@ interface s402RouteConfig {
   receiptRequired?: boolean;
   stream?: { ratePerSecond: string; budgetCap: string; minDeposit: string };
   escrow?: { seller: string; arbiter?: string; deadlineMs: string };
-  unlock?: { encryptionId: string; walrusBlobId: string; encryptionPackageId: string };
+  unlock?: { encryptionId: string; encryptedContentId: string; encryptionServiceId: string };
   prepaid?: { ratePerCall: string; maxCalls?: string; minDeposit: string; withdrawalDelayMs: string };
 }
 ```

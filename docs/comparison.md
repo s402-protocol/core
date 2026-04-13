@@ -1,5 +1,5 @@
 ---
-description: s402 vs x402 — how Sui's HTTP 402 protocol extends Coinbase's x402 with Prepaid, Escrow, Stream, and Unlock schemes. Complementary, not competing.
+description: s402 vs x402 — how Sui's HTTP 402 protocol extends Coinbase's x402 with Upto, Prepaid, Escrow, Stream, and Unlock schemes. Complementary, not competing.
 ---
 
 # s402 vs x402
@@ -12,7 +12,7 @@ s402 extends [x402](https://github.com/coinbase/x402) (Coinbase's HTTP 402 proto
 |---|---|---|---|
 | **Settlement** | Two-step: verify then settle | Two-step + Extensions for deferred/batch | Atomic: verify + settle in one PTB |
 | **Finality** | ~2s (Base) / ~400ms opt. (Solana) | Same per chain | ~400ms (owned objects) |
-| **Payment models** | Exact (per-call) | Exact + session/deferred via Extensions | Exact, Prepaid, Escrow, Stream, Unlock |
+| **Payment models** | Exact (per-call) | Exact + session/deferred via Extensions | Exact, Upto, Prepaid, Escrow, Stream, Unlock |
 | **Session patterns** | None | Application-layer conventions | Protocol-enforced Move contracts |
 | **Coin handling** | approve + transferFrom | Same + multi-chain | Native `coinWithBalance` + `splitCoins` |
 | **Direct mode** | No | No | Yes (no facilitator needed) |
@@ -77,12 +77,13 @@ const requirements = normalizeRequirements(decoded);
 
 You can — s402's `exact` scheme is wire-compatible with x402. But you'd miss:
 
-1. **Prepaid**: Deposit-based access with off-chain API calls. 500x gas savings for high-frequency usage.
-2. **Escrow**: Time-locked trustless commerce with arbiter dispute resolution.
-3. **Stream**: Per-second micropayments via on-chain meters.
-4. **Unlock**: Pay-to-decrypt via Sui SEAL + Walrus encrypted storage.
-5. **Direct settlement**: No facilitator needed — settle directly on-chain.
-6. **On-chain receipts**: Permanent, auditable proof of every payment as NFTs.
-7. **AP2 mandates**: Agent spending authorization with per-tx and lifetime caps.
+1. **Upto**: Variable-amount payments with client-chosen on-chain settlement ceiling.
+2. **Prepaid**: Deposit-based access with off-chain API calls. 500x gas savings for high-frequency usage.
+3. **Escrow**: Time-locked trustless commerce with arbiter dispute resolution.
+4. **Stream**: Per-second micropayments via on-chain meters.
+5. **Unlock**: Pay-to-decrypt via Sui SEAL + Walrus encrypted storage.
+6. **Direct settlement**: No facilitator needed — settle directly on-chain.
+7. **On-chain receipts**: Permanent, auditable proof of every payment as NFTs.
+8. **AP2 mandates**: Agent spending authorization with per-tx and lifetime caps.
 
 These capabilities come from Sui's object model, PTBs, and sub-second finality. They can't be replicated on EVM — and they don't need to be. x402 already handles EVM well. s402 handles Sui.

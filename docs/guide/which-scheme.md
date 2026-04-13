@@ -1,10 +1,10 @@
 ---
-description: How to choose the right s402 payment scheme. Decision tree comparing Exact, Prepaid, Escrow, Stream, and Unlock — pick the right one in 10 seconds.
+description: How to choose the right s402 payment scheme. Decision tree comparing Exact, Upto, Prepaid, Escrow, Stream, and Unlock — pick the right one in 10 seconds.
 ---
 
 # Which Scheme Do I Need?
 
-Five schemes sounds like a lot. Here is how to pick the right one in 10 seconds.
+Six schemes sounds like a lot. Here is how to pick the right one in 10 seconds.
 
 ## Decision Tree
 
@@ -12,7 +12,8 @@ Five schemes sounds like a lot. Here is how to pick the right one in 10 seconds.
 What are you building?
 │
 ├─ API that charges per call
-│  ├─ < 10 calls/session → Exact
+│  ├─ Fixed price, < 10 calls/session → Exact
+│  ├─ Variable price (usage-based) → Upto
 │  ├─ 10–10,000 calls/session → Prepaid (500x cheaper)
 │  └─ Continuous / real-time → Stream
 │
@@ -25,20 +26,23 @@ What are you building?
 
 ## Comparison Table
 
-| | Exact | Prepaid | Escrow | Stream | Unlock |
-|---|---|---|---|---|---|
-| **On-chain TXs per 1K calls** | 1,000 | 2 | 1 | 2 | 1 |
-| **Gas cost per 1K calls** | ~$7.00 | ~$0.014 | ~$0.007 | ~$0.014 | ~$0.007 |
-| **Latency per call** | ~400ms | ~5ms | N/A | ~5ms | N/A |
-| **Setup complexity** | None | Deposit TX | Deposit TX | Deposit TX | Deposit TX + SEAL |
-| **Trust model** | Atomic | On-chain rate caps | Time-lock + arbiter | On-chain meter | Escrow + encryption |
-| **x402 compatible** | Yes | No | No | No | No |
-| **Best for** | Simple APIs | High-frequency APIs | Digital commerce | Real-time billing | Encrypted content |
+| | Exact | Upto | Prepaid | Escrow | Stream | Unlock |
+|---|---|---|---|---|---|---|
+| **On-chain TXs per 1K calls** | 1,000 | 1,000 | 2 | 1 | 2 | 1 |
+| **Gas cost per 1K calls** | ~$7.00 | ~$7.00 | ~$0.014 | ~$0.007 | ~$0.014 | ~$0.007 |
+| **Latency per call** | ~400ms | ~400ms | ~5ms | N/A | ~5ms | N/A |
+| **Setup complexity** | None | None | Deposit TX | Deposit TX | Deposit TX | Deposit TX + SEAL |
+| **Trust model** | Atomic | On-chain cap + refund | On-chain rate caps | Time-lock + arbiter | On-chain meter | Escrow + encryption |
+| **x402 compatible** | Yes | No | No | No | No | No |
+| **Best for** | Simple APIs | Usage-based APIs | High-frequency APIs | Digital commerce | Real-time billing | Encrypted content |
 
 ## Quick Recommendations
 
 **"I am building an AI agent that calls APIs."**
 Start with **Exact** for prototyping. Switch to **Prepaid** for high-frequency usage — at 1,000 calls per session, Prepaid saves 500x on gas ($0.014 vs $7.00).
+
+**"My API charges variable amounts based on usage."**
+Use **Upto**. The client authorizes a maximum, you settle the actual amount after metering. Client-chosen `settlementCeiling` gives the payer on-chain protection against overcharging. Remainder is refunded automatically.
 
 **"I am selling digital goods."**
 Use **Escrow**. The buyer's funds are locked until they confirm delivery. If the seller disappears, the deadline triggers an automatic refund.

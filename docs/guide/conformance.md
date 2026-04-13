@@ -1,14 +1,14 @@
 ---
-description: 132 machine-readable JSON test vectors for verifying s402 implementations in any language. Shared across TypeScript and Python — proven cross-language compatible.
+description: 161 machine-readable JSON test vectors for verifying s402 implementations in any language. Shared across TypeScript and Python — proven cross-language compatible.
 ---
 
 # Conformance Test Vectors
 
-s402 ships 132 machine-readable JSON test vectors that define correct protocol behavior. Both the [TypeScript](/guide/quickstart) and [Python](/guide/server-python) implementations pass all 132 vectors — producing byte-identical wire output. Use these vectors to verify any new implementation (Go, Rust, Java) without reading a single line of TypeScript or Python.
+s402 ships 161 machine-readable JSON test vectors that define correct protocol behavior. Both the [TypeScript](/guide/quickstart) and [Python](/guide/server-python) implementations pass all 161 vectors — producing byte-identical wire output. Use these vectors to verify any new implementation (Go, Rust, Java) without reading a single line of TypeScript or Python.
 
 ## Why This Matters
 
-Most protocols define behavior in prose. Prose is ambiguous. s402 defines behavior in **executable JSON vectors** that any language can load and run. If your implementation passes all 132 vectors, it's s402-compliant.
+Most protocols define behavior in prose. Prose is ambiguous. s402 defines behavior in **executable JSON vectors** that any language can load and run. If your implementation passes all 161 vectors, it's s402-compliant.
 
 The vectors live in `spec/vectors/` at the root of the monorepo. Both the TypeScript and Python test suites read from this single directory — one source of truth.
 
@@ -62,18 +62,19 @@ Each JSON file is an array of test cases:
 
 | File | Count | What it tests |
 |------|-------|---------------|
-| `requirements-encode.json` | 17 | Object → base64 header |
-| `requirements-decode.json` | 19 | Base64 header → object (including key stripping) |
-| `payload-encode.json` | 8 | Payment payload → base64 header |
-| `payload-decode.json` | 7 | Base64 header → payment payload |
-| `settle-encode.json` | 5 | Settle response → base64 header |
-| `settle-decode.json` | 6 | Base64 header → settle response |
-| `body-transport.json` | 5 | JSON body transport (no base64) |
+| `requirements-encode.json` | 19 | Object → base64 header |
+| `requirements-decode.json` | 21 | Base64 header → object (including key stripping) |
+| `payload-encode.json` | 10 | Payment payload → base64 header |
+| `payload-decode.json` | 9 | Base64 header → payment payload |
+| `settle-encode.json` | 7 | Settle response → base64 header |
+| `settle-decode.json` | 7 | Base64 header → settle response |
+| `body-transport.json` | 6 | JSON body transport (no base64) |
 | `compat-normalize.json` | 10 | x402 V1/V2 → s402 normalization |
 | `receipt-format.json` | 6 | Receipt fields → header string |
 | `receipt-parse.json` | 4 | Header string → receipt fields |
-| `validation-reject.json` | 39 | Malformed inputs that must fail |
-| `roundtrip.json` | 7 | encode → decode → re-encode identity |
+| `settlement-verification.json` | 7 | Settlement digest-binding verification |
+| `validation-reject.json` | 46 | Malformed inputs that must fail |
+| `roundtrip.json` | 9 | encode → decode → re-encode identity |
 
 ## Quick Start (Go example)
 

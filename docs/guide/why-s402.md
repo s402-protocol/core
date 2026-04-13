@@ -40,16 +40,17 @@ s402 is a wire format for HTTP 402 on Sui. It defines:
 
 - **What goes in the headers** — base64 JSON in three headers (`payment-required`, `x-payment`, `payment-response`)
 - **What the JSON looks like** — typed requirements, payloads, and responses
-- **Five payment schemes** — different economics for different use cases
+- **Six payment schemes** — different economics for different use cases
 - **Error codes with recovery hints** — so agents can self-recover without human intervention
 
 s402 is **not** a payment SDK. It does not include Sui SDK code, transaction builders, or RPC clients. It is a ~30 KB TypeScript package with zero runtime dependencies that defines the protocol layer. You build the Sui integration on top.
 
-## Five Schemes, One Protocol
+## Six Schemes, One Protocol
 
 | Scheme | What It Does | Best For |
 |--------|-------------|----------|
 | [Exact](/schemes/exact) | One payment per request | Simple API calls, x402 interop |
+| [Upto](/schemes/upto) | Variable-amount payment with on-chain cap | Usage-based APIs, metered billing |
 | [Prepaid](/schemes/prepaid) | Deposit upfront, call off-chain | High-frequency APIs (500x gas savings) |
 | [Escrow](/schemes/escrow) | Time-locked vault with dispute resolution | Digital goods, freelance payments |
 | [Stream](/schemes/stream) | Per-second micropayments | AI inference, video, real-time data |

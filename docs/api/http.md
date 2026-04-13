@@ -86,7 +86,7 @@ function decodePaymentPayload(header: string): s402PaymentPayload;
 
 **Throws:** `s402Error` with code `INVALID_PAYLOAD` if:
 - Base64/JSON decoding fails
-- `scheme` is missing or not one of the five valid schemes
+- `scheme` is missing or not one of the six valid schemes
 - `payload` object is missing
 
 > **Note:** `s402Version` is **not** required on payment payloads. Requirements include it, but payloads omit it for x402 wire compatibility — the scheme field is the discriminant.

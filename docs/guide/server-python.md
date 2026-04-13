@@ -154,11 +154,11 @@ The example above accepts any valid-shaped payload. For production:
 
 ## Conformance
 
-The Python implementation passes all [132 conformance test vectors](/guide/conformance) — the same vectors used by the TypeScript reference. The two implementations produce byte-identical wire output.
+The Python implementation passes all [161 conformance test vectors](/guide/conformance) — the same vectors used by the TypeScript reference. The two implementations produce byte-identical wire output.
 
 ```bash
 cd python
 pip install -e ".[dev]"
 pytest -v
-# 132 passed
+# 161 passed
 ```

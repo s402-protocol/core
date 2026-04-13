@@ -6,9 +6,9 @@ description: Common questions about s402 — production readiness, testing, faci
 
 ## Is s402 production-ready?
 
-The protocol spec and TypeScript package (`s402@0.1.8`) are stable for the **Exact**, **Prepaid**, and **Escrow** schemes. These are v0.1 and covered by 245 tests.
+The protocol spec and TypeScript package (`s402@0.5.0`) are stable for all six schemes: **Exact**, **Upto**, **Prepaid**, **Escrow**, **Stream**, and **Unlock**. Covered by 831 tests and 161 conformance vectors.
 
-**Stream** and **Unlock** are v0.2 — the types are defined but the on-chain implementations are under active development. Use them for prototyping, not production.
+**Stream** and **Unlock** on-chain implementations are under active development. Use them for prototyping, not production.
 
 ## Do I need a facilitator?
 
@@ -108,7 +108,7 @@ The facilitator and scheme implementations need to support the coin type, but th
 [x402](https://github.com/coinbase/x402) by Coinbase established HTTP 402 payments on EVM. s402 uses the **same wire format** (HTTP headers, base64 JSON encoding) extended with Sui-native capabilities.
 
 - An x402 client can talk to an s402 server using the `exact` scheme — zero code changes
-- s402 adds four schemes that EVM can't support (Prepaid, Escrow, Stream, Unlock)
+- s402 adds five schemes beyond exact that leverage Sui's architecture (Upto, Prepaid, Escrow, Stream, Unlock)
 - The `normalizeRequirements()` function handles both protocols transparently
 
 They are complementary. x402 handles EVM. s402 handles Sui. See the [full comparison](/comparison).

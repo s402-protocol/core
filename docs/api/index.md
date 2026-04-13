@@ -40,10 +40,10 @@ HTTP header names used by s402. All lowercase per HTTP/2 spec (RFC 9113 §8.2.1)
 ### `s402Scheme`
 
 ```typescript
-type s402Scheme = 'exact' | 'stream' | 'escrow' | 'unlock' | 'prepaid';
+type s402Scheme = 'exact' | 'upto' | 'prepaid' | 'stream' | 'escrow' | 'unlock';
 ```
 
-The five payment schemes.
+The six payment schemes.
 
 ### `s402SettlementMode`
 
@@ -79,16 +79,34 @@ interface s402PaymentRequirements {
   expiresAt?: number;           // Unix timestamp ms
 
   // ── Scheme-specific extras ──
+  upto?: s402UptoExtra;
   stream?: s402StreamExtra;
   escrow?: s402EscrowExtra;
   unlock?: s402UnlockExtra;
   prepaid?: s402PrepaidExtra;
+
+  settlementOverrides?: s402SettlementOverrides;
 
   extensions?: Record<string, unknown>;
 }
 ```
 
 #### Scheme Extras
+
+**`s402UptoExtra`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `maxAmount` | `string` | Maximum authorized amount in base units |
+| `settlementDeadlineMs` | `string` | Deadline for settlement (ms since epoch) |
+| `estimatedAmount?` | `string` | Server's estimated cost (advisory) |
+| `usageReportUrl?` | `string` | URL for usage/metering data |
+
+**`s402SettlementOverrides`**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `actualAmount` | `string` | Actual amount to settle (must be ≤ maxAmount) |
 
 **`s402StreamExtra`**
 
@@ -111,9 +129,9 @@ interface s402PaymentRequirements {
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `encryptionId` | `string` | SEAL encryption ID |
-| `walrusBlobId` | `string` | Walrus blob containing encrypted content |
-| `encryptionPackageId` | `string` | SEAL package ID on Sui |
+| `encryptionId` | `string` | Encryption key identifier for key servers |
+| `encryptedContentId` | `string` | Content identifier for encrypted blob (e.g., Walrus blob ID, IPFS CID) |
+| `encryptionServiceId` | `string` | Identifier for encryption service/module (e.g., Sui package ID) |
 
 **`s402PrepaidExtra`**
 
@@ -146,6 +164,7 @@ All payloads contain a `payload` object with `transaction` (base64 signed PTB) a
 | Payload Type | Extra Fields | Notes |
 |-------------|-------------|-------|
 | `s402ExactPayload` | — | One-shot transfer |
+| `s402UptoPayload` | `maxAmount`, `settlementCeiling?` | Variable-amount deposit |
 | `s402StreamPayload` | — | Stream creation PTB |
 | `s402EscrowPayload` | — | Escrow creation PTB |
 | `s402UnlockPayload` | `encryptionId` | Two-stage: TX1 escrow, TX2 seal_approve |
@@ -156,10 +175,11 @@ All payloads contain a `payload` object with `transaction` (base64 signed PTB) a
 ```typescript
 type s402PaymentPayload =
   | s402ExactPayload
+  | s402UptoPayload
+  | s402PrepaidPayload
   | s402StreamPayload
   | s402EscrowPayload
-  | s402UnlockPayload
-  | s402PrepaidPayload;
+  | s402UnlockPayload;
 ```
 
 Discriminated union — switch on the `scheme` field.
@@ -174,6 +194,8 @@ interface s402SettleResponse {
   txDigest?: string;          // Sui transaction digest
   receiptId?: string;         // on-chain receipt NFT ID
   finalityMs?: number;        // time to finality
+  actualAmount?: string;      // actual amount settled (upto scheme)
+  depositId?: string;         // UptoDeposit object ID (upto scheme)
   streamId?: string;          // stream scheme
   escrowId?: string;          // escrow scheme
   balanceId?: string;         // prepaid scheme

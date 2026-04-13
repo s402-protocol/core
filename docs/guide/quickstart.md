@@ -189,7 +189,7 @@ except S402Error as e:
     print(e.suggested_action) # 'Check payload format...'
 ```
 
-Both implementations pass the same [132 conformance test vectors](/guide/conformance) — they produce byte-identical wire output.
+Both implementations pass the same [161 conformance test vectors](/guide/conformance) — they produce byte-identical wire output.
 
 ## What's Next?
 

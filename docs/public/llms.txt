@@ -1,14 +1,15 @@
 # s402 -- Chain-Agnostic HTTP 402 Payment Protocol
 
-> s402 is an open wire format for HTTP 402 machine-to-machine payments. Five payment schemes (Exact, Prepaid, Escrow, Stream, Unlock), zero runtime dependencies, wire-compatible with x402 (Coinbase). ~400ms finality on Sui, $0.014 per thousand API calls via Prepaid scheme.
+> s402 is an open wire format for HTTP 402 machine-to-machine payments. Six payment schemes (Exact, Upto, Prepaid, Escrow, Stream, Unlock), zero runtime dependencies, wire-compatible with x402 (Coinbase). ~400ms finality on Sui, $0.014 per thousand API calls via Prepaid scheme.
 
 ## What is s402?
 
-s402 is a TypeScript protocol layer for HTTP 402 payments. It provides wire format encoding/decoding, five payment schemes, and a machine-native error model with 15 typed error codes (each with retryable flag + recovery action). Zero runtime dependencies. Chain-agnostic core with Sui-native reference implementation.
+s402 is a TypeScript protocol layer for HTTP 402 payments. It provides wire format encoding/decoding, six payment schemes, and a machine-native error model with 15 typed error codes (each with retryable flag + recovery action). Zero runtime dependencies. Chain-agnostic core with Sui-native reference implementation.
 
-## Five Payment Schemes
+## Six Payment Schemes
 
 - **Exact** -- One payment, one resource. Atomic settlement. x402-compatible baseline.
+- **Upto** -- Variable-amount payment with client-chosen on-chain settlement ceiling. Refunds remainder.
 - **Prepaid** -- Deposit once, make 1000+ API calls, batch-claim. Gas: $0.014 total vs $7.00 per-call.
 - **Escrow** -- Time-locked vault with optional arbiter dispute resolution.
 - **Stream** -- Per-second billing with on-chain rate cap.
@@ -19,7 +20,7 @@ s402 is a TypeScript protocol layer for HTTP 402 payments. It provides wire form
 - License: Apache-2.0
 - Zero runtime dependencies
 - x402-compatible (Coinbase's EVM payment protocol)
-- 133 machine-readable conformance test vectors
+- 161 machine-readable conformance test vectors
 - npm: https://www.npmjs.com/package/s402
 
 ## Documentation
@@ -35,6 +36,7 @@ s402 is a TypeScript protocol layer for HTTP 402 payments. It provides wire form
 ## Payment Schemes
 
 - Exact: https://s402-protocol.org/schemes/exact
+- Upto: https://s402-protocol.org/schemes/upto
 - Prepaid: https://s402-protocol.org/schemes/prepaid
 - Escrow: https://s402-protocol.org/schemes/escrow
 - Stream: https://s402-protocol.org/schemes/stream

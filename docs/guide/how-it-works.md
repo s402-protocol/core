@@ -119,7 +119,7 @@ Servers can advertise s402 support at `/.well-known/s402.json`:
 ```json
 {
   "s402Version": "1",
-  "schemes": ["exact", "prepaid", "escrow", "stream", "unlock"],
+  "schemes": ["exact", "upto", "prepaid", "escrow", "stream", "unlock"],
   "networks": ["sui:mainnet"],
   "assets": ["0x2::sui::SUI"],
   "directSettlement": true,

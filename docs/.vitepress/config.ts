@@ -2,7 +2,7 @@ import { defineConfig } from 'vitepress';
 
 export default defineConfig({
   title: 's402',
-  description: 'The HTTP 402 payment protocol for Sui. Five payment schemes. Built for AI agents that spend money autonomously.',
+  description: 'The HTTP 402 payment protocol for Sui. Six payment schemes. Built for AI agents that spend money autonomously.',
   cleanUrls: true,
   sitemap: {
     hostname: 'https://s402-protocol.org',
@@ -10,12 +10,12 @@ export default defineConfig({
   head: [
     ['link', { rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     ['meta', { property: 'og:title', content: 's402 — The HTTP 402 payment protocol for Sui' }],
-    ['meta', { property: 'og:description', content: 'The HTTP 402 payment protocol for Sui. Five payment schemes. From one-shot payments to prepaid API budgets. Built for AI agents that spend money autonomously.' }],
+    ['meta', { property: 'og:description', content: 'The HTTP 402 payment protocol for Sui. Six payment schemes. From one-shot payments to prepaid API budgets. Built for AI agents that spend money autonomously.' }],
     ['meta', { property: 'og:type', content: 'website' }],
     ['meta', { property: 'og:image', content: '/images/og.png' }],
     ['meta', { name: 'twitter:card', content: 'summary_large_image' }],
     ['meta', { name: 'twitter:title', content: 's402 — HTTP 402 payment protocol for Sui' }],
-    ['meta', { name: 'twitter:description', content: 'Five payment schemes for AI agents. From one-shot payments to prepaid API budgets — $0.014 gas per 1,000 calls.' }],
+    ['meta', { name: 'twitter:description', content: 'Six payment schemes for AI agents. From one-shot payments to prepaid API budgets — $0.014 gas per 1,000 calls.' }],
     ['meta', { name: 'twitter:image', content: '/images/og.png' }],
   ],
   themeConfig: {
@@ -50,6 +50,7 @@ export default defineConfig({
         items: [
           { text: 'Which Scheme Do I Need?', link: '/guide/which-scheme' },
           { text: 'Exact', link: '/schemes/exact' },
+          { text: 'Upto', link: '/schemes/upto' },
           { text: 'Prepaid', link: '/schemes/prepaid' },
           { text: 'Escrow', link: '/schemes/escrow' },
           { text: 'Stream', link: '/schemes/stream' },
