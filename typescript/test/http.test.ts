@@ -303,12 +303,26 @@ describe('s402 HTTP encode/decode', () => {
       expect(() => decodeSettleResponse(bad)).toThrow('errorCode must be a string');
     });
 
+    it('decodeSettleResponse rejects non-string actualAmount', () => {
+      const bad = btoa(JSON.stringify({ success: true, txDigest: 'ABC', actualAmount: 42 }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('actualAmount must be a string');
+    });
+
+    it('decodeSettleResponse rejects non-string depositId', () => {
+      const bad = btoa(JSON.stringify({ success: true, txDigest: 'ABC', depositId: 99 }));
+      expect(() => decodeSettleResponse(bad)).toThrow(s402Error);
+      expect(() => decodeSettleResponse(bad)).toThrow('depositId must be a string');
+    });
+
     it('decodeSettleResponse still accepts valid optional fields', () => {
       const good = btoa(JSON.stringify({
         success: true,
         txDigest: 'ABC123',
         receiptId: '0xreceipt',
         finalityMs: 450,
+        actualAmount: '7500000',
+        depositId: '0xdeposit123',
         streamId: '0xstream',
         escrowId: '0xescrow',
         balanceId: '0xbalance',
@@ -317,6 +331,8 @@ describe('s402 HTTP encode/decode', () => {
       expect(decoded.success).toBe(true);
       expect(decoded.txDigest).toBe('ABC123');
       expect(decoded.finalityMs).toBe(450);
+      expect(decoded.actualAmount).toBe('7500000');
+      expect(decoded.depositId).toBe('0xdeposit123');
     });
 
     it('decodePaymentPayload rejects unknown scheme', () => {
@@ -325,9 +341,10 @@ describe('s402 HTTP encode/decode', () => {
       expect(() => decodePaymentPayload(bad)).toThrow('Unknown payment scheme');
     });
 
-    it('decodePaymentPayload accepts all five valid schemes', () => {
-      for (const scheme of ['exact', 'stream', 'escrow', 'unlock', 'prepaid']) {
+    it('decodePaymentPayload accepts all six valid schemes', () => {
+      for (const scheme of ['exact', 'upto', 'prepaid', 'stream', 'escrow', 'unlock']) {
         const schemeFields: Record<string, string> = {};
+        if (scheme === 'upto') schemeFields.maxAmount = '5000000';
         if (scheme === 'unlock') schemeFields.encryptionId = 'enc123';
         if (scheme === 'prepaid') schemeFields.ratePerCall = '100';
         const encoded = btoa(JSON.stringify({ scheme, payload: { transaction: 'tx', signature: 'sig', ...schemeFields } }));
@@ -376,6 +393,24 @@ describe('s402 HTTP encode/decode', () => {
       const good = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig', ratePerCall: '100' } }));
       const decoded = decodePaymentPayload(good);
       expect(decoded.scheme).toBe('prepaid');
+    });
+
+    it('decodePaymentPayload rejects prepaid payload with negative ratePerCall', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig', ratePerCall: '-5' } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('ratePerCall must be a non-negative integer string');
+    });
+
+    it('decodePaymentPayload rejects prepaid payload with leading-zero ratePerCall', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig', ratePerCall: '007' } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('ratePerCall must be a non-negative integer string');
+    });
+
+    it('decodePaymentPayload rejects prepaid payload with non-numeric maxCalls', () => {
+      const bad = btoa(JSON.stringify({ scheme: 'prepaid', payload: { transaction: 'tx', signature: 'sig', ratePerCall: '100', maxCalls: 'abc' } }));
+      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
+      expect(() => decodePaymentPayload(bad)).toThrow('maxCalls must be a non-negative integer string');
     });
 
     it('decodePaymentPayload accepts valid payload', () => {
@@ -876,5 +911,143 @@ describe('s402 body transport', () => {
       const fromBody = decodeSettleBody(encodeSettleBody(SAMPLE_SETTLE));
       expect(fromHeader).toEqual(fromBody);
     });
+  });
+});
+
+// ── V2: estimatedAmount + settlementCeiling validation ──
+
+describe('V2: upto.estimatedAmount validation', () => {
+  function makeUptoRequirements(uptoOverrides: Record<string, unknown> = {}): string {
+    return btoa(JSON.stringify({
+      s402Version: '1',
+      accepts: ['exact', 'upto'],
+      network: 'sui:testnet',
+      asset: '0x2::sui::SUI',
+      amount: '1000000',
+      payTo: VALID_PAY_TO,
+      upto: {
+        maxAmount: '5000000',
+        settlementDeadlineMs: '1700000000000',
+        ...uptoOverrides,
+      },
+    }));
+  }
+
+  it('valid estimatedAmount roundtrips', () => {
+    const header = makeUptoRequirements({ estimatedAmount: '3000000' });
+    const decoded = decodePaymentRequired(header);
+    expect(decoded.upto!.estimatedAmount).toBe('3000000');
+  });
+
+  it('estimatedAmount = maxAmount passes (boundary)', () => {
+    const header = makeUptoRequirements({ estimatedAmount: '5000000' });
+    const decoded = decodePaymentRequired(header);
+    expect(decoded.upto!.estimatedAmount).toBe('5000000');
+  });
+
+  it('estimatedAmount = "0" passes (valid advisory)', () => {
+    const header = makeUptoRequirements({ estimatedAmount: '0' });
+    const decoded = decodePaymentRequired(header);
+    expect(decoded.upto!.estimatedAmount).toBe('0');
+  });
+
+  it('estimatedAmount absent passes', () => {
+    const header = makeUptoRequirements({});
+    const decoded = decodePaymentRequired(header);
+    expect(decoded.upto!.estimatedAmount).toBeUndefined();
+  });
+
+  it('rejects non-string estimatedAmount', () => {
+    const header = makeUptoRequirements({ estimatedAmount: 42 });
+    expect(() => decodePaymentRequired(header)).toThrow(s402Error);
+    expect(() => decodePaymentRequired(header)).toThrow('estimatedAmount must be a string');
+  });
+
+  it('rejects non-numeric string estimatedAmount', () => {
+    const header = makeUptoRequirements({ estimatedAmount: 'abc' });
+    expect(() => decodePaymentRequired(header)).toThrow(s402Error);
+    expect(() => decodePaymentRequired(header)).toThrow('non-negative integer string');
+  });
+
+  it('rejects estimatedAmount > maxAmount', () => {
+    const header = makeUptoRequirements({ estimatedAmount: '9999999' });
+    expect(() => decodePaymentRequired(header)).toThrow(s402Error);
+    expect(() => decodePaymentRequired(header)).toThrow('must be <= maxAmount');
+  });
+});
+
+describe('V2: upto payload.settlementCeiling validation', () => {
+  function makeUptoPayload(innerOverrides: Record<string, unknown> = {}): string {
+    return btoa(JSON.stringify({
+      s402Version: '1',
+      scheme: 'upto',
+      payload: {
+        transaction: 'dHhieXRlcw==',
+        signature: 'c2lnbmF0dXJl',
+        maxAmount: '5000000',
+        ...innerOverrides,
+      },
+    }));
+  }
+
+  it('valid settlementCeiling roundtrips', () => {
+    const header = makeUptoPayload({ settlementCeiling: '3000000' });
+    const decoded = decodePaymentPayload(header);
+    expect((decoded as any).payload.settlementCeiling).toBe('3000000');
+  });
+
+  it('settlementCeiling = maxAmount passes (boundary)', () => {
+    const header = makeUptoPayload({ settlementCeiling: '5000000' });
+    const decoded = decodePaymentPayload(header);
+    expect((decoded as any).payload.settlementCeiling).toBe('5000000');
+  });
+
+  it('settlementCeiling = "1" passes (minimum boundary)', () => {
+    const header = makeUptoPayload({ settlementCeiling: '1' });
+    const decoded = decodePaymentPayload(header);
+    expect((decoded as any).payload.settlementCeiling).toBe('1');
+  });
+
+  it('settlementCeiling absent passes (backwards compat)', () => {
+    const header = makeUptoPayload({});
+    const decoded = decodePaymentPayload(header);
+    expect((decoded as any).payload.settlementCeiling).toBeUndefined();
+  });
+
+  it('rejects non-string settlementCeiling', () => {
+    const header = makeUptoPayload({ settlementCeiling: 500 });
+    expect(() => decodePaymentPayload(header)).toThrow(s402Error);
+    expect(() => decodePaymentPayload(header)).toThrow('must be a string');
+  });
+
+  it('rejects non-numeric string settlementCeiling', () => {
+    const header = makeUptoPayload({ settlementCeiling: 'abc' });
+    expect(() => decodePaymentPayload(header)).toThrow(s402Error);
+    expect(() => decodePaymentPayload(header)).toThrow('non-negative integer string');
+  });
+
+  it('rejects settlementCeiling = "0"', () => {
+    const header = makeUptoPayload({ settlementCeiling: '0' });
+    expect(() => decodePaymentPayload(header)).toThrow(s402Error);
+    expect(() => decodePaymentPayload(header)).toThrow('must be >= 1');
+  });
+
+  it('rejects settlementCeiling > maxAmount', () => {
+    const header = makeUptoPayload({ settlementCeiling: '9999999' });
+    expect(() => decodePaymentPayload(header)).toThrow(s402Error);
+    expect(() => decodePaymentPayload(header)).toThrow('must be <= maxAmount');
+  });
+
+  it('upto payload requires maxAmount', () => {
+    const header = btoa(JSON.stringify({
+      s402Version: '1',
+      scheme: 'upto',
+      payload: {
+        transaction: 'dHhieXRlcw==',
+        signature: 'c2lnbmF0dXJl',
+      },
+    }));
+    expect(() => decodePaymentPayload(header)).toThrow(s402Error);
+    expect(() => decodePaymentPayload(header)).toThrow('maxAmount');
   });
 });

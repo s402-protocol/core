@@ -61,5 +61,33 @@
       "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6InByZXAxMjMiLCJiYWxhbmNlSWQiOiIweGJhbGFuY2U3ODkiLCJmaW5hbGl0eU1zIjozMDB9"
     },
     "shouldReject": false
+  },
+  {
+    "description": "Success with actualAmount and depositId (upto)",
+    "input": {
+      "success": true,
+      "txDigest": "upto_digest_abc",
+      "actualAmount": "7500000",
+      "depositId": "0xdeposit_upto_123",
+      "finalityMs": 250
+    },
+    "expected": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6InVwdG9fZGlnZXN0X2FiYyIsImFjdHVhbEFtb3VudCI6Ijc1MDAwMDAiLCJkZXBvc2l0SWQiOiIweGRlcG9zaXRfdXB0b18xMjMiLCJmaW5hbGl0eU1zIjoyNTB9"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Success with actualAmount at zero (upto full refund)",
+    "input": {
+      "success": true,
+      "txDigest": "upto_refund_xyz",
+      "actualAmount": "0",
+      "depositId": "0xdeposit_refund_456",
+      "finalityMs": 180
+    },
+    "expected": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6InVwdG9fcmVmdW5kX3h5eiIsImFjdHVhbEFtb3VudCI6IjAiLCJkZXBvc2l0SWQiOiIweGRlcG9zaXRfcmVmdW5kXzQ1NiIsImZpbmFsaXR5TXMiOjE4MH0="
+    },
+    "shouldReject": false
   }
 ]

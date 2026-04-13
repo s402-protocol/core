@@ -5,6 +5,37 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.5.0] - 2026-04-12
+
+### Added
+
+- **`upto` scheme V2 features (DAN-284).** Two new fields close x402's upto overcharge vulnerability:
+  - `estimatedAmount` on `s402UptoExtra` — server's advisory cost estimate so clients can set tight ceilings
+  - `settlementCeiling` on `s402UptoPayload` — client-chosen, on-chain-enforced cap. Move contract rejects `actualAmount > settlementCeiling`. Must satisfy `1 <= settlementCeiling <= maxAmount`. See ADR-003 §Decision 3 and §Decision 8.
+- **Extension system (DAN-285, ADR-004).** Typed, lifecycle-aware plugin architecture:
+  - Three actor-specific interfaces: `s402ClientExtension`, `s402ServerExtension`, `s402FacilitatorExtension`
+  - Four facilitator hooks in pipeline order: `beforeVerify` → `afterVerify` → `beforeSettle` → `afterSettle`
+  - `s402ExtensionRegistry` with dependency ordering via Kahn's topological sort
+  - Critical vs advisory error handling: `critical: true` extensions throw, advisory extensions log and continue
+  - `getExtensionData<T>()` / `setExtensionData()` type-safe helpers
+  - `./extensions` sub-path export added to package.json
+- **`skipVerify` option on `process()`.** New `s402ProcessOptions` interface with `skipVerify?: boolean`. Eliminates the verify() dry-run RPC round-trip (~200-400ms) for chains where failed transactions cost zero gas (Sui PTBs). All pre-flight checks (expiration, scheme-mismatch, dedup) still run.
+- **`EXTENSION_FAILED` error code** — `retryable: false`, for critical extension pipeline failures.
+- **154 conformance test vectors** (was ~130). New vectors for: upto requirements with estimatedAmount, upto payloads with settlementCeiling, settle responses with actualAmount/depositId, V2 rejection vectors, upto roundtrips, mandate.minPerTx validation.
+
+### Fixed
+
+- **Settle response type validation (M1).** `validateSettleShape` now rejects non-string `actualAmount` and `depositId` — a malicious facilitator could previously inject numeric types that passed through to consumer code.
+- **Prepaid payload amount validation (M2).** `ratePerCall` and `maxCalls` in payload now validated with `isValidAmount()`, matching the requirements-side validation. Previously only type-checked as strings.
+- **Mandate minPerTx amount validation (L1).** `mandate.minPerTx` now validated with `isValidAmount()` for consistency with other amount fields.
+- **afterSettle error observability.** Catch block now forwards to `extensionErrorHandler` instead of silently swallowing critical extension errors (the settlement result is still never changed — tx is already on-chain).
+- **Stale comment in validatePayloadShape.** Updated to document upto's scheme-specific inner keys alongside prepaid and unlock.
+
+### Changed
+
+- **831 tests across 17 files** (was 798). New coverage: standalone verify/settle guard tests, V2 validation edge cases, settle response type checks, prepaid amount validation, extension system integration.
+- Conformance README updated with `estimatedAmount` in upto sub-object keys and `settlementCeiling` in payload inner keys.
+
 ## [0.4.0] - 2026-04-11
 
 ### Changed

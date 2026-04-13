@@ -124,6 +124,58 @@
     "shouldReject": false
   },
   {
+    "description": "Upto requirements with estimatedAmount roundtrip",
+    "input": {
+      "type": "requirements",
+      "transport": "header",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "upto"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "upto": {
+          "maxAmount": "10000000",
+          "settlementDeadlineMs": "1700000000000",
+          "usageReportUrl": "https://api.example.com/usage",
+          "estimatedAmount": "7500000"
+        }
+      }
+    },
+    "expected": {
+      "firstEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwidXB0byI6eyJtYXhBbW91bnQiOiIxMDAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsInVzYWdlUmVwb3J0VXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vdXNhZ2UiLCJlc3RpbWF0ZWRBbW91bnQiOiI3NTAwMDAwIn19",
+      "reEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwidXB0byI6eyJtYXhBbW91bnQiOiIxMDAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsInVzYWdlUmVwb3J0VXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vdXNhZ2UiLCJlc3RpbWF0ZWRBbW91bnQiOiI3NTAwMDAwIn19",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Upto payload with settlementCeiling roundtrip",
+    "input": {
+      "type": "payload",
+      "transport": "header",
+      "value": {
+        "s402Version": "1",
+        "scheme": "upto",
+        "payload": {
+          "transaction": "dXB0b190eA==",
+          "signature": "dXB0b19zaWc=",
+          "maxAmount": "10000000",
+          "settlementCeiling": "8000000"
+        }
+      }
+    },
+    "expected": {
+      "firstEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1cHRvIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRYQjBiMTkwZUE9PSIsInNpZ25hdHVyZSI6ImRYQjBiMTl6YVdjPSIsIm1heEFtb3VudCI6IjEwMDAwMDAwIiwic2V0dGxlbWVudENlaWxpbmciOiI4MDAwMDAwIn19",
+      "reEncode": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1cHRvIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRYQjBiMTkwZUE9PSIsInNpZ25hdHVyZSI6ImRYQjBiMTl6YVdjPSIsIm1heEFtb3VudCI6IjEwMDAwMDAwIiwic2V0dGxlbWVudENlaWxpbmciOiI4MDAwMDAwIn19",
+      "identical": true
+    },
+    "shouldReject": false
+  },
+  {
     "description": "Complex requirements with extensions roundtrip",
     "input": {
       "type": "requirements",

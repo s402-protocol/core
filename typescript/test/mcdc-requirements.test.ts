@@ -33,7 +33,7 @@
  * C23: facilitatorUrl valid URL but not http/https     → rejects
  * C24: settlementMode present AND not 'facilitator'|'direct' → rejects
  * C25: receiptRequired present AND not boolean         → rejects
- * C26-C30: sub-object validators (mandate, stream, escrow, unlock, prepaid)
+ * C26-C32: sub-object validators (mandate, upto, settlementOverrides, prepaid, stream, escrow, unlock)
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -105,7 +105,7 @@ describe('mcdc: validateRequirementsShape — happy paths', () => {
   });
 
   it('mcdc-hp: multiple schemes in accepts passes', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: ['exact', 'stream', 'escrow', 'unlock', 'prepaid'] }))).not.toThrow();
+    expect(() => validateRequirementsShape(valid({ accepts: ['exact', 'upto', 'prepaid', 'stream', 'escrow', 'unlock'] }))).not.toThrow();
   });
 
   it('mcdc-hp: unknown scheme names in accepts pass (forward compat)', () => {

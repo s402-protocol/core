@@ -5,7 +5,7 @@
  * with x402's JSON format. The reference implementation targets Sui, but the
  * protocol layer contains no chain-specific logic (see S7 invariant in AGENTS.md).
  *
- *   - Five payment schemes: exact, stream, escrow, unlock, prepaid
+ *   - Six payment schemes: exact, upto, prepaid, stream, escrow, unlock
  *   - AP2 mandate support for agent spending authorization
  *   - Direct settlement mode (no facilitator needed)
  *   - On-chain receipts as proofs
@@ -27,8 +27,14 @@ export const S402_VERSION = '1' as const;
 // Payment schemes
 // ══════════════════════════════════════════════════════════════
 
-/** The five s402 payment schemes */
-export type s402Scheme = 'exact' | 'stream' | 'escrow' | 'unlock' | 'prepaid';
+/**
+ * The six s402 payment schemes, ordered by complexity:
+ *
+ * TIER 1 — Single Payment:  exact (fixed amount), upto (variable amount)
+ * TIER 2 — Persistent Balance: prepaid (multi-claim), stream (time-based)
+ * TIER 3 — Conditional Release: escrow (arbiter), unlock (encryption)
+ */
+export type s402Scheme = 'exact' | 'upto' | 'prepaid' | 'stream' | 'escrow' | 'unlock';
 
 /** Settlement mode: facilitator-mediated or direct on-chain */
 export type s402SettlementMode = 'facilitator' | 'direct';
@@ -98,16 +104,21 @@ export interface s402PaymentRequirements {
   /** When these requirements expire (Unix timestamp ms). Facilitator MUST reject after this. */
   expiresAt?: number;
 
-  // ── Scheme-specific extensions ──
+  // ── Scheme-specific extensions (ordered by tier) ──
 
+  /** Extra fields for upto scheme (usage-based, variable settlement) */
+  upto?: s402UptoExtra;
+  /** Extra fields for prepaid scheme */
+  prepaid?: s402PrepaidExtra;
   /** Extra fields for stream scheme */
   stream?: s402StreamExtra;
   /** Extra fields for escrow scheme */
   escrow?: s402EscrowExtra;
   /** Extra fields for unlock scheme (pay-to-decrypt encrypted content) */
   unlock?: s402UnlockExtra;
-  /** Extra fields for prepaid scheme */
-  prepaid?: s402PrepaidExtra;
+
+  /** Settlement overrides (used by upto scheme — server provides actual amount at settle-time) */
+  settlementOverrides?: s402SettlementOverrides;
 
   /**
    * Arbitrary extension data (forward-compatible extensibility).
@@ -121,37 +132,63 @@ export interface s402PaymentRequirements {
   extensions?: Record<string, unknown>;
 }
 
-/** Stream-specific requirements */
-export interface s402StreamExtra {
-  /** Rate in base units per second */
-  ratePerSecond: string;
-  /** Maximum budget cap in base units */
-  budgetCap: string;
-  /** Minimum initial deposit in base units */
-  minDeposit: string;
-  /** URL for stream status checks (phase 2) */
-  streamSetupUrl?: string;
+// ── Tier 1: Single Payment ──────────────────────────────────
+
+/**
+ * Upto-specific requirements (usage-based, variable settlement).
+ *
+ * The client authorizes up to `maxAmount`; the facilitator settles the actual
+ * amount (provided by the server via `settlementOverrides`) at settlement time.
+ * Remainder is returned to the payer on-chain.
+ *
+ * TRUST MODEL: The client can bound its exposure via `settlementCeiling` in the
+ * payment payload — an on-chain-enforced cap tighter than `maxAmount`. The server
+ * advertises `estimatedAmount` so the client can set a tight ceiling (e.g., 1.2x
+ * the estimate). Without `settlementCeiling`, the facilitator can settle up to
+ * `maxAmount`. See ADR-003 §Decision 3 and §Decision 8.
+ *
+ * SEMANTIC CLARITY: `amount` on the parent `s402PaymentRequirements` is the
+ * EXACT price for the `exact` scheme. For `upto`, `maxAmount` here is the
+ * ceiling — the two are intentionally separate fields to avoid the semantic
+ * overloading that x402 suffers from.
+ */
+export interface s402UptoExtra {
+  /** Maximum authorized amount in base units. Client deposits this; actual may be less. */
+  maxAmount: string;
+  /**
+   * Deadline for settlement in milliseconds since epoch.
+   * After this time, the payer can reclaim the full deposit via `expire()`.
+   * Must be in the future at verify-time. Facilitator MUST reject expired deposits.
+   */
+  settlementDeadlineMs: string;
+  /** Optional URL where the client can query usage/metering data (informational) */
+  usageReportUrl?: string;
+  /**
+   * Server's estimated cost in base units (advisory, optional).
+   * Helps the client set a tight `settlementCeiling` in the payload.
+   * Must be ≤ maxAmount when present. Not enforced on-chain — purely informational.
+   */
+  estimatedAmount?: string;
 }
 
-/** Escrow-specific requirements */
-export interface s402EscrowExtra {
-  /** Seller/payee address */
-  seller: string;
-  /** Arbiter address for dispute resolution */
-  arbiter?: string;
-  /** Escrow deadline in milliseconds since epoch */
-  deadlineMs: string;
+/**
+ * Settlement overrides — server provides the actual amount to the facilitator.
+ *
+ * Used by the `upto` scheme: the resource server tells the facilitator how much
+ * of the authorized maximum to actually charge, based on observed usage.
+ * Threaded via `requirements.settlementOverrides` so the facilitator's `process()`
+ * signature (payload, requirements) doesn't need to change.
+ *
+ * TRUST MODEL: The server is trusted to report honest usage. The facilitator
+ * enforces `actualAmount <= maxAmount` but cannot verify usage independently.
+ * On-chain events provide an audit trail for dispute resolution.
+ */
+export interface s402SettlementOverrides {
+  /** Actual amount to settle in base units. Must be ≤ maxAmount from UptoExtra. */
+  actualAmount: string;
 }
 
-/** Unlock-specific requirements (pay-to-decrypt encrypted content) */
-export interface s402UnlockExtra {
-  /** Encryption ID for key servers */
-  encryptionId: string;
-  /** Content identifier for the encrypted blob (e.g., Walrus blob ID, IPFS CID) */
-  encryptedContentId: string;
-  /** Identifier for the encryption service or module (e.g., Sui package ID, EVM contract address) */
-  encryptionServiceId: string;
-}
+// ── Tier 2: Persistent Balance ──────────────────────────────
 
 /**
  * Prepaid-specific requirements.
@@ -192,6 +229,40 @@ export interface s402PrepaidExtra {
    * @since v0.2
    */
   disputeWindowMs?: string;
+}
+
+/** Stream-specific requirements */
+export interface s402StreamExtra {
+  /** Rate in base units per second */
+  ratePerSecond: string;
+  /** Maximum budget cap in base units */
+  budgetCap: string;
+  /** Minimum initial deposit in base units */
+  minDeposit: string;
+  /** URL for stream status checks (phase 2) */
+  streamSetupUrl?: string;
+}
+
+// ── Tier 3: Conditional Release ─────────────────────────────
+
+/** Escrow-specific requirements */
+export interface s402EscrowExtra {
+  /** Seller/payee address */
+  seller: string;
+  /** Arbiter address for dispute resolution */
+  arbiter?: string;
+  /** Escrow deadline in milliseconds since epoch */
+  deadlineMs: string;
+}
+
+/** Unlock-specific requirements (pay-to-decrypt encrypted content) */
+export interface s402UnlockExtra {
+  /** Encryption ID for key servers */
+  encryptionId: string;
+  /** Content identifier for the encrypted blob (e.g., Walrus blob ID, IPFS CID) */
+  encryptedContentId: string;
+  /** Identifier for the encryption service or module (e.g., Sui package ID, EVM contract address) */
+  encryptionServiceId: string;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -238,6 +309,8 @@ export interface s402PaymentPayloadBase {
   scheme: s402Scheme;
 }
 
+// ── Tier 1: Single Payment ──────────────────────────────────
+
 /** Exact payment: signed transaction bytes */
 export interface s402ExactPayload extends s402PaymentPayloadBase {
   scheme: 'exact';
@@ -249,6 +322,57 @@ export interface s402ExactPayload extends s402PaymentPayloadBase {
   };
 }
 
+/**
+ * Upto payment: signed deposit transaction for variable-amount settlement.
+ *
+ * The client deposits `maxAmount` into an on-chain UptoDeposit proxy.
+ * The facilitator later calls `settle(actual_amount)` where
+ * `actual ≤ min(maxAmount, settlementCeiling)`, returning the remainder
+ * to the payer. If settlement doesn't happen before the deadline, the
+ * payer can reclaim via `expire()`.
+ */
+export interface s402UptoPayload extends s402PaymentPayloadBase {
+  scheme: 'upto';
+  payload: {
+    /** Base64-encoded signed deposit transaction (creates UptoDeposit on-chain) */
+    transaction: string;
+    /** Base64-encoded signature */
+    signature: string;
+    /** Maximum authorized amount (must match requirements.upto.maxAmount) */
+    maxAmount: string;
+    /**
+     * Client-chosen settlement ceiling (optional, on-chain enforced).
+     * The Move contract rejects settlements where `actualAmount > settlementCeiling`.
+     * Must satisfy: `1 <= settlementCeiling <= maxAmount`.
+     * Omit to allow settlement up to `maxAmount` (backwards compatible).
+     *
+     * Servers SHOULD check this before serving expensive resources — if
+     * `settlementCeiling < estimatedCost`, respond with an updated 402.
+     */
+    settlementCeiling?: string;
+  };
+}
+
+// ── Tier 2: Persistent Balance ──────────────────────────────
+
+/**
+ * Prepaid payment: agent deposits into a PrepaidBalance shared object.
+ * This is the deposit phase only — claims are provider-initiated (not via HTTP 402).
+ */
+export interface s402PrepaidPayload extends s402PaymentPayloadBase {
+  scheme: 'prepaid';
+  payload: {
+    /** Base64-encoded deposit PTB */
+    transaction: string;
+    /** Agent's signature */
+    signature: string;
+    /** Committed rate per call (must match requirements) */
+    ratePerCall: string;
+    /** Committed max calls cap (must match requirements) */
+    maxCalls?: string;
+  };
+}
+
 /** Stream payment: signed stream creation transaction */
 export interface s402StreamPayload extends s402PaymentPayloadBase {
   scheme: 'stream';
@@ -257,6 +381,8 @@ export interface s402StreamPayload extends s402PaymentPayloadBase {
     signature: string;
   };
 }
+
+// ── Tier 3: Conditional Release ─────────────────────────────
 
 /** Escrow payment: signed escrow creation transaction */
 export interface s402EscrowPayload extends s402PaymentPayloadBase {
@@ -287,31 +413,14 @@ export interface s402UnlockPayload extends s402PaymentPayloadBase {
   };
 }
 
-/**
- * Prepaid payment: agent deposits into a PrepaidBalance shared object.
- * This is the deposit phase only — claims are provider-initiated (not via HTTP 402).
- */
-export interface s402PrepaidPayload extends s402PaymentPayloadBase {
-  scheme: 'prepaid';
-  payload: {
-    /** Base64-encoded deposit PTB */
-    transaction: string;
-    /** Agent's signature */
-    signature: string;
-    /** Committed rate per call (must match requirements) */
-    ratePerCall: string;
-    /** Committed max calls cap (must match requirements) */
-    maxCalls?: string;
-  };
-}
-
 /** Discriminated union of all payment payloads */
 export type s402PaymentPayload =
   | s402ExactPayload
+  | s402UptoPayload
+  | s402PrepaidPayload
   | s402StreamPayload
   | s402EscrowPayload
-  | s402UnlockPayload
-  | s402PrepaidPayload;
+  | s402UnlockPayload;
 
 // ══════════════════════════════════════════════════════════════
 // Settlement response (facilitator/server → client)
@@ -326,12 +435,20 @@ export interface s402SettleResponse {
   receiptId?: string;
   /** Time to finality in milliseconds */
   finalityMs?: number;
+
+  // ── Scheme-specific response fields (ordered by tier) ──
+
+  /** Actual amount settled in base units (for upto scheme — fixes x402's opacity) */
+  actualAmount?: string;
+  /** UptoDeposit object ID (for upto scheme) */
+  depositId?: string;
+  /** PrepaidBalance object ID (for prepaid scheme) */
+  balanceId?: string;
   /** Stream object ID (for stream scheme) */
   streamId?: string;
   /** Escrow object ID (for escrow scheme) */
   escrowId?: string;
-  /** PrepaidBalance object ID (for prepaid scheme) */
-  balanceId?: string;
+
   /** Error message if settlement failed */
   error?: string;
   /** Typed error code for programmatic failure handling */

@@ -202,6 +202,8 @@ describe('Conformance: body-transport', () => {
 
 describe('Conformance: compat-normalize', () => {
   const vectors = loadVectors('compat-normalize.json');
+  // Fixed reference timestamp matching the generator — ensures deterministic expiresAt
+  const COMPAT_REFERENCE_NOW = 1700000000000;
 
   it(`loaded ${vectors.length} vectors`, () => {
     expect(vectors.length).toBeGreaterThanOrEqual(10);
@@ -209,7 +211,7 @@ describe('Conformance: compat-normalize', () => {
 
   for (const v of vectors) {
     it(v.description, () => {
-      const result = normalizeRequirements(v.input as Record<string, unknown>);
+      const result = normalizeRequirements(v.input as Record<string, unknown>, COMPAT_REFERENCE_NOW);
       expect(result).toEqual(v.expected);
     });
   }

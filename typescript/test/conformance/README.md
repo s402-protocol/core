@@ -113,23 +113,26 @@ In the vector JSON files, `signature` and `responseHash` are represented as arra
 
 All three decode functions (`decodePaymentRequired`, `decodePaymentPayload`, `decodeSettleResponse`) MUST strip unknown top-level keys. Only known fields should survive the decode. This is a defense-in-depth measure at the HTTP trust boundary.
 
-**Requirements known top-level keys:** `s402Version`, `accepts`, `network`, `asset`, `amount`, `payTo`, `facilitatorUrl`, `mandate`, `protocolFeeBps`, `protocolFeeAddress`, `receiptRequired`, `settlementMode`, `expiresAt`, `stream`, `escrow`, `unlock`, `prepaid`, `extensions`.
+**Requirements known top-level keys:** `s402Version`, `accepts`, `network`, `asset`, `amount`, `payTo`, `facilitatorUrl`, `mandate`, `protocolFeeBps`, `protocolFeeAddress`, `receiptRequired`, `settlementMode`, `expiresAt`, `upto`, `settlementOverrides`, `prepaid`, `stream`, `escrow`, `unlock`, `extensions`.
 
 **Requirements sub-object known keys** (also stripped of unknowns):
 - `mandate`: `required`, `minPerTx`, `coinType`
+- `upto`: `maxAmount`, `settlementDeadlineMs`, `usageReportUrl`, `estimatedAmount`
+- `settlementOverrides`: `actualAmount`
+- `prepaid`: `ratePerCall`, `maxCalls`, `minDeposit`, `withdrawalDelayMs`, `providerPubkey`, `disputeWindowMs`
 - `stream`: `ratePerSecond`, `budgetCap`, `minDeposit`, `streamSetupUrl`
 - `escrow`: `seller`, `arbiter`, `deadlineMs`
 - `unlock`: `encryptionId`, `encryptedContentId`, `encryptionServiceId`
-- `prepaid`: `ratePerCall`, `maxCalls`, `minDeposit`, `withdrawalDelayMs`, `providerPubkey`, `disputeWindowMs`
 
 **Payload known top-level keys:** `s402Version`, `scheme`, `payload`.
 
 **Payload inner keys** (per scheme):
 - `exact`, `stream`, `escrow`: `transaction`, `signature`
-- `unlock`: `transaction`, `signature`, `encryptionId`
+- `upto`: `transaction`, `signature`, `maxAmount`, `settlementCeiling`
 - `prepaid`: `transaction`, `signature`, `ratePerCall`, `maxCalls`
+- `unlock`: `transaction`, `signature`, `encryptionId`
 
-**Settle response known keys:** `success`, `txDigest`, `receiptId`, `finalityMs`, `streamId`, `escrowId`, `balanceId`, `error`, `errorCode`.
+**Settle response known keys:** `success`, `txDigest`, `receiptId`, `finalityMs`, `actualAmount`, `depositId`, `balanceId`, `streamId`, `escrowId`, `error`, `errorCode`.
 
 ### JSON key ordering
 

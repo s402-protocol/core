@@ -78,7 +78,7 @@ export interface x402PaymentPayload {
  * Handles both V1 (`maxAmountRequired`) and V2 (`amount`) wire formats.
  * Maps x402's single scheme to s402's accepts array.
  */
-export function fromX402Requirements(x402: x402PaymentRequirements): s402PaymentRequirements {
+export function fromX402Requirements(x402: x402PaymentRequirements, now?: number): s402PaymentRequirements {
   // V1 uses maxAmountRequired, V2 uses amount
   const amount = x402.amount ?? x402.maxAmountRequired;
   if (!amount) {
@@ -106,6 +106,13 @@ export function fromX402Requirements(x402: x402PaymentRequirements): s402Payment
       throw new s402Error('INVALID_PAYLOAD', 'facilitatorUrl is not a valid URL');
     }
   }
+  // Compute expiresAt from x402's maxTimeoutSeconds to preserve S1 (Stale Payment Rejection).
+  // Without this, inbound x402 traffic would bypass all three S1 expiration layers because
+  // expiresAt would be undefined (the null-check guards in facilitator.process() would skip).
+  const expiresAt = x402.maxTimeoutSeconds != null && x402.maxTimeoutSeconds > 0
+    ? (now ?? Date.now()) + x402.maxTimeoutSeconds * 1000
+    : undefined;
+
   return {
     s402Version: S402_VERSION,
     accepts: ['exact'],
@@ -114,6 +121,7 @@ export function fromX402Requirements(x402: x402PaymentRequirements): s402Payment
     amount,
     payTo: x402.payTo,
     facilitatorUrl: x402.facilitatorUrl,
+    expiresAt,
     extensions: x402.extensions,
   };
 }
@@ -150,7 +158,7 @@ export function fromX402Payload(x402: x402PaymentPayload): s402ExactPayload {
 
 /**
  * Convert outbound s402 requirements to x402 V1 wire format.
- * Strips s402-only fields (mandate, stream, escrow, unlock extensions).
+ * Strips s402-only fields (mandate, upto, prepaid, stream, escrow, unlock extensions).
  * Only works for "exact" scheme — other schemes have no x402 equivalent.
  *
  * Includes both `maxAmountRequired` (V1) and `amount` (V2) for maximum interop.
@@ -226,7 +234,7 @@ export function isX402Envelope(obj: Record<string, unknown>): boolean {
  * Picks the first requirement from the `accepts` array.
  * Copies `x402Version` from the envelope onto the requirement for downstream processing.
  */
-export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope): s402PaymentRequirements {
+export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope, now?: number): s402PaymentRequirements {
   if (!envelope.accepts || envelope.accepts.length === 0) {
     throw new s402Error('INVALID_PAYLOAD', 'x402 V2 envelope has empty accepts array');
   }
@@ -238,7 +246,7 @@ export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope): s402Pay
   // Validate the inner requirement — the V1 flat path does this via normalizeRequirements,
   // but the V2 envelope path was missing this check.
   validateX402Shape(req as unknown as Record<string, unknown>);
-  return fromX402Requirements(req);
+  return fromX402Requirements(req, now);
 }
 
 /**
@@ -264,6 +272,7 @@ export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope): s402Pay
  */
 export function normalizeRequirements(
   obj: Record<string, unknown>,
+  now?: number,
 ): s402PaymentRequirements {
   if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) {
     throw new s402Error('INVALID_PAYLOAD',
@@ -276,7 +285,7 @@ export function normalizeRequirements(
   }
   // x402 V2 envelope: { x402Version, accepts: [{scheme, network, ...}, ...] }
   if (isX402Envelope(obj)) {
-    const result = fromX402Envelope(obj as unknown as x402PaymentRequiredEnvelope);
+    const result = fromX402Envelope(obj as unknown as x402PaymentRequiredEnvelope, now);
     // Validate the normalized output with the same checks as native s402 decode
     // (payTo format, control chars, u64 bounds) — prevents weaker x402 validation
     // from producing an s402PaymentRequirements that would fail native validation.
@@ -287,7 +296,7 @@ export function normalizeRequirements(
   // x402 V1 flat: { x402Version, scheme, network, amount/maxAmountRequired, ... }
   if (isX402(obj)) {
     validateX402Shape(obj);
-    const result = fromX402Requirements(obj as unknown as x402PaymentRequirements);
+    const result = fromX402Requirements(obj as unknown as x402PaymentRequirements, now);
     const record = result as unknown as Record<string, unknown>;
     validateRequirementsShape(record);
     return pickRequirementsFields(record);

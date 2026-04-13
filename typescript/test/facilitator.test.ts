@@ -172,6 +172,69 @@ describe('s402Facilitator', () => {
   });
 });
 
+describe('s402Facilitator skipVerify (V6)', () => {
+  it('process({ skipVerify: true }) skips verify and goes straight to settle', async () => {
+    const mockScheme = createMockScheme();
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', mockScheme);
+
+    const result = await facilitator.process(PAYLOAD, REQUIREMENTS, { skipVerify: true });
+
+    expect(result.success).toBe(true);
+    expect(result.txDigest).toBe('ABC123');
+    // verify should NOT have been called
+    expect(mockScheme.verify).not.toHaveBeenCalled();
+    // settle SHOULD have been called
+    expect(mockScheme.settle).toHaveBeenCalledOnce();
+  });
+
+  it('process({ skipVerify: true }) still rejects expired requirements', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const expiredReqs: s402PaymentRequirements = {
+      ...REQUIREMENTS,
+      expiresAt: Date.now() - 1000,
+    };
+
+    const result = await facilitator.process(PAYLOAD, expiredReqs, { skipVerify: true });
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('REQUIREMENTS_EXPIRED');
+  });
+
+  it('process({ skipVerify: true }) still rejects scheme mismatch', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const streamPayload = { ...PAYLOAD, scheme: 'stream' as const, payload: PAYLOAD.payload };
+    const result = await facilitator.process(streamPayload, REQUIREMENTS, { skipVerify: true });
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('SCHEME_NOT_SUPPORTED');
+  });
+
+  it('process({ skipVerify: true }) still returns settle failures', async () => {
+    const mockScheme = createMockScheme();
+    (mockScheme.settle as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('RPC timeout'));
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', mockScheme);
+
+    const result = await facilitator.process(PAYLOAD, REQUIREMENTS, { skipVerify: true });
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('SETTLEMENT_FAILED');
+    expect(result.error).toContain('RPC timeout');
+  });
+
+  it('process() without options still calls verify (backwards compat)', async () => {
+    const mockScheme = createMockScheme();
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', mockScheme);
+
+    await facilitator.process(PAYLOAD, REQUIREMENTS);
+    expect(mockScheme.verify).toHaveBeenCalledOnce();
+    expect(mockScheme.settle).toHaveBeenCalledOnce();
+  });
+});
+
 describe('s402Facilitator timer cleanup', () => {
   it('process() clears verify timeout after fast resolution (no timer leak)', async () => {
     const facilitator = new s402Facilitator();
@@ -255,6 +318,64 @@ describe('s402Facilitator verify/settle expiration (A-25)', () => {
 
     const result = await facilitator.settle(PAYLOAD, REQUIREMENTS);
     expect(result.success).toBe(true);
+  });
+});
+
+describe('s402Facilitator standalone verify/settle guards', () => {
+  it('verify() returns invalid for unregistered network', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const result = await facilitator.verify(PAYLOAD, { ...REQUIREMENTS, network: 'eth:mainnet' });
+    expect(result.valid).toBe(false);
+    expect(result.invalidReason).toContain('eth:mainnet');
+  });
+
+  it('verify() returns invalid for scheme mismatch', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const streamPayload = { ...PAYLOAD, scheme: 'stream' as const, payload: { transaction: 'tx', signature: 'sig' } };
+    const result = await facilitator.verify(streamPayload, REQUIREMENTS);
+    expect(result.valid).toBe(false);
+    expect(result.invalidReason).toContain('not accepted');
+  });
+
+  it('settle() returns failure for unregistered network', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const result = await facilitator.settle(PAYLOAD, { ...REQUIREMENTS, network: 'eth:mainnet' });
+    expect(result.success).toBe(false);
+    expect(result.error).toContain('eth:mainnet');
+  });
+
+  it('settle() returns failure for scheme mismatch', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const streamPayload = { ...PAYLOAD, scheme: 'stream' as const, payload: { transaction: 'tx', signature: 'sig' } };
+    const result = await facilitator.settle(streamPayload, REQUIREMENTS);
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('SCHEME_NOT_SUPPORTED');
+  });
+
+  it('verify() rejects non-number expiresAt', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const result = await facilitator.verify(PAYLOAD, { ...REQUIREMENTS, expiresAt: 'never' as unknown as number });
+    expect(result.valid).toBe(false);
+    expect(result.invalidReason).toContain('Invalid expiresAt');
+  });
+
+  it('settle() rejects non-number expiresAt', async () => {
+    const facilitator = new s402Facilitator();
+    facilitator.register('sui:testnet', createMockScheme());
+
+    const result = await facilitator.settle(PAYLOAD, { ...REQUIREMENTS, expiresAt: 'never' as unknown as number });
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('INVALID_PAYLOAD');
   });
 });
 

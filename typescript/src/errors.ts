@@ -24,6 +24,7 @@ export const s402ErrorCode = {
   VERIFICATION_FAILED: 'VERIFICATION_FAILED',
   SETTLEMENT_FAILED: 'SETTLEMENT_FAILED',
   DIGEST_MISMATCH: 'DIGEST_MISMATCH',
+  EXTENSION_FAILED: 'EXTENSION_FAILED',
 } as const;
 
 export type s402ErrorCodeType = (typeof s402ErrorCode)[keyof typeof s402ErrorCode];
@@ -102,6 +103,10 @@ const ERROR_HINTS: Record<s402ErrorCodeType, { retryable: boolean; suggestedActi
     suggestedAction:
       'Facilitator returned a transaction digest that does not match the signed payload. ' +
       'Do NOT retry — treat payment as non-settled and investigate the facilitator.',
+  },
+  EXTENSION_FAILED: {
+    retryable: false,
+    suggestedAction: 'A critical extension blocked the payment flow. Contact the extension provider or disable the extension.',
   },
 };
 

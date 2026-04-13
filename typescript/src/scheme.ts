@@ -1,9 +1,9 @@
 /**
  * s402 Scheme Interfaces
  *
- * Each payment scheme (exact, stream, escrow, unlock, prepaid) implements these
- * interfaces. The key insight: each scheme has its OWN verify logic.
- * Exact verify ≠ stream verify ≠ escrow verify.
+ * Each payment scheme (exact, upto, prepaid, stream, escrow, unlock) implements
+ * these interfaces. The key insight: each scheme has its OWN verify logic.
+ * Exact verify ≠ upto verify ≠ stream verify ≠ escrow verify.
  */
 
 import type {
@@ -97,6 +97,8 @@ export interface s402ServerScheme {
  *
  * Critical: each scheme has its OWN verify logic.
  * - Exact: signature recovery + dry-run simulation + balance check
+ * - Upto: deposit PTB validation + maxAmount match + deadline check
+ * - Prepaid: deposit PTB validation + rate/cap match
  * - Stream: stream creation PTB validation + deposit check
  * - Escrow: escrow creation PTB validation + arbiter/deadline check
  * - Unlock: escrow validation (key release is separate PTB)
@@ -159,7 +161,7 @@ export interface s402RouteConfig {
   /** Settlement mode preference */
   settlementMode?: s402SettlementMode;
 
-  // ── Optional scheme-specific config ──
+  // ── Optional cross-cutting config ──
 
   /** AP2 mandate requirements */
   mandate?: {
@@ -171,28 +173,17 @@ export interface s402RouteConfig {
   /** Require on-chain receipt */
   receiptRequired?: boolean;
 
-  // ── Stream config ──
-  stream?: {
-    ratePerSecond: string;
-    budgetCap: string;
-    minDeposit: string;
+  // ── Scheme-specific config (ordered by tier) ──
+
+  // Tier 1: Single Payment
+  upto?: {
+    maxAmount: string;
+    settlementDeadlineMs: string;
+    usageReportUrl?: string;
+    estimatedAmount?: string;
   };
 
-  // ── Escrow config ──
-  escrow?: {
-    seller: string;
-    arbiter?: string;
-    deadlineMs: string;
-  };
-
-  // ── Unlock config (pay-to-decrypt) ──
-  unlock?: {
-    encryptionId: string;
-    encryptedContentId: string;
-    encryptionServiceId: string;
-  };
-
-  // ── Prepaid config ──
+  // Tier 2: Persistent Balance
   prepaid?: {
     ratePerCall: string;
     maxCalls?: string;
@@ -202,5 +193,22 @@ export interface s402RouteConfig {
     providerPubkey?: string;
     /** Dispute window in ms. Required when providerPubkey is set. @since v0.2 */
     disputeWindowMs?: string;
+  };
+  stream?: {
+    ratePerSecond: string;
+    budgetCap: string;
+    minDeposit: string;
+  };
+
+  // Tier 3: Conditional Release
+  escrow?: {
+    seller: string;
+    arbiter?: string;
+    deadlineMs: string;
+  };
+  unlock?: {
+    encryptionId: string;
+    encryptedContentId: string;
+    encryptionServiceId: string;
   };
 }

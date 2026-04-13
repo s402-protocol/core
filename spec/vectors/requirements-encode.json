@@ -39,6 +39,50 @@
     "shouldReject": false
   },
   {
+    "description": "Upto scheme with estimatedAmount",
+    "input": {
+      "s402Version": "1",
+      "accepts": [
+        "upto"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "upto": {
+        "maxAmount": "10000000",
+        "settlementDeadlineMs": "1700000000000",
+        "usageReportUrl": "https://api.example.com/usage",
+        "estimatedAmount": "7500000"
+      }
+    },
+    "expected": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwidXB0byI6eyJtYXhBbW91bnQiOiIxMDAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsInVzYWdlUmVwb3J0VXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vdXNhZ2UiLCJlc3RpbWF0ZWRBbW91bnQiOiI3NTAwMDAwIn19"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Upto scheme minimal (no estimatedAmount)",
+    "input": {
+      "s402Version": "1",
+      "accepts": [
+        "upto"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "upto": {
+        "maxAmount": "5000000",
+        "settlementDeadlineMs": "1700000000000"
+      }
+    },
+    "expected": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwidXB0byI6eyJtYXhBbW91bnQiOiI1MDAwMDAwIiwic2V0dGxlbWVudERlYWRsaW5lTXMiOiIxNzAwMDAwMDAwMDAwIn19"
+    },
+    "shouldReject": false
+  },
+  {
     "description": "Escrow scheme with extras",
     "input": {
       "s402Version": "1",

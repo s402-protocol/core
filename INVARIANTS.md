@@ -107,7 +107,9 @@ Layer 3 — Facilitator process (facilitator.ts):
   Type checks expiresAt (must be number)
   Validates facilitatorUrl via new URL() (SSRF guard — M-1 patch)
   Validates amount via isValidU64Amount() (overflow guard — M-2 patch)
-  Validates payTo via /^0x[0-9a-fA-F]{64}$/ regex (M-6 patch)
+  Validates payTo as non-empty string with no control characters (http.ts
+  wire-decode). Chain-specific address format validation (e.g. Sui hex,
+  Solana base58) is delegated to downstream chain adapters per S7.
 
 Each layer INDEPENDENTLY validates. No layer trusts the output of a previous layer.
 

@@ -74,6 +74,48 @@
     "shouldReject": false
   },
   {
+    "description": "Upto requirements body with estimatedAmount",
+    "input": {
+      "type": "requirements",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "upto"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "upto": {
+          "maxAmount": "10000000",
+          "settlementDeadlineMs": "1700000000000",
+          "usageReportUrl": "https://api.example.com/usage",
+          "estimatedAmount": "7500000"
+        }
+      }
+    },
+    "expected": {
+      "body": "{\"s402Version\":\"1\",\"accepts\":[\"upto\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\",\"upto\":{\"maxAmount\":\"10000000\",\"settlementDeadlineMs\":\"1700000000000\",\"usageReportUrl\":\"https://api.example.com/usage\",\"estimatedAmount\":\"7500000\"}}",
+      "decoded": {
+        "s402Version": "1",
+        "accepts": [
+          "upto"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+        "upto": {
+          "maxAmount": "10000000",
+          "settlementDeadlineMs": "1700000000000",
+          "usageReportUrl": "https://api.example.com/usage",
+          "estimatedAmount": "7500000"
+        }
+      }
+    },
+    "shouldReject": false
+  },
+  {
     "description": "Payload body encode/decode",
     "input": {
       "type": "payload",

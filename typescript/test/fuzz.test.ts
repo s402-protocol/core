@@ -46,7 +46,7 @@ const VALID_PAY_TO = '0x' + 'a'.repeat(64);
 const validRequirements = () =>
   fc.record({
     s402Version: fc.constant(S402_VERSION as string),
-    accepts: fc.constantFrom(['exact'], ['exact', 'stream'], ['exact', 'escrow'], ['exact', 'unlock', 'prepaid']),
+    accepts: fc.constantFrom(['exact'], ['exact', 'upto'], ['exact', 'stream'], ['exact', 'escrow'], ['exact', 'unlock', 'prepaid']),
     network: fc.constantFrom('sui:testnet', 'sui:mainnet', 'sui:devnet'),
     asset: fc.constantFrom('0x2::sui::SUI', '0xdba::usdc::USDC'),
     amount: fc.nat({ max: 1_000_000_000_000 }).map(n => String(n)),
@@ -147,7 +147,7 @@ describe('fuzz: normalizeRequirements', () => {
             's402Version', 'accepts', 'network', 'asset', 'amount', 'payTo',
             'facilitatorUrl', 'mandate', 'protocolFeeBps', 'protocolFeeAddress',
             'receiptRequired', 'settlementMode', 'expiresAt',
-            'stream', 'escrow', 'unlock', 'prepaid', 'extensions',
+            'upto', 'settlementOverrides', 'prepaid', 'stream', 'escrow', 'unlock', 'extensions',
           ]);
 
           for (const key of Object.keys(result)) {

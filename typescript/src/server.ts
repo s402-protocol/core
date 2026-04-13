@@ -101,10 +101,11 @@ export class s402ResourceServer {
       protocolFeeBps: config.protocolFeeBps,
       receiptRequired: config.receiptRequired,
       settlementMode: config.settlementMode,
+      upto: config.upto,
+      prepaid: config.prepaid,
       stream: config.stream,
       escrow: config.escrow,
       unlock: config.unlock,
-      prepaid: config.prepaid,
     };
   }
 

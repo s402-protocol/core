@@ -1,7 +1,7 @@
 /**
  * s402 — Chain-agnostic HTTP 402 protocol
  *
- * Five payment schemes: exact, stream, escrow, unlock, prepaid.
+ * Six payment schemes: exact, upto, prepaid, stream, escrow, unlock.
  * AP2 mandate support. Direct settlement. On-chain receipts.
  * Wire-compatible with x402. Zero runtime dependencies.
  * Optional x402 compat layer available via 's402/compat'.
@@ -14,21 +14,29 @@ export type {
   s402Scheme,
   s402SettlementMode,
   s402PaymentRequirements,
+  // Scheme-specific extras (ordered by tier)
+  s402UptoExtra,
+  s402SettlementOverrides,
+  s402PrepaidExtra,
   s402StreamExtra,
   s402EscrowExtra,
   s402UnlockExtra,
-  s402PrepaidExtra,
+  // Mandate
   s402MandateRequirements,
   s402Mandate,
+  // Payment payloads (ordered by tier)
   s402PaymentPayloadBase,
   s402ExactPayload,
+  s402UptoPayload,
+  s402PrepaidPayload,
   s402StreamPayload,
   s402EscrowPayload,
   s402UnlockPayload,
-  s402PrepaidPayload,
   s402PaymentPayload,
+  // Responses
   s402SettleResponse,
   s402VerifyResponse,
+  // Discovery & session
   s402Discovery,
   s402PaymentSession,
   s402ServiceEntry,
@@ -54,6 +62,7 @@ export { s402ResourceServer } from './server.js';
 
 // Facilitator
 export { s402Facilitator } from './facilitator.js';
+export type { s402ProcessOptions } from './facilitator.js';
 
 // HTTP helpers — header transport (base64-encoded JSON in HTTP headers)
 export {
@@ -91,6 +100,21 @@ export {
 // Receipt HTTP helpers (v0.2 signed usage receipts)
 export { formatReceiptHeader, parseReceiptHeader, S402_RECEIPT_HEADER } from './receipts.js';
 export type { s402Receipt, s402ReceiptSigner, s402ReceiptVerifier } from './receipts.js';
+
+// Extensions
+export type {
+  s402Extension,
+  s402ClientExtension,
+  s402ServerExtension,
+  s402FacilitatorExtension,
+  s402ExtensionErrorHandler,
+} from './extensions.js';
+export {
+  s402ExtensionRegistry,
+  getExtensionData,
+  setExtensionData,
+  runExtensionHooks,
+} from './extensions.js';
 
 // Errors
 export {

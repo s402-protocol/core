@@ -18,7 +18,8 @@
       "network": "sui:mainnet",
       "asset": "0x2::sui::SUI",
       "amount": "1000000",
-      "payTo": "0xrecipient123"
+      "payTo": "0xrecipient123",
+      "expiresAt": 1700000060000
     },
     "shouldReject": false
   },

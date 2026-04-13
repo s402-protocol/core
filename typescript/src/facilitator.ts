@@ -17,10 +17,40 @@ import type {
 } from './types.js';
 import type { s402FacilitatorScheme } from './scheme.js';
 import { s402Error } from './errors.js';
+import type { s402FacilitatorExtension, s402ExtensionErrorHandler } from './extensions.js';
+import { s402ExtensionRegistry, runExtensionHooks } from './extensions.js';
+
+/**
+ * Options for `s402Facilitator.process()`.
+ *
+ * Callers can tune the verify→settle pipeline per-request.
+ */
+export interface s402ProcessOptions {
+  /**
+   * Skip the verify() dry-run and go straight to settle().
+   *
+   * On chains where failed transactions cost zero gas (e.g., Sui PTBs revert
+   * atomically with no gas charge), the dry-run is pure latency overhead — it
+   * adds a full RPC round-trip (~200-400ms) just to predict what settle() will
+   * discover anyway. Setting `skipVerify: true` eliminates that round-trip.
+   *
+   * When `true`, process() still performs: expiration checks, scheme-mismatch
+   * checks, deduplication, and settle timeout. Only the dry-run is skipped.
+   *
+   * **Use when:** your chain adapter knows failures are free (Sui, Aptos).
+   * **Don't use when:** failed settlements cost gas (EVM L1s) — the dry-run
+   * saves real money by catching bad txs before broadcast.
+   *
+   * @default false
+   */
+  skipVerify?: boolean;
+}
 
 export class s402Facilitator {
   private schemes = new Map<string, Map<s402Scheme, s402FacilitatorScheme>>();
   private inFlight = new Set<string>();
+  private extensionRegistry = new s402ExtensionRegistry<s402FacilitatorExtension>();
+  private extensionErrorHandler?: s402ExtensionErrorHandler;
 
   /**
    * Register a scheme-specific facilitator for a network.
@@ -30,6 +60,27 @@ export class s402Facilitator {
       this.schemes.set(network, new Map());
     }
     this.schemes.get(network)!.set(scheme.scheme, scheme);
+    return this;
+  }
+
+  /**
+   * Register a facilitator extension. Extensions fire in dependency order
+   * at four points in the process() pipeline: beforeVerify, afterVerify,
+   * beforeSettle, afterSettle.
+   *
+   * @throws {s402Error} `EXTENSION_FAILED` on duplicate key or dependency cycle
+   */
+  registerExtension(ext: s402FacilitatorExtension): this {
+    this.extensionRegistry.register(ext);
+    return this;
+  }
+
+  /**
+   * Set the handler for advisory (non-critical) extension failures.
+   * Critical extensions always throw; advisory extensions call this handler.
+   */
+  onExtensionError(handler: s402ExtensionErrorHandler): this {
+    this.extensionErrorHandler = handler;
     return this;
   }
 
@@ -140,6 +191,7 @@ export class s402Facilitator {
    *
    * @param payload - Client's payment payload
    * @param requirements - Server's payment requirements
+   * @param options - Optional process configuration (e.g., `{ skipVerify: true }` for zero-cost-failure chains)
    * @returns Settlement result (check `result.success` and `result.errorCode`)
    *
    * @example
@@ -160,6 +212,7 @@ export class s402Facilitator {
   async process(
     payload: s402PaymentPayload,
     requirements: s402PaymentRequirements,
+    options?: s402ProcessOptions,
   ): Promise<s402SettleResponse> {
     // Reject expired requirements before doing any work.
     // Type check defends against string/NaN expiresAt from untrusted JSON
@@ -218,49 +271,95 @@ export class s402Facilitator {
     }
     this.inFlight.add(dedupeKey);
 
+    // Get sorted extensions once (cached after first call, zero-cost when empty)
+    const extensions = this.extensionRegistry.size > 0
+      ? this.extensionRegistry.sorted()
+      : null;
+
     try {
-      // H-1 + H-3: Verify with timeout to prevent hanging RPC calls from exhausting the event loop
-      let verifyResult: s402VerifyResponse;
-      try {
-        let verifyTimer: ReturnType<typeof setTimeout>;
-        verifyResult = await Promise.race([
-          scheme.verify(payload, requirements),
-          new Promise<never>((_, reject) => {
-            verifyTimer = setTimeout(() => reject(new Error('Verification timed out after 5s')), 5_000);
-          }),
-        ]).finally(() => clearTimeout(verifyTimer));
-      } catch (e) {
-        return {
-          success: false,
-          error: e instanceof Error ? e.message : 'Verification threw an unexpected error',
-          errorCode: 'VERIFICATION_FAILED',
-        };
+      // V6 optimization: skip verify dry-run when caller knows failures are free.
+      // All pre-flight checks (expiration, scheme-mismatch, dedup) still run above.
+      if (!options?.skipVerify) {
+        // Extension hook: beforeVerify (rate limiting, allowlisting, pre-checks)
+        if (extensions) {
+          try {
+            await runExtensionHooks(extensions, 'beforeVerify',
+              (ext) => ext.beforeVerify ? ext.beforeVerify(payload, requirements) : Promise.resolve(),
+              this.extensionErrorHandler);
+          } catch (e) {
+            if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
+            return { success: false, error: 'Extension beforeVerify failed', errorCode: 'EXTENSION_FAILED' };
+          }
+        }
+
+        // H-1 + H-3: Verify with timeout to prevent hanging RPC calls from exhausting the event loop
+        let verifyResult: s402VerifyResponse;
+        try {
+          let verifyTimer: ReturnType<typeof setTimeout>;
+          verifyResult = await Promise.race([
+            scheme.verify(payload, requirements),
+            new Promise<never>((_, reject) => {
+              verifyTimer = setTimeout(() => reject(new Error('Verification timed out after 5s')), 5_000);
+            }),
+          ]).finally(() => clearTimeout(verifyTimer));
+        } catch (e) {
+          return {
+            success: false,
+            error: e instanceof Error ? e.message : 'Verification threw an unexpected error',
+            errorCode: 'VERIFICATION_FAILED',
+          };
+        }
+
+        if (!verifyResult.valid) {
+          return {
+            success: false,
+            error: verifyResult.invalidReason ?? 'Payment verification failed',
+            errorCode: 'VERIFICATION_FAILED',
+          };
+        }
+
+        // Extension hook: afterVerify (logging, metrics, post-verification checks)
+        if (extensions) {
+          try {
+            await runExtensionHooks(extensions, 'afterVerify',
+              (ext) => ext.afterVerify ? ext.afterVerify(payload, verifyResult) : Promise.resolve(),
+              this.extensionErrorHandler);
+          } catch (e) {
+            if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
+            return { success: false, error: 'Extension afterVerify failed', errorCode: 'EXTENSION_FAILED' };
+          }
+        }
+
+        // Latency guard: if the dry-run took a long time, don't waste gas on stale requirements.
+        // Note: this is NOT a TOCTOU fix — Sui PTBs are atomic. This just avoids broadcasting
+        // a transaction for requirements the server has already expired.
+        // Type already validated above, so only check expiration here.
+        if (typeof requirements.expiresAt === 'number' && Date.now() > requirements.expiresAt) {
+          return {
+            success: false,
+            error: `Payment requirements expired during verification at ${new Date(requirements.expiresAt).toISOString()}`,
+            errorCode: 'REQUIREMENTS_EXPIRED',
+          };
+        }
       }
 
-      if (!verifyResult.valid) {
-        return {
-          success: false,
-          error: verifyResult.invalidReason ?? 'Payment verification failed',
-          errorCode: 'VERIFICATION_FAILED',
-        };
-      }
-
-      // Latency guard: if the dry-run took a long time, don't waste gas on stale requirements.
-      // Note: this is NOT a TOCTOU fix — Sui PTBs are atomic. This just avoids broadcasting
-      // a transaction for requirements the server has already expired.
-      // Type already validated above, so only check expiration here.
-      if (typeof requirements.expiresAt === 'number' && Date.now() > requirements.expiresAt) {
-        return {
-          success: false,
-          error: `Payment requirements expired during verification at ${new Date(requirements.expiresAt).toISOString()}`,
-          errorCode: 'REQUIREMENTS_EXPIRED',
-        };
+      // Extension hook: beforeSettle (final fraud checks, balance confirmation)
+      if (extensions) {
+        try {
+          await runExtensionHooks(extensions, 'beforeSettle',
+            (ext) => ext.beforeSettle ? ext.beforeSettle(payload, requirements) : Promise.resolve(),
+            this.extensionErrorHandler);
+        } catch (e) {
+          if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
+          return { success: false, error: 'Extension beforeSettle failed', errorCode: 'EXTENSION_FAILED' };
+        }
       }
 
       // H-1 + H-3 + M-5: Settle with timeout; SETTLEMENT_FAILED is retryable (transient RPC errors)
+      let settleResult: s402SettleResponse;
       try {
         let settleTimer: ReturnType<typeof setTimeout>;
-        return await Promise.race([
+        settleResult = await Promise.race([
           scheme.settle(payload, requirements),
           new Promise<never>((_, reject) => {
             settleTimer = setTimeout(() => reject(new Error('Settlement timed out after 15s')), 15_000);
@@ -273,6 +372,24 @@ export class s402Facilitator {
           errorCode: 'SETTLEMENT_FAILED',
         };
       }
+
+      // Extension hook: afterSettle (indexing, receipts, analytics)
+      // Only fires on successful settlement — extensions observing failures should
+      // use beforeSettle or external monitoring. Post-settle hooks never change the result.
+      if (extensions && settleResult.success) {
+        try {
+          await runExtensionHooks(extensions, 'afterSettle',
+            (ext) => ext.afterSettle ? ext.afterSettle(payload, settleResult) : Promise.resolve(),
+            this.extensionErrorHandler);
+        } catch (e) {
+          // Even critical extension failure after settle doesn't change the result —
+          // the transaction is already on-chain. Forward to error handler for observability
+          // but always return the true settle result.
+          this.extensionErrorHandler?.({ key: 'afterSettle', version: '0', critical: true }, e);
+        }
+      }
+
+      return settleResult;
     } finally {
       this.inFlight.delete(dedupeKey);
     }

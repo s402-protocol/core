@@ -48,6 +48,39 @@
     "shouldReject": false
   },
   {
+    "description": "Decode upto payload with settlementCeiling",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1cHRvIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRYQjBiMTkwZUE9PSIsInNpZ25hdHVyZSI6ImRYQjBiMTl6YVdjPSIsIm1heEFtb3VudCI6IjEwMDAwMDAwIiwic2V0dGxlbWVudENlaWxpbmciOiI4MDAwMDAwIn19"
+    },
+    "expected": {
+      "s402Version": "1",
+      "scheme": "upto",
+      "payload": {
+        "transaction": "dXB0b190eA==",
+        "signature": "dXB0b19zaWc=",
+        "maxAmount": "10000000",
+        "settlementCeiling": "8000000"
+      }
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode upto payload without settlementCeiling",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1cHRvIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRYQjBiMTkwZUE9PSIsInNpZ25hdHVyZSI6ImRYQjBiMTl6YVdjPSIsIm1heEFtb3VudCI6IjUwMDAwMDAifX0="
+    },
+    "expected": {
+      "s402Version": "1",
+      "scheme": "upto",
+      "payload": {
+        "transaction": "dXB0b190eA==",
+        "signature": "dXB0b19zaWc=",
+        "maxAmount": "5000000"
+      }
+    },
+    "shouldReject": false
+  },
+  {
     "description": "Decode stream payload",
     "input": {
       "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJzdHJlYW0iLCJwYXlsb2FkIjp7InRyYW5zYWN0aW9uIjoiYzNSeVpXRnRYM1I0Iiwic2lnbmF0dXJlIjoiYzNSeVpXRnRYM05wWnc9PSJ9fQ=="

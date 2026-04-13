@@ -128,6 +128,26 @@ const WITH_PREPAID_V01: s402PaymentRequirements = {
   },
 };
 
+const WITH_UPTO: s402PaymentRequirements = {
+  ...MINIMAL_EXACT,
+  accepts: ['upto'],
+  upto: {
+    maxAmount: '10000000',
+    settlementDeadlineMs: '1700000000000',
+    usageReportUrl: 'https://api.example.com/usage',
+    estimatedAmount: '7500000',
+  },
+};
+
+const WITH_UPTO_MINIMAL: s402PaymentRequirements = {
+  ...MINIMAL_EXACT,
+  accepts: ['upto'],
+  upto: {
+    maxAmount: '5000000',
+    settlementDeadlineMs: '1700000000000',
+  },
+};
+
 const WITH_MANDATE: s402PaymentRequirements = {
   ...MINIMAL_EXACT,
   mandate: {
@@ -197,6 +217,8 @@ function generateRequirementsEncode(): TestVector[] {
   const fixtures: Array<[string, s402PaymentRequirements]> = [
     ['Minimal exact requirements', MINIMAL_EXACT],
     ['Stream scheme with extras', WITH_STREAM],
+    ['Upto scheme with estimatedAmount', WITH_UPTO],
+    ['Upto scheme minimal (no estimatedAmount)', WITH_UPTO_MINIMAL],
     ['Escrow scheme with extras', WITH_ESCROW],
     ['Unlock scheme with extras', WITH_UNLOCK],
     ['Prepaid v0.2 (providerPubkey + disputeWindowMs)', WITH_PREPAID_V02],
@@ -228,6 +250,8 @@ function generateRequirementsDecode(): TestVector[] {
   const fixtures: Array<[string, s402PaymentRequirements]> = [
     ['Decode minimal exact requirements', MINIMAL_EXACT],
     ['Decode stream scheme', WITH_STREAM],
+    ['Decode upto scheme with estimatedAmount', WITH_UPTO],
+    ['Decode upto scheme minimal', WITH_UPTO_MINIMAL],
     ['Decode escrow scheme', WITH_ESCROW],
     ['Decode unlock scheme', WITH_UNLOCK],
     ['Decode prepaid v0.2', WITH_PREPAID_V02],
@@ -309,6 +333,25 @@ function generatePayloadEncode(): TestVector[] {
         maxCalls: '100',
       },
     }],
+    ['Upto payload with maxAmount and settlementCeiling', {
+      s402Version: '1',
+      scheme: 'upto',
+      payload: {
+        transaction: 'dXB0b190eA==',
+        signature: 'dXB0b19zaWc=',
+        maxAmount: '10000000',
+        settlementCeiling: '8000000',
+      },
+    }],
+    ['Upto payload without settlementCeiling (backwards compatible)', {
+      s402Version: '1',
+      scheme: 'upto',
+      payload: {
+        transaction: 'dXB0b190eA==',
+        signature: 'dXB0b19zaWc=',
+        maxAmount: '5000000',
+      },
+    }],
     ['Stream payload', {
       s402Version: '1',
       scheme: 'stream',
@@ -387,6 +430,25 @@ function generatePayloadDecode(): TestVector[] {
         transaction: 'dW5sb2NrX3R4',
         signature: 'dW5sb2NrX3NpZw==',
         encryptionId: 'enc-abc-123',
+      },
+    }],
+    ['Decode upto payload with settlementCeiling', {
+      s402Version: '1',
+      scheme: 'upto',
+      payload: {
+        transaction: 'dXB0b190eA==',
+        signature: 'dXB0b19zaWc=',
+        maxAmount: '10000000',
+        settlementCeiling: '8000000',
+      },
+    }],
+    ['Decode upto payload without settlementCeiling', {
+      s402Version: '1',
+      scheme: 'upto',
+      payload: {
+        transaction: 'dXB0b190eA==',
+        signature: 'dXB0b19zaWc=',
+        maxAmount: '5000000',
       },
     }],
     ['Decode stream payload', {
@@ -471,6 +533,20 @@ function generateSettleEncode(): TestVector[] {
       balanceId: '0xbalance789',
       finalityMs: 300,
     }],
+    ['Success with actualAmount and depositId (upto)', {
+      success: true,
+      txDigest: 'upto_digest_abc',
+      actualAmount: '7500000',
+      depositId: '0xdeposit_upto_123',
+      finalityMs: 250,
+    }],
+    ['Success with actualAmount at zero (upto full refund)', {
+      success: true,
+      txDigest: 'upto_refund_xyz',
+      actualAmount: '0',
+      depositId: '0xdeposit_refund_456',
+      finalityMs: 180,
+    }],
   ];
 
   return responses.map(([description, input]) => ({
@@ -511,6 +587,13 @@ function generateSettleDecode(): TestVector[] {
       txDigest: 'balance_digest',
       balanceId: '0xbalance456',
       finalityMs: 350,
+    }],
+    ['Decode success with actualAmount and depositId (upto)', {
+      success: true,
+      txDigest: 'upto_decode_digest',
+      actualAmount: '7500000',
+      depositId: '0xdeposit_decode_123',
+      finalityMs: 250,
     }],
   ];
 
@@ -569,6 +652,17 @@ function generateBodyTransport(): TestVector[] {
     shouldReject: false,
   });
 
+  // Upto requirements body transport (V2)
+  vectors.push({
+    description: 'Upto requirements body with estimatedAmount',
+    input: { type: 'requirements', value: WITH_UPTO },
+    expected: {
+      body: encodeRequirementsBody(WITH_UPTO),
+      decoded: decodeRequirementsBody(encodeRequirementsBody(WITH_UPTO)),
+    },
+    shouldReject: false,
+  });
+
   // Payload body transport
   const payloadInput: s402PaymentPayload = {
     s402Version: '1',
@@ -620,6 +714,10 @@ function generateBodyTransport(): TestVector[] {
 
 // ── Generate compat-normalize.json ───────────────
 
+// Fixed reference timestamp for deterministic vector generation.
+// Tests MUST use this same value when calling normalizeRequirements().
+const COMPAT_REFERENCE_NOW = 1700000000000; // 2023-11-14T22:13:20Z
+
 function generateCompatNormalize(): TestVector[] {
   const vectors: TestVector[] = [];
 
@@ -636,7 +734,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V1 flat format → s402',
     input: x402V1,
-    expected: normalizeRequirements(x402V1 as Record<string, unknown>),
+    expected: normalizeRequirements(x402V1 as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -654,7 +752,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V2 envelope (single offer) → s402',
     input: x402V2Single,
-    expected: normalizeRequirements(x402V2Single as Record<string, unknown>),
+    expected: normalizeRequirements(x402V2Single as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -681,7 +779,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V2 envelope (multiple offers) → s402 (first offer taken)',
     input: x402V2Multi,
-    expected: normalizeRequirements(x402V2Multi as Record<string, unknown>),
+    expected: normalizeRequirements(x402V2Multi as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -697,7 +795,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V1 with maxAmountRequired → amount',
     input: x402V1Max,
-    expected: normalizeRequirements(x402V1Max as Record<string, unknown>),
+    expected: normalizeRequirements(x402V1Max as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -705,7 +803,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'Native s402 passed through unchanged',
     input: MINIMAL_EXACT,
-    expected: normalizeRequirements(MINIMAL_EXACT as unknown as Record<string, unknown>),
+    expected: normalizeRequirements(MINIMAL_EXACT as unknown as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -723,7 +821,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V1 with extra unknown fields (stripped)',
     input: x402WithExtras,
-    expected: normalizeRequirements(x402WithExtras as Record<string, unknown>),
+    expected: normalizeRequirements(x402WithExtras as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -740,7 +838,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 with facilitatorUrl (SSRF-safe HTTPS)',
     input: x402WithUrl,
-    expected: normalizeRequirements(x402WithUrl as Record<string, unknown>),
+    expected: normalizeRequirements(x402WithUrl as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -757,7 +855,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V1 with both amount and maxAmountRequired (amount wins)',
     input: x402BothAmounts,
-    expected: normalizeRequirements(x402BothAmounts as Record<string, unknown>),
+    expected: normalizeRequirements(x402BothAmounts as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -776,7 +874,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V2 envelope with resource metadata',
     input: x402V2WithResource,
-    expected: normalizeRequirements(x402V2WithResource as Record<string, unknown>),
+    expected: normalizeRequirements(x402V2WithResource as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -793,7 +891,7 @@ function generateCompatNormalize(): TestVector[] {
   vectors.push({
     description: 'x402 V1 with extensions preserved',
     input: x402WithExtensions,
-    expected: normalizeRequirements(x402WithExtensions as Record<string, unknown>),
+    expected: normalizeRequirements(x402WithExtensions as Record<string, unknown>, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -1251,6 +1349,138 @@ function generateValidationReject(): TestVector[] {
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
 
+  // V2: estimatedAmount > maxAmount
+  vectors.push({
+    description: 'Rejects upto.estimatedAmount exceeding maxAmount',
+    input: { header: toBase64(JSON.stringify({
+      s402Version: '1', accepts: ['upto'], network: 'sui:mainnet', asset: 'SUI',
+      amount: '1000', payTo: '0xabc',
+      upto: {
+        maxAmount: '5000000', settlementDeadlineMs: '1700000000000',
+        estimatedAmount: '5000001',
+      },
+    })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // V2: settlementCeiling = "0" in upto payload (must be >= 1)
+  vectors.push({
+    description: 'Rejects upto payload with settlementCeiling of zero',
+    input: {
+      header: toBase64(JSON.stringify({
+        s402Version: '1', scheme: 'upto',
+        payload: {
+          transaction: 'dHg=', signature: 'c2ln',
+          maxAmount: '1000000', settlementCeiling: '0',
+        },
+      })),
+      decodeAs: 'payload',
+    },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // V2: settlementCeiling > maxAmount in upto payload
+  vectors.push({
+    description: 'Rejects upto payload with settlementCeiling exceeding maxAmount',
+    input: {
+      header: toBase64(JSON.stringify({
+        s402Version: '1', scheme: 'upto',
+        payload: {
+          transaction: 'dHg=', signature: 'c2ln',
+          maxAmount: '1000000', settlementCeiling: '1000001',
+        },
+      })),
+      decodeAs: 'payload',
+    },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // V2: non-string estimatedAmount
+  vectors.push({
+    description: 'Rejects upto.estimatedAmount as number (must be string)',
+    input: { header: toBase64(JSON.stringify({
+      s402Version: '1', accepts: ['upto'], network: 'sui:mainnet', asset: 'SUI',
+      amount: '1000', payTo: '0xabc',
+      upto: {
+        maxAmount: '5000000', settlementDeadlineMs: '1700000000000',
+        estimatedAmount: 123,
+      },
+    })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // V2: non-string settlementCeiling in upto payload
+  vectors.push({
+    description: 'Rejects upto payload with numeric settlementCeiling (must be string)',
+    input: {
+      header: toBase64(JSON.stringify({
+        s402Version: '1', scheme: 'upto',
+        payload: {
+          transaction: 'dHg=', signature: 'c2ln',
+          maxAmount: '1000000', settlementCeiling: 500000,
+        },
+      })),
+      decodeAs: 'payload',
+    },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // M2: prepaid payload ratePerCall must be valid amount (not just a string)
+  vectors.push({
+    description: 'Rejects prepaid payload with negative ratePerCall',
+    input: {
+      header: toBase64(JSON.stringify({
+        s402Version: '1', scheme: 'prepaid',
+        payload: {
+          transaction: 'dHg=', signature: 'c2ln',
+          ratePerCall: '-5',
+        },
+      })),
+      decodeAs: 'payload',
+    },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // M2: prepaid payload maxCalls must be valid amount
+  vectors.push({
+    description: 'Rejects prepaid payload with non-numeric maxCalls',
+    input: {
+      header: toBase64(JSON.stringify({
+        s402Version: '1', scheme: 'prepaid',
+        payload: {
+          transaction: 'dHg=', signature: 'c2ln',
+          ratePerCall: '100', maxCalls: 'abc',
+        },
+      })),
+      decodeAs: 'payload',
+    },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // L1: mandate.minPerTx must be valid amount
+  vectors.push({
+    description: 'Rejects mandate.minPerTx with leading zeros',
+    input: { header: toBase64(JSON.stringify({
+      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+      amount: '1000', payTo: '0xabc',
+      mandate: { required: true, minPerTx: '007' },
+    })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // M1: settle actualAmount must be string (not number)
+  // Note: settle rejection vectors go through decodeSettleResponse, but our
+  // conformance runner only dispatches by decodeAs 'payload'/'compat'/receipt.
+  // Settle shape validation is covered by unit tests in http.test.ts.
+
   // S7: Wire format is chain-agnostic — amounts > u64 are valid (needed for EVM u256).
   // Chain-specific magnitude bounds (u64, u256) belong in chain adapters (@sweefi/sui etc.).
   // This vector was previously a rejection case but was changed in v0.2.4 to comply with S7.
@@ -1531,6 +1761,46 @@ function generateRoundtrip(): TestVector[] {
       firstEncode: settleBodyStr,
       reEncode: settleBodyReEncoded,
       identical: settleBodyStr === settleBodyReEncoded,
+    },
+    shouldReject: false,
+  });
+
+  // Upto requirements roundtrip (V2 fields)
+  const uptoHeader = encodePaymentRequired(WITH_UPTO);
+  const uptoDecoded = decodePaymentRequired(uptoHeader);
+  const uptoReEncoded = encodePaymentRequired(uptoDecoded);
+  vectors.push({
+    description: 'Upto requirements with estimatedAmount roundtrip',
+    input: { type: 'requirements', transport: 'header', value: WITH_UPTO },
+    expected: {
+      firstEncode: uptoHeader,
+      reEncode: uptoReEncoded,
+      identical: uptoHeader === uptoReEncoded,
+    },
+    shouldReject: false,
+  });
+
+  // Upto payload roundtrip (with settlementCeiling)
+  const uptoPayloadInput: s402PaymentPayload = {
+    s402Version: '1',
+    scheme: 'upto',
+    payload: {
+      transaction: 'dXB0b190eA==',
+      signature: 'dXB0b19zaWc=',
+      maxAmount: '10000000',
+      settlementCeiling: '8000000',
+    },
+  };
+  const uptoPayHeader = encodePaymentPayload(uptoPayloadInput);
+  const uptoPayDecoded = decodePaymentPayload(uptoPayHeader);
+  const uptoPayReEncoded = encodePaymentPayload(uptoPayDecoded);
+  vectors.push({
+    description: 'Upto payload with settlementCeiling roundtrip',
+    input: { type: 'payload', transport: 'header', value: uptoPayloadInput },
+    expected: {
+      firstEncode: uptoPayHeader,
+      reEncode: uptoPayReEncoded,
+      identical: uptoPayHeader === uptoPayReEncoded,
     },
     shouldReject: false,
   });

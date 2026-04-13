@@ -106,16 +106,18 @@ const S402_REQUIREMENTS_KEYS = new Set([
   's402Version', 'accepts', 'network', 'asset', 'amount', 'payTo',
   'facilitatorUrl', 'mandate', 'protocolFeeBps', 'protocolFeeAddress',
   'receiptRequired', 'settlementMode', 'expiresAt',
-  'stream', 'escrow', 'unlock', 'prepaid', 'extensions',
+  'upto', 'settlementOverrides', 'prepaid', 'stream', 'escrow', 'unlock', 'extensions',
 ]);
 
 /** Known keys for each sub-object type — used to strip extra keys at the trust boundary. */
 const S402_SUB_OBJECT_KEYS: Record<string, Set<string>> = {
   mandate: new Set(['required', 'minPerTx', 'coinType']),
+  upto: new Set(['maxAmount', 'settlementDeadlineMs', 'usageReportUrl', 'estimatedAmount']),
+  settlementOverrides: new Set(['actualAmount']),
+  prepaid: new Set(['ratePerCall', 'maxCalls', 'minDeposit', 'withdrawalDelayMs', 'providerPubkey', 'disputeWindowMs']),
   stream: new Set(['ratePerSecond', 'budgetCap', 'minDeposit', 'streamSetupUrl']),
   escrow: new Set(['seller', 'arbiter', 'deadlineMs']),
   unlock: new Set(['encryptionId', 'encryptedContentId', 'encryptionServiceId']),
-  prepaid: new Set(['ratePerCall', 'maxCalls', 'minDeposit', 'withdrawalDelayMs', 'providerPubkey', 'disputeWindowMs']),
 };
 
 /** Strip unknown keys from a sub-object, returning a clean copy. */
@@ -194,14 +196,16 @@ const S402_PAYLOAD_TOP_KEYS = new Set(['s402Version', 'scheme', 'payload']);
 
 /**
  * Known inner payload keys per scheme. All schemes share transaction + signature;
- * unlock adds encryptionId, prepaid adds ratePerCall + maxCalls.
+ * upto adds maxAmount + settlementCeiling, prepaid adds ratePerCall + maxCalls,
+ * unlock adds encryptionId.
  */
 const S402_PAYLOAD_INNER_KEYS: Record<string, Set<string>> = {
   exact: new Set(['transaction', 'signature']),
+  upto: new Set(['transaction', 'signature', 'maxAmount', 'settlementCeiling']),
+  prepaid: new Set(['transaction', 'signature', 'ratePerCall', 'maxCalls']),
   stream: new Set(['transaction', 'signature']),
   escrow: new Set(['transaction', 'signature']),
   unlock: new Set(['transaction', 'signature', 'encryptionId']),
-  prepaid: new Set(['transaction', 'signature', 'ratePerCall', 'maxCalls']),
 };
 
 /** Return a clean payload object with only known s402 payload fields. */
@@ -268,7 +272,8 @@ export function decodePaymentPayload(header: string): s402PaymentPayload {
  */
 const S402_SETTLE_RESPONSE_KEYS = new Set([
   'success', 'txDigest', 'receiptId', 'finalityMs',
-  'streamId', 'escrowId', 'balanceId', 'error', 'errorCode',
+  'actualAmount', 'depositId', 'balanceId', 'streamId', 'escrowId',
+  'error', 'errorCode',
 ]);
 
 /** Return a clean settle response with only known s402 fields. */
@@ -306,7 +311,7 @@ export function decodeSettleResponse(header: string): s402SettleResponse {
 // ══════════════════════════════════════════════════════════════
 
 /** Valid s402 payment scheme values */
-const VALID_SCHEMES = new Set<string>(['exact', 'stream', 'escrow', 'unlock', 'prepaid']);
+const VALID_SCHEMES = new Set<string>(['exact', 'upto', 'prepaid', 'stream', 'escrow', 'unlock']);
 
 /**
  * Check that a string represents a canonical non-negative integer.
@@ -386,13 +391,61 @@ export function validateMandateShape(value: unknown): void {
       `mandate.required must be a boolean, got ${typeof obj.required}`);
   }
   assertOptionalString(obj, 'minPerTx', 'mandate');
+  if (typeof obj.minPerTx === 'string' && !isValidAmount(obj.minPerTx)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `mandate.minPerTx must be a non-negative integer string, got "${obj.minPerTx}"`);
+  }
   assertOptionalString(obj, 'coinType', 'mandate');
 }
 
 /**
- * Validate stream sub-object.
- * Checks required fields are present and correctly typed.
+ * Validate upto sub-object (usage-based variable settlement).
  */
+export function validateUptoShape(value: unknown): void {
+  assertPlainObject(value, 'upto');
+  const obj = value as Record<string, unknown>;
+  assertString(obj, 'maxAmount', 'upto');
+  if (typeof obj.maxAmount === 'string' && !isValidAmount(obj.maxAmount)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `upto.maxAmount must be a non-negative integer string, got "${obj.maxAmount}"`);
+  }
+  assertString(obj, 'settlementDeadlineMs', 'upto');
+  if (typeof obj.settlementDeadlineMs === 'string' && !isValidAmount(obj.settlementDeadlineMs)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `upto.settlementDeadlineMs must be a non-negative integer string (Unix timestamp ms), got "${obj.settlementDeadlineMs}"`);
+  }
+  assertOptionalString(obj, 'usageReportUrl', 'upto');
+  assertOptionalString(obj, 'estimatedAmount', 'upto');
+  if (typeof obj.estimatedAmount === 'string') {
+    if (!isValidAmount(obj.estimatedAmount)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `upto.estimatedAmount must be a non-negative integer string, got "${obj.estimatedAmount}"`);
+    }
+    // estimatedAmount must be <= maxAmount (server can't estimate more than the ceiling)
+    if (typeof obj.maxAmount === 'string' && isValidAmount(obj.maxAmount)) {
+      const est = BigInt(obj.estimatedAmount);
+      const max = BigInt(obj.maxAmount);
+      if (est > max) {
+        throw new s402Error('INVALID_PAYLOAD',
+          `upto.estimatedAmount (${obj.estimatedAmount}) must be <= maxAmount (${obj.maxAmount})`);
+      }
+    }
+  }
+}
+
+/**
+ * Validate settlementOverrides sub-object.
+ */
+export function validateSettlementOverridesShape(value: unknown): void {
+  assertPlainObject(value, 'settlementOverrides');
+  const obj = value as Record<string, unknown>;
+  assertString(obj, 'actualAmount', 'settlementOverrides');
+  if (typeof obj.actualAmount === 'string' && !isValidAmount(obj.actualAmount)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `settlementOverrides.actualAmount must be a non-negative integer string, got "${obj.actualAmount}"`);
+  }
+}
+
 export function validateStreamShape(value: unknown): void {
   assertPlainObject(value, 'stream');
   const obj = value as Record<string, unknown>;
@@ -488,10 +541,12 @@ export function validatePrepaidShape(value: unknown): void {
  */
 export function validateSubObjects(record: Record<string, unknown>): void {
   if (record.mandate !== undefined) validateMandateShape(record.mandate);
+  if (record.upto !== undefined) validateUptoShape(record.upto);
+  if (record.settlementOverrides !== undefined) validateSettlementOverridesShape(record.settlementOverrides);
+  if (record.prepaid !== undefined) validatePrepaidShape(record.prepaid);
   if (record.stream !== undefined) validateStreamShape(record.stream);
   if (record.escrow !== undefined) validateEscrowShape(record.escrow);
   if (record.unlock !== undefined) validateUnlockShape(record.unlock);
-  if (record.prepaid !== undefined) validatePrepaidShape(record.prepaid);
 }
 
 /** Validate that decoded payment requirements have the required shape. */
@@ -681,13 +736,55 @@ function validatePayloadShape(obj: unknown): void {
     throw new s402Error('INVALID_PAYLOAD',
       `unlock payload requires encryptionId (string), got ${typeof inner.encryptionId}`);
   }
-  if (record.scheme === 'prepaid' && typeof inner.ratePerCall !== 'string') {
-    throw new s402Error('INVALID_PAYLOAD',
-      `prepaid payload requires ratePerCall (string), got ${typeof inner.ratePerCall}`);
+  if (record.scheme === 'upto') {
+    if (typeof inner.maxAmount !== 'string') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `upto payload requires maxAmount (string), got ${typeof inner.maxAmount}`);
+    }
+    if (!isValidAmount(inner.maxAmount)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `upto payload maxAmount must be a non-negative integer string, got "${inner.maxAmount}"`);
+    }
+    if (inner.settlementCeiling !== undefined) {
+      if (typeof inner.settlementCeiling !== 'string') {
+        throw new s402Error('INVALID_PAYLOAD',
+          `upto payload settlementCeiling must be a string if provided, got ${typeof inner.settlementCeiling}`);
+      }
+      if (!isValidAmount(inner.settlementCeiling)) {
+        throw new s402Error('INVALID_PAYLOAD',
+          `upto payload settlementCeiling must be a non-negative integer string, got "${inner.settlementCeiling}"`);
+      }
+      const ceiling = BigInt(inner.settlementCeiling);
+      if (ceiling < 1n) {
+        throw new s402Error('INVALID_PAYLOAD',
+          `upto payload settlementCeiling must be >= 1, got "${inner.settlementCeiling}"`);
+      }
+      const max = BigInt(inner.maxAmount);
+      if (ceiling > max) {
+        throw new s402Error('INVALID_PAYLOAD',
+          `upto payload settlementCeiling (${inner.settlementCeiling}) must be <= maxAmount (${inner.maxAmount})`);
+      }
+    }
   }
-  if (record.scheme === 'prepaid' && inner.maxCalls !== undefined && typeof inner.maxCalls !== 'string') {
-    throw new s402Error('INVALID_PAYLOAD',
-      `prepaid payload maxCalls must be a string if provided, got ${typeof inner.maxCalls}`);
+  if (record.scheme === 'prepaid') {
+    if (typeof inner.ratePerCall !== 'string') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `prepaid payload requires ratePerCall (string), got ${typeof inner.ratePerCall}`);
+    }
+    if (!isValidAmount(inner.ratePerCall)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `prepaid payload ratePerCall must be a non-negative integer string, got "${inner.ratePerCall}"`);
+    }
+    if (inner.maxCalls !== undefined) {
+      if (typeof inner.maxCalls !== 'string') {
+        throw new s402Error('INVALID_PAYLOAD',
+          `prepaid payload maxCalls must be a string if provided, got ${typeof inner.maxCalls}`);
+      }
+      if (!isValidAmount(inner.maxCalls)) {
+        throw new s402Error('INVALID_PAYLOAD',
+          `prepaid payload maxCalls must be a non-negative integer string, got "${inner.maxCalls}"`);
+      }
+    }
   }
 }
 
@@ -727,6 +824,14 @@ function validateSettleShape(obj: unknown): void {
   if (record.balanceId !== undefined && typeof record.balanceId !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `Malformed settle response: balanceId must be a string, got ${typeof record.balanceId}`);
+  }
+  if (record.actualAmount !== undefined && typeof record.actualAmount !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: actualAmount must be a string, got ${typeof record.actualAmount}`);
+  }
+  if (record.depositId !== undefined && typeof record.depositId !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed settle response: depositId must be a string, got ${typeof record.depositId}`);
   }
   if (record.error !== undefined && typeof record.error !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',

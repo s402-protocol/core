@@ -62,6 +62,20 @@
     "shouldReject": false
   },
   {
+    "description": "Decode success with actualAmount and depositId (upto)",
+    "input": {
+      "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6InVwdG9fZGVjb2RlX2RpZ2VzdCIsImFjdHVhbEFtb3VudCI6Ijc1MDAwMDAiLCJkZXBvc2l0SWQiOiIweGRlcG9zaXRfZGVjb2RlXzEyMyIsImZpbmFsaXR5TXMiOjI1MH0="
+    },
+    "expected": {
+      "success": true,
+      "txDigest": "upto_decode_digest",
+      "finalityMs": 250,
+      "actualAmount": "7500000",
+      "depositId": "0xdeposit_decode_123"
+    },
+    "shouldReject": false
+  },
+  {
     "description": "Decode strips unknown top-level keys from settle response",
     "input": {
       "header": "eyJzdWNjZXNzIjp0cnVlLCJ0eERpZ2VzdCI6IkFCQzEyMyIsImZpbmFsaXR5TXMiOjMwMCwiaW5qZWN0ZWRFdmlsIjoic2hvdWxkIGJlIHN0cmlwcGVkIiwiaW50ZXJuYWxOb3RlIjoiYWxzbyBzdHJpcHBlZCJ9"

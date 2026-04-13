@@ -176,6 +176,75 @@
     "expectedErrorCode": "INVALID_PAYLOAD"
   },
   {
+    "description": "Rejects upto.estimatedAmount exceeding maxAmount",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInVwdG8iOnsibWF4QW1vdW50IjoiNTAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsImVzdGltYXRlZEFtb3VudCI6IjUwMDAwMDEifX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects upto payload with settlementCeiling of zero",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1cHRvIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRIZz0iLCJzaWduYXR1cmUiOiJjMmxuIiwibWF4QW1vdW50IjoiMTAwMDAwMCIsInNldHRsZW1lbnRDZWlsaW5nIjoiMCJ9fQ==",
+      "decodeAs": "payload"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects upto payload with settlementCeiling exceeding maxAmount",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1cHRvIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRIZz0iLCJzaWduYXR1cmUiOiJjMmxuIiwibWF4QW1vdW50IjoiMTAwMDAwMCIsInNldHRsZW1lbnRDZWlsaW5nIjoiMTAwMDAwMSJ9fQ==",
+      "decodeAs": "payload"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects upto.estimatedAmount as number (must be string)",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInVwdG8iOnsibWF4QW1vdW50IjoiNTAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsImVzdGltYXRlZEFtb3VudCI6MTIzfX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects upto payload with numeric settlementCeiling (must be string)",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1cHRvIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRIZz0iLCJzaWduYXR1cmUiOiJjMmxuIiwibWF4QW1vdW50IjoiMTAwMDAwMCIsInNldHRsZW1lbnRDZWlsaW5nIjo1MDAwMDB9fQ==",
+      "decodeAs": "payload"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects prepaid payload with negative ratePerCall",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJwcmVwYWlkIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRIZz0iLCJzaWduYXR1cmUiOiJjMmxuIiwicmF0ZVBlckNhbGwiOiItNSJ9fQ==",
+      "decodeAs": "payload"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects prepaid payload with non-numeric maxCalls",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJwcmVwYWlkIiwicGF5bG9hZCI6eyJ0cmFuc2FjdGlvbiI6ImRIZz0iLCJzaWduYXR1cmUiOiJjMmxuIiwicmF0ZVBlckNhbGwiOiIxMDAiLCJtYXhDYWxscyI6ImFiYyJ9fQ==",
+      "decodeAs": "payload"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects mandate.minPerTx with leading zeros",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJtYW5kYXRlIjp7InJlcXVpcmVkIjp0cnVlLCJtaW5QZXJUeCI6IjAwNyJ9fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
     "description": "Rejects invalid base64 header",
     "input": {
       "header": "!!!not+valid+base64!!!"

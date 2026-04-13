@@ -1,8 +1,8 @@
 {
   "name": "s402",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "type": "module",
-  "description": "s402 — Chain-agnostic HTTP 402 wire format. Types, HTTP encoding, and scheme registry for five payment schemes. Wire-compatible with x402. Zero runtime dependencies.",
+  "description": "s402 — Chain-agnostic HTTP 402 wire format. Types, HTTP encoding, and scheme registry for six payment schemes. Wire-compatible with x402. Zero runtime dependencies.",
   "license": "Apache-2.0",
   "author": "SweeInc <daniel@sweeinc.com> (https://s402-protocol.org)",
   "repository": {
@@ -88,6 +88,13 @@
         "default": "./dist/receipts.mjs"
       },
       "default": "./dist/receipts.mjs"
+    },
+    "./extensions": {
+      "import": {
+        "types": "./dist/extensions.d.mts",
+        "default": "./dist/extensions.mjs"
+      },
+      "default": "./dist/extensions.mjs"
     },
     "./test-utils": {
       "import": {
