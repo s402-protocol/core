@@ -7,6 +7,7 @@ Enables bidirectional interop:
 
 from __future__ import annotations
 
+import time
 from typing import Any
 from urllib.parse import urlparse
 
@@ -29,7 +30,7 @@ def is_x402_envelope(obj: dict[str, Any]) -> bool:
     return "x402Version" in obj and isinstance(obj.get("accepts"), list) and "s402Version" not in obj
 
 
-def from_x402_requirements(x402: dict[str, Any]) -> dict[str, Any]:
+def from_x402_requirements(x402: dict[str, Any], now: int | None = None) -> dict[str, Any]:
     """Convert x402 requirements to s402 format."""
     amount = x402.get("amount") or x402.get("maxAmountRequired")
     if not amount:
@@ -50,6 +51,13 @@ def from_x402_requirements(x402: dict[str, Any]) -> dict[str, Any]:
         except Exception:
             raise S402Error("INVALID_PAYLOAD", "facilitatorUrl is not a valid URL")
 
+    # Compute expiresAt from x402's maxTimeoutSeconds to preserve S1 (Stale Payment Rejection).
+    max_timeout = x402.get("maxTimeoutSeconds")
+    expires_at: int | None = None
+    if max_timeout is not None and isinstance(max_timeout, (int, float)) and max_timeout > 0:
+        ref = now if now is not None else int(time.time() * 1000)
+        expires_at = ref + int(max_timeout) * 1000
+
     result: dict[str, Any] = {
         "s402Version": S402_VERSION,
         "accepts": ["exact"],
@@ -60,6 +68,8 @@ def from_x402_requirements(x402: dict[str, Any]) -> dict[str, Any]:
     }
     if facilitator_url is not None:
         result["facilitatorUrl"] = facilitator_url
+    if expires_at is not None:
+        result["expiresAt"] = expires_at
     extensions = x402.get("extensions")
     if extensions is not None:
         result["extensions"] = extensions
@@ -87,20 +97,22 @@ def _validate_x402_shape(obj: dict[str, Any]) -> None:
         raise S402Error("INVALID_PAYLOAD", f"Malformed x402 requirements: missing or invalid fields: {', '.join(missing)}")
 
 
-def from_x402_envelope(envelope: dict[str, Any]) -> dict[str, Any]:
+def from_x402_envelope(envelope: dict[str, Any], now: int | None = None) -> dict[str, Any]:
     """Convert x402 V2 envelope to s402 format."""
     accepts = envelope.get("accepts")
     if not accepts or not isinstance(accepts, list) or len(accepts) == 0:
         raise S402Error("INVALID_PAYLOAD", "x402 V2 envelope has empty accepts array")
     req = {**accepts[0], "x402Version": envelope.get("x402Version")}
     _validate_x402_shape(req)
-    return from_x402_requirements(req)
+    return from_x402_requirements(req, now)
 
 
-def normalize_requirements(obj: Any) -> dict[str, Any]:
+def normalize_requirements(obj: Any, now: int | None = None) -> dict[str, Any]:
     """Auto-detect and normalize: x402 or s402 → validated s402 requirements.
 
     Returns a clean object with only known s402 fields.
+    The ``now`` parameter (epoch ms) is used for deterministic
+    ``maxTimeoutSeconds → expiresAt`` conversion in conformance tests.
     """
     if obj is None or not isinstance(obj, dict):
         t = "null" if obj is None else ("array" if isinstance(obj, list) else type(obj).__name__)
@@ -111,13 +123,13 @@ def normalize_requirements(obj: Any) -> dict[str, Any]:
         return pick_requirements_fields(obj)
 
     if is_x402_envelope(obj):
-        result = from_x402_envelope(obj)
+        result = from_x402_envelope(obj, now)
         validate_requirements_shape(result)
         return pick_requirements_fields(result)
 
     if is_x402(obj):
         _validate_x402_shape(obj)
-        result = from_x402_requirements(obj)
+        result = from_x402_requirements(obj, now)
         validate_requirements_shape(result)
         return pick_requirements_fields(result)
 

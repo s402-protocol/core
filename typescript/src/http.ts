@@ -51,10 +51,10 @@ function fromBase64(b64: string): string {
  * const header = encodePaymentRequired({
  *   s402Version: '1',
  *   accepts: ['exact'],
- *   network: 'sui:mainnet',
- *   asset: '0x2::sui::SUI',
+ *   network: 'your-chain:mainnet',
+ *   asset: 'NATIVE_TOKEN',
  *   amount: '1000000',
- *   payTo: '0xYOUR_ADDRESS',
+ *   payTo: 'YOUR_ADDRESS',
  * });
  * response.headers.set('payment-required', header);
  * ```

@@ -1,4 +1,4 @@
-"""s402 Conformance Test Runner — verifies Python implementation against 132 test vectors.
+"""s402 Conformance Test Runner — verifies Python implementation against conformance test vectors.
 
 These vectors are the SAME ones used by the TypeScript reference implementation.
 Passing all of them proves the Python implementation is wire-compatible.
@@ -157,14 +157,16 @@ class TestBodyTransport:
 
 class TestCompatNormalize:
     vectors = load_vectors("compat-normalize.json")
+    # Fixed reference timestamp for deterministic maxTimeoutSeconds → expiresAt conversion
+    COMPAT_REFERENCE_NOW = 1700000000000  # 2023-11-14T22:13:20Z
 
     @pytest.mark.parametrize("vector", vectors, ids=[v["description"] for v in vectors])
     def test_normalize(self, vector: dict) -> None:
         if vector.get("shouldReject"):
             with pytest.raises(S402Error):
-                normalize_requirements(vector["input"])
+                normalize_requirements(vector["input"], now=self.COMPAT_REFERENCE_NOW)
         else:
-            result = normalize_requirements(vector["input"])
+            result = normalize_requirements(vector["input"], now=self.COMPAT_REFERENCE_NOW)
             assert result == vector["expected"]
 
 

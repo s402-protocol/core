@@ -58,9 +58,9 @@ export class s402ResourceServer {
    * const requirements = server.buildRequirements({
    *   schemes: ['exact'],
    *   price: '1000000',
-   *   network: 'sui:mainnet',
-   *   payTo: '0xYOUR_ADDRESS',
-   *   asset: '0x2::sui::SUI',
+   *   network: 'your-chain:mainnet',
+   *   payTo: 'YOUR_ADDRESS',
+   *   asset: 'NATIVE_TOKEN',
    * });
    * res.status(402).setHeader('payment-required', encodePaymentRequired(requirements));
    * ```

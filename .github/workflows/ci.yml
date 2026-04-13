@@ -67,33 +67,35 @@ jobs:
       - name: Grep for chain-specific patterns in s402 src/
         run: |
           VIOLATIONS=0
+          # Strip comments: // line comments, /* block openers, and JSDoc * continuation lines
+          STRIP_COMMENTS='grep -v "^\s*//" | grep -v "^\s*\*" | grep -v "^\s*/\*"'
 
           # Sui SDK imports
-          if grep -rn '@mysten/sui' typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+          if grep -rn '@mysten/sui' typescript/src/ --include='*.ts' | eval "$STRIP_COMMENTS"; then
             echo "::error::Found @mysten/sui imports in s402 src/ — these belong in @sweefi/sui"
             VIOLATIONS=$((VIOLATIONS + 1))
           fi
 
           # Sui coin type literal
-          if grep -rn '0x2::sui::SUI' typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+          if grep -rn '0x2::sui::SUI' typescript/src/ --include='*.ts' | eval "$STRIP_COMMENTS"; then
             echo "::error::Found Sui coin type literal in s402 src/"
             VIOLATIONS=$((VIOLATIONS + 1))
           fi
 
           # Solana SDK imports
-          if grep -rn '@solana/web3' typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+          if grep -rn '@solana/web3' typescript/src/ --include='*.ts' | eval "$STRIP_COMMENTS"; then
             echo "::error::Found @solana/web3 imports in s402 src/"
             VIOLATIONS=$((VIOLATIONS + 1))
           fi
 
           # Ethers.js imports
-          if grep -rn "from ['\"]ethers['\"]" typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+          if grep -rn "from ['\"]ethers['\"]" typescript/src/ --include='*.ts' | eval "$STRIP_COMMENTS"; then
             echo "::error::Found ethers imports in s402 src/"
             VIOLATIONS=$((VIOLATIONS + 1))
           fi
 
           # Viem imports
-          if grep -rn "from ['\"]viem['\"]" typescript/src/ --include='*.ts' | grep -v '^\s*//' | grep -v '/\*'; then
+          if grep -rn "from ['\"]viem['\"]" typescript/src/ --include='*.ts' | eval "$STRIP_COMMENTS"; then
             echo "::error::Found viem imports in s402 src/"
             VIOLATIONS=$((VIOLATIONS + 1))
           fi

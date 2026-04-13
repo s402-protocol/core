@@ -30,7 +30,7 @@ S402_HEADERS = {
 
 S402_CONTENT_TYPE = "application/s402+json"
 
-VALID_SCHEMES = frozenset({"exact", "stream", "escrow", "unlock", "prepaid"})
+VALID_SCHEMES = frozenset({"exact", "upto", "stream", "escrow", "unlock", "prepaid"})
 
 MAX_HEADER_BYTES = 64 * 1024
 
@@ -55,11 +55,13 @@ _REQUIREMENTS_KEYS = [
     "s402Version", "accepts", "network", "asset", "amount", "payTo",
     "facilitatorUrl", "mandate", "protocolFeeBps", "protocolFeeAddress",
     "receiptRequired", "settlementMode", "expiresAt",
-    "stream", "escrow", "unlock", "prepaid", "extensions",
+    "upto", "settlementOverrides", "prepaid", "stream", "escrow", "unlock", "extensions",
 ]
 
 _SUB_OBJECT_KEYS: dict[str, list[str]] = {
     "mandate": ["required", "minPerTx", "coinType"],
+    "upto": ["maxAmount", "settlementDeadlineMs", "usageReportUrl", "estimatedAmount"],
+    "settlementOverrides": ["actualAmount"],
     "stream": ["ratePerSecond", "budgetCap", "minDeposit", "streamSetupUrl"],
     "escrow": ["seller", "arbiter", "deadlineMs"],
     "unlock": ["encryptionId", "encryptedContentId", "encryptionServiceId"],
@@ -70,6 +72,7 @@ _PAYLOAD_TOP_KEYS = ["s402Version", "scheme", "payload"]
 
 _PAYLOAD_INNER_KEYS: dict[str, list[str]] = {
     "exact": ["transaction", "signature"],
+    "upto": ["transaction", "signature", "maxAmount", "settlementCeiling"],
     "stream": ["transaction", "signature"],
     "escrow": ["transaction", "signature"],
     "unlock": ["transaction", "signature", "encryptionId"],
@@ -78,7 +81,8 @@ _PAYLOAD_INNER_KEYS: dict[str, list[str]] = {
 
 _SETTLE_RESPONSE_KEYS = [
     "success", "txDigest", "receiptId", "finalityMs",
-    "streamId", "escrowId", "balanceId", "error", "errorCode",
+    "actualAmount", "depositId", "balanceId", "streamId", "escrowId",
+    "error", "errorCode",
 ]
 
 # ══════════════════════════════════════════════════════════════
@@ -159,6 +163,8 @@ def validate_mandate_shape(value: Any) -> None:
     if not isinstance(value.get("required"), bool):
         raise S402Error("INVALID_PAYLOAD", f"mandate.required must be a boolean, got {type(value.get('required')).__name__}")
     _assert_optional_string(value, "minPerTx", "mandate")
+    if isinstance(value.get("minPerTx"), str) and not is_valid_amount(value["minPerTx"]):
+        raise S402Error("INVALID_PAYLOAD", f'mandate.minPerTx must be a non-negative integer string, got "{value["minPerTx"]}"')
     _assert_optional_string(value, "coinType", "mandate")
 
 
@@ -195,6 +201,33 @@ def validate_unlock_shape(value: Any) -> None:
     _assert_string(value, "encryptionServiceId", "unlock")
 
 
+def validate_upto_shape(value: Any) -> None:
+    if not isinstance(value, dict):
+        raise S402Error("INVALID_PAYLOAD", f"upto must be a plain object, got {type(value).__name__}")
+    _assert_string(value, "maxAmount", "upto")
+    if isinstance(value.get("maxAmount"), str) and not is_valid_amount(value["maxAmount"]):
+        raise S402Error("INVALID_PAYLOAD", f'upto.maxAmount must be a non-negative integer string, got "{value["maxAmount"]}"')
+    _assert_string(value, "settlementDeadlineMs", "upto")
+    if isinstance(value.get("settlementDeadlineMs"), str) and not is_valid_amount(value["settlementDeadlineMs"]):
+        raise S402Error("INVALID_PAYLOAD", f'upto.settlementDeadlineMs must be a non-negative integer string (Unix timestamp ms), got "{value["settlementDeadlineMs"]}"')
+    _assert_optional_string(value, "usageReportUrl", "upto")
+    _assert_optional_string(value, "estimatedAmount", "upto")
+    if isinstance(value.get("estimatedAmount"), str):
+        if not is_valid_amount(value["estimatedAmount"]):
+            raise S402Error("INVALID_PAYLOAD", f'upto.estimatedAmount must be a non-negative integer string, got "{value["estimatedAmount"]}"')
+        if isinstance(value.get("maxAmount"), str) and is_valid_amount(value["maxAmount"]):
+            est = int(value["estimatedAmount"])
+            max_amt = int(value["maxAmount"])
+            if est > max_amt:
+                raise S402Error("INVALID_PAYLOAD", f"upto.estimatedAmount ({value['estimatedAmount']}) must be <= maxAmount ({value['maxAmount']})")
+
+
+def validate_settlement_overrides_shape(value: Any) -> None:
+    if not isinstance(value, dict):
+        raise S402Error("INVALID_PAYLOAD", f"settlementOverrides must be a plain object, got {type(value).__name__}")
+    _assert_optional_string(value, "actualAmount", "settlementOverrides")
+
+
 def validate_prepaid_shape(value: Any) -> None:
     if not isinstance(value, dict):
         raise S402Error("INVALID_PAYLOAD", f"prepaid must be a plain object, got {type(value).__name__}")
@@ -224,6 +257,10 @@ def validate_prepaid_shape(value: Any) -> None:
 def _validate_sub_objects(record: dict[str, Any]) -> None:
     if "mandate" in record and record["mandate"] is not None:
         validate_mandate_shape(record["mandate"])
+    if "upto" in record and record["upto"] is not None:
+        validate_upto_shape(record["upto"])
+    if "settlementOverrides" in record and record["settlementOverrides"] is not None:
+        validate_settlement_overrides_shape(record["settlementOverrides"])
     if "stream" in record and record["stream"] is not None:
         validate_stream_shape(record["stream"])
     if "escrow" in record and record["escrow"] is not None:
@@ -358,12 +395,34 @@ def _validate_payload_shape(obj: Any) -> None:
     if not isinstance(inner.get("signature"), str):
         raise S402Error("INVALID_PAYLOAD", f"payload.signature must be a string, got {type(inner.get('signature')).__name__}")
 
+    if obj["scheme"] == "upto":
+        if not isinstance(inner.get("maxAmount"), str):
+            raise S402Error("INVALID_PAYLOAD", f"upto payload requires maxAmount (string), got {type(inner.get('maxAmount')).__name__}")
+        if isinstance(inner.get("maxAmount"), str) and not is_valid_amount(inner["maxAmount"]):
+            raise S402Error("INVALID_PAYLOAD", f'upto payload maxAmount must be a non-negative integer string, got "{inner["maxAmount"]}"')
+        if "settlementCeiling" in inner and inner["settlementCeiling"] is not None:
+            if not isinstance(inner["settlementCeiling"], str):
+                raise S402Error("INVALID_PAYLOAD", f"upto payload settlementCeiling must be a string if provided, got {type(inner['settlementCeiling']).__name__}")
+            if not is_valid_amount(inner["settlementCeiling"]):
+                raise S402Error("INVALID_PAYLOAD", f'upto payload settlementCeiling must be a non-negative integer string, got "{inner["settlementCeiling"]}"')
+            ceiling = int(inner["settlementCeiling"])
+            if ceiling < 1:
+                raise S402Error("INVALID_PAYLOAD", f'upto payload settlementCeiling must be >= 1, got "{inner["settlementCeiling"]}"')
+            max_amt = int(inner["maxAmount"])
+            if ceiling > max_amt:
+                raise S402Error("INVALID_PAYLOAD", f"upto payload settlementCeiling ({inner['settlementCeiling']}) must be <= maxAmount ({inner['maxAmount']})")
     if obj["scheme"] == "unlock" and not isinstance(inner.get("encryptionId"), str):
         raise S402Error("INVALID_PAYLOAD", f"unlock payload requires encryptionId (string), got {type(inner.get('encryptionId')).__name__}")
-    if obj["scheme"] == "prepaid" and not isinstance(inner.get("ratePerCall"), str):
-        raise S402Error("INVALID_PAYLOAD", f"prepaid payload requires ratePerCall (string), got {type(inner.get('ratePerCall')).__name__}")
-    if obj["scheme"] == "prepaid" and "maxCalls" in inner and inner["maxCalls"] is not None and not isinstance(inner["maxCalls"], str):
-        raise S402Error("INVALID_PAYLOAD", f"prepaid payload maxCalls must be a string if provided, got {type(inner['maxCalls']).__name__}")
+    if obj["scheme"] == "prepaid":
+        if not isinstance(inner.get("ratePerCall"), str):
+            raise S402Error("INVALID_PAYLOAD", f"prepaid payload requires ratePerCall (string), got {type(inner.get('ratePerCall')).__name__}")
+        if isinstance(inner.get("ratePerCall"), str) and not is_valid_amount(inner["ratePerCall"]):
+            raise S402Error("INVALID_PAYLOAD", f'prepaid payload ratePerCall must be a non-negative integer string, got "{inner["ratePerCall"]}"')
+        if "maxCalls" in inner and inner["maxCalls"] is not None:
+            if not isinstance(inner["maxCalls"], str):
+                raise S402Error("INVALID_PAYLOAD", f"prepaid payload maxCalls must be a string if provided, got {type(inner['maxCalls']).__name__}")
+            if not is_valid_amount(inner["maxCalls"]):
+                raise S402Error("INVALID_PAYLOAD", f'prepaid payload maxCalls must be a non-negative integer string, got "{inner["maxCalls"]}"')
 
 
 def _validate_settle_shape(obj: Any) -> None:
@@ -381,6 +440,10 @@ def _validate_settle_shape(obj: Any) -> None:
         v = obj["finalityMs"]
         if isinstance(v, bool) or not isinstance(v, (int, float)) or (isinstance(v, float) and not math.isfinite(v)):
             raise S402Error("INVALID_PAYLOAD", f"Malformed settle response: finalityMs must be a finite number, got {type(v).__name__}")
+    if "actualAmount" in obj and obj["actualAmount"] is not None and not isinstance(obj["actualAmount"], str):
+        raise S402Error("INVALID_PAYLOAD", f"Malformed settle response: actualAmount must be a string, got {type(obj['actualAmount']).__name__}")
+    if "depositId" in obj and obj["depositId"] is not None and not isinstance(obj["depositId"], str):
+        raise S402Error("INVALID_PAYLOAD", f"Malformed settle response: depositId must be a string, got {type(obj['depositId']).__name__}")
     if "streamId" in obj and obj["streamId"] is not None and not isinstance(obj["streamId"], str):
         raise S402Error("INVALID_PAYLOAD", f"Malformed settle response: streamId must be a string, got {type(obj['streamId']).__name__}")
     if "escrowId" in obj and obj["escrowId"] is not None and not isinstance(obj["escrowId"], str):
