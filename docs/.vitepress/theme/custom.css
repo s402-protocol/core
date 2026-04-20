@@ -59,3 +59,38 @@
     max-height: 157px;
   }
 }
+
+/*
+ * Cramped-desktop fix: between 960px and ~1150px (also hit when users zoom in),
+ * VitePress keeps the hero in a row while the text column has no min-width:0,
+ * so long taglines overflow into the image. Collapse to stacked layout in that
+ * range, and above it give the text column proper shrink semantics.
+ */
+@media (min-width: 960px) and (max-width: 1150px) {
+  .VPHero .container {
+    flex-direction: column;
+    align-items: center;
+    gap: 32px;
+  }
+  .VPHero .main {
+    text-align: center;
+    max-width: 640px;
+    order: 1;
+  }
+  .VPHero .image {
+    order: 2;
+  }
+  .VPHero .actions {
+    justify-content: center;
+  }
+}
+
+@media (min-width: 1151px) {
+  .VPHero .main {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+  .VPHero .image {
+    flex-shrink: 0;
+  }
+}
