@@ -75,6 +75,13 @@
       },
       "default": "./dist/compat.mjs"
     },
+    "./compat-mpp": {
+      "import": {
+        "types": "./dist/compat-mpp.d.mts",
+        "default": "./dist/compat-mpp.mjs"
+      },
+      "default": "./dist/compat-mpp.mjs"
+    },
     "./errors": {
       "import": {
         "types": "./dist/errors.d.mts",

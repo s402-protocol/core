@@ -91,9 +91,11 @@ The compat layers let existing x402 and MPP traffic flow through an s402 server 
 |---|---|---|---|
 | **x402 V1** | `s402/compat` | ✅ Production | `x-payment` header, base64 JSON, `exact` scheme |
 | **x402 V2** | `s402/compat` | ✅ Production | Multi-chain extensions, new error shapes |
-| **MPP Charge** | `s402/compat-mpp` | 📋 v0.3 roadmap | 4-tier credential hierarchy: permit2 / authorization / transaction / hash |
-| **MPP Session** | `s402/compat-mpp` | 📋 v0.3 roadmap | Cumulative voucher ↔ Prepaid translation |
-| **MPP `Accept-Payment`** | core `s402` | 📋 v0.3 roadmap | q-value parsing, scheme negotiation ([DAN-341](https://linear.app/dannydevs/issue/DAN-341)) |
+| **MPP Charge (read)** | `s402/compat-mpp` | 🟡 v0.3 | Challenge parsing + `fromMppChargeChallenge` for blockchain methods (tempo/evm/solana/lightning/stellar) |
+| **MPP Charge (write)** | `s402/compat-mpp` | 📋 v0.4 roadmap | Emit MPP-shaped `WWW-Authenticate: Payment` challenges |
+| **MPP Session** | `s402/compat-mpp` | 📋 v0.4 roadmap | Cumulative voucher ↔ Prepaid translation |
+| **MPP `Accept-Payment`** | `s402/compat-mpp` | ✅ Production | `parseMppAcceptPayment` — method/intent pairs with wildcards + q-values |
+| **s402 `Accept-Payment`** | core `s402` | ✅ Production | Flat scheme token negotiation ([DAN-341](https://linear.app/dannydevs/issue/DAN-341)) |
 
 See [Migrating from x402](/guide/upgrade-x402) and [Migrating from MPP](/guide/upgrade-mpp) for code.
 

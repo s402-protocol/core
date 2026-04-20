@@ -6,6 +6,7 @@ export default defineConfig({
     types: 'src/types.ts',
     http: 'src/http.ts',
     compat: 'src/compat.ts',
+    'compat-mpp': 'src/compat-mpp.ts',
     errors: 'src/errors.ts',
     receipts: 'src/receipts.ts',
     'test-utils': 'src/test-utils.ts',

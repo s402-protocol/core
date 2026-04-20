@@ -16,6 +16,16 @@ deno add npm:s402
 
 > **ESM-only.** This package ships ES modules only (`"type": "module"`). Requires Node.js >= 18. CommonJS `require()` is not supported.
 
+## Governing Principle
+
+> **We interop when possible. We superset when wise.**
+
+s402 does not fight x402 or Stripe MPP head-on. s402 **absorbs** them as payment-in formats where their design choices are legitimate (exact, upto), and **supersets** them on primitives their business models cannot ship (prepaid with on-chain ceiling, streaming with rate enforcement, escrow with arbiter, Seal-encrypted unlock).
+
+This is the Postgres-eats-MySQL move: the superset always eats the subset because adopters never lose what they had — they only gain. The asymmetry is in s402's favor because competitors' constraints forbid reciprocating. Stripe cannot accept s402 schemes without bypassing card-processing margin. x402's 2-scheme governance envelope cannot absorb s402's 5 without re-ratification.
+
+See [ADR-005](./docs/adr/005-interop-superset-principle.md) for the full reasoning.
+
 ## Why s402?
 
 HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a payment protocol that actually works. Coinbase's x402 proved the concept on EVM. s402 takes it further by leveraging what makes Sui different.

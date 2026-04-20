@@ -9,7 +9,7 @@ Already running MPP (Stripe's Machine Payment Protocol on Tempo)? s402 is design
 This guide is for teams evaluating s402 alongside MPP, or already running MPP and considering s402 for the patterns MPP doesn't cover.
 
 ::: info Availability
-MPP compat adapter is **on the v0.3 roadmap** ([tracked as DAN-339](https://linear.app/dannydevs/issue/DAN-339)). This page describes the planned API and migration pattern. Today, you can still adopt s402 for its native schemes; the MPP bridge lands with v0.3.
+MPP compat **read path** (challenge parsing + Charge-to-s402 translation) ships with v0.3 — the code is in the `s402/compat-mpp` entry point. Write-path emission (s402 → MPP challenges) and the Session-to-Prepaid shim are on the v0.4 roadmap ([DAN-339](https://linear.app/dannydevs/issue/DAN-339)). Today you can consume MPP Charge 402 responses natively; emitting MPP challenges still requires routing to an MPP-native server.
 :::
 
 ## TL;DR
@@ -79,27 +79,52 @@ Result: MPP clients pay via MPP (card, Lightning, Tempo EVM). s402 clients pay v
 
 ## Migrating off MPP (if you want to)
 
-Some teams want to consolidate on a single protocol. s402's compat layer makes that mechanical:
+Some teams want to consolidate on a single protocol. s402's compat layer makes that mechanical — the read path ships with v0.3, letting an s402 client consume an MPP Charge 402 response using native s402 types:
 
 ```typescript
-// Receiving an MPP challenge as an s402 client
-import { fromMppRequirements } from 's402/compat-mpp';
+// Receiving an MPP Charge challenge as an s402 client
+import {
+  parseWwwAuthenticatePayment,
+  fromMppChargeChallenge,
+} from 's402/compat-mpp';
 
-const mppHeader = response.headers.get('WWW-Authenticate');
-const s402Requirements = fromMppRequirements(mppHeader);
-
-// Now build the payment using s402 types, s402 wallet
-const payment = await buildS402Payment(s402Requirements);
+const challenge = parseWwwAuthenticatePayment(
+  response.headers.get('WWW-Authenticate'),
+);
+if (challenge?.intent === 'charge') {
+  const requirements = fromMppChargeChallenge(challenge);
+  // requirements is s402PaymentRequirements with scheme "exact",
+  // network resolved (e.g., "tempo:42431", "eip155:8453"),
+  // asset = currency, payTo = recipient, expiresAt from RFC 3339.
+  const payment = await buildS402Payment(requirements);
+}
 ```
 
-The compat layer handles MPP's **4-tier credential hierarchy** (added in their April 17 spec release, PR #213):
+`parseWwwAuthenticatePayment` extracts the RFC 9110 auth-params; `fromMppChargeChallenge` decodes the base64url JCS request body, enforces blockchain-method invariants (recipient required, amount integer, non-expired), and returns an `s402PaymentRequirements` with `scheme: 'exact'`.
 
-| MPP credential | s402 scheme |
-|---|---|
-| `permit2` (EIP-712, server-broadcast) | `exact` / `upto` |
-| `authorization` (EIP-3009) | `exact` |
-| `transaction` (raw ERC-20 transfer sig) | `exact` |
-| `hash` (client-broadcast) | `exact` with Direct mode |
+### Method coverage
+
+The translator handles MPP's **blockchain Charge methods** — the subset where the request shape exposes a payTo and asset that s402's exact scheme can consume:
+
+| MPP method | s402 network | Notes |
+|---|---|---|
+| `tempo` | `tempo:{chainId}` | chainId from `methodDetails.chainId` |
+| `evm` | `eip155:{chainId}` | EIP-155 convention |
+| `solana` | `solana:unknown` | chain implicit in method |
+| `lightning` | `lightning:unknown` | bolt11 invoice in methodDetails |
+| `stellar` | `stellar:unknown` | chain implicit in method |
+| `stripe`, `card` | — | processor routes internally; no payTo exposed |
+
+Processor methods (Stripe, card) have no payTo in the Charge request — they route payments through the processor's internal ledger. Keep those on the MPP path; the translator rejects them explicitly.
+
+### What's not in the read path yet
+
+The v0.3 read path intentionally stops short of:
+
+- **Session intent** — cumulative voucher model needs a translation shim to Prepaid receipts
+- **Credential dispatch** — each method spec (EVM permit2/authorization/transaction/hash, Tempo transaction/hash/proof) defines its own payload shape; `decodeMppCredential` exposes the envelope but method-specific handling lives in chain adapters
+- **HMAC challenge-binding verification** — requires the server's secret; implemented in the facilitator, not this client-facing module
+- **Write path** (s402 → MPP emission) — on the v0.4 roadmap
 
 ## Honest comparison
 
@@ -121,7 +146,7 @@ No. s402 is a chain-agnostic wire format. You can deploy on any chain, but Sui i
 
 ### Does s402 speak MPP's `WWW-Authenticate: Payment` header?
 
-Via the compat layer (coming with v0.3). Today, s402 uses its own headers (`payment-required`, `x-payment`); the compat module will translate both directions.
+Read path lands in v0.3: `parseWwwAuthenticatePayment` + `fromMppChargeChallenge` in `s402/compat-mpp`. Write-path emission (s402 server sending an MPP-shaped `WWW-Authenticate: Payment` header) is v0.4 roadmap. Native s402 uses its own headers (`payment-required`, `x-payment`); the two coexist via the `Accept-Payment` negotiation.
 
 ### Can MPP clients consume s402 NFT receipts?
 
