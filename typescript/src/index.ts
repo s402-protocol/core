@@ -129,6 +129,14 @@ export type { JsonValue } from './canonicalization.js';
 // Not re-exported here to keep the main barrel focused on s402-native APIs.
 // import { normalizeRequirements, fromX402Requirements } from 's402/compat';
 
+// Accept-Payment content negotiation (RFC 7231-style q-values)
+export {
+  parseAcceptPayment,
+  formatAcceptPayment,
+  selectBestScheme,
+} from './accept-payment.js';
+export type { AcceptPaymentEntry } from './accept-payment.js';
+
 // Receipt HTTP helpers (v0.2 signed usage receipts)
 export { formatReceiptHeader, parseReceiptHeader, S402_RECEIPT_HEADER } from './receipts.js';
 export type { s402Receipt, s402ReceiptSigner, s402ReceiptVerifier } from './receipts.js';

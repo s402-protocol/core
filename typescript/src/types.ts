@@ -573,4 +573,6 @@ export const S402_HEADERS = {
   PAYMENT_RESPONSE: 'payment-response',
   /** Client → server: active stream ID (phase 2 of stream protocol) */
   STREAM_ID: 'x-stream-id',
+  /** Client → server: scheme preference negotiation (RFC 7231-style q-values) */
+  ACCEPT_PAYMENT: 'accept-payment',
 } as const;
