@@ -29,46 +29,65 @@ An x402 client sending an `exact` payment to an s402 server works with **zero co
 
 ## Drop-in migration (server)
 
-If you have an x402 server today, swap one import:
+For `exact`-scheme traffic, the s402 V1 and x402 V1 wire formats are identical. If you have an x402 server today using the `exact` scheme, your existing x402 clients work against an s402 server with **zero changes on either side** — you just replace your x402 library with `s402` and keep the same headers and flow.
 
 ```typescript
-// Before
-import { verifyX402Payment } from 'x402';
+import {
+  s402ResourceServer,
+  s402Facilitator,
+  encodePaymentRequired,
+  decodePaymentPayload,
+  encodeSettleResponse,
+  S402_HEADERS,
+} from 's402';
 
-// After
-import { normalizeRequirements, verifyPayment } from 's402/compat';
+const server = new s402ResourceServer();
+server.register(/* network */, /* your server scheme */);
+server.setFacilitator(/* your facilitator */);
 
-// Your existing handler, unchanged in shape:
+const requirements = server.buildRequirements({
+  schemes: ['exact'],
+  network: 'sui:mainnet',
+  asset: '0x2::sui::SUI',
+  price: '1000000',
+  payTo: process.env.PAY_TO_ADDRESS!,
+});
+
 async function handlePaidRequest(req: Request): Promise<Response> {
-  const header = req.headers.get('x-payment');
+  const header = req.headers.get(S402_HEADERS.PAYMENT);
+
   if (!header) {
-    return new Response('Payment Required', {
+    return new Response(JSON.stringify({ error: 'Payment Required' }), {
       status: 402,
-      headers: {
-        'payment-required': buildPaymentRequired({
-          accepts: ['exact'],
-          network: 'sui:mainnet',
-          asset: '0x2::sui::SUI',
-          amount: '1000000',
-          payTo: process.env.PAY_TO_ADDRESS!,
-        }),
-      },
+      headers: { [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements) },
     });
   }
 
-  // Works with payloads from x402 V1 clients OR s402 clients
-  const normalized = normalizeRequirements(header);
-  const verified = await verifyPayment(normalized);
+  // decodePaymentPayload accepts x402 V1 `exact` payloads natively.
+  const payload = decodePaymentPayload(header);
+  const result = await server.process(payload, requirements);
 
-  if (!verified.ok) {
-    return new Response(verified.error.suggestedAction, { status: 402 });
+  if (!result.success) {
+    return new Response(JSON.stringify({ error: result.error }), { status: 402 });
   }
 
-  return deliverContent();
+  return new Response(/* your content */, {
+    headers: { [S402_HEADERS.PAYMENT_RESPONSE]: encodeSettleResponse(result) },
+  });
 }
 ```
 
-That's the migration. One import swap. Your existing clients continue to work.
+For **x402 V2 requirements** (the envelope format with `accepts: [{...}, ...]`), use the compat layer to normalize them into s402 shape:
+
+```typescript
+import { normalizeRequirements } from 's402/compat';
+
+// Auto-detects s402 vs x402 V1 flat vs x402 V2 envelope.
+const requirements = normalizeRequirements(JSON.parse(atob(headerFromUpstream)));
+// Always returns s402PaymentRequirements — call server.process() as normal.
+```
+
+That's the migration. Your existing clients continue to work.
 
 ## What you gain without changing app code
 

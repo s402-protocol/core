@@ -47,31 +47,33 @@ If your use case is "pay a card-only merchant," use MPP. s402 is not trying to b
 You don't need to migrate *away* from MPP to adopt s402. Advertise both protocols on the same endpoint via the `Accept-Payment` header, and let each client pay its native way.
 
 ```typescript
-// Your server handler
-import { parseAcceptPayment, selectBestScheme } from 's402';
-import { emitMppChallenge } from 's402/compat-mpp';
+import { parseAcceptPayment, selectBestScheme, S402_HEADERS } from 's402';
 
 async function handle(req: Request): Promise<Response> {
-  const accept = req.headers.get('Accept-Payment');
-  const preferred = accept ? parseAcceptPayment(accept) : null;
+  const preferred = parseAcceptPayment(req.headers.get(S402_HEADERS.ACCEPT_PAYMENT));
 
-  // Advertise what you support
+  // Advertise what this endpoint speaks.
   const supported = [
     's402/exact',       // s402 native
     's402/prepaid',     // s402 high-frequency
-    'tempo/charge',     // MPP on Tempo
-    'stripe/charge',    // MPP card rail
+    'tempo/charge',     // MPP on Tempo (v0.3 compat)
+    'stripe/charge',    // MPP card rail (v0.3 compat)
   ];
 
-  const chosen = selectBestScheme(preferred ?? [], supported);
+  const chosen = selectBestScheme(preferred, supported);
 
   if (chosen?.startsWith('tempo/') || chosen?.startsWith('stripe/')) {
-    return emitMppChallenge(chosen, { amount: '0.01' });
+    // v0.3: delegate to 's402/compat-mpp' challenge builder.
+    // Until then, route MPP traffic to your existing MPP server path.
+    return routeToMppHandler(req, chosen);
   }
 
-  return emitS402Challenge(chosen ?? 's402/exact', { amount: '0.01' });
+  // s402-native path — build a standard payment-required response.
+  return buildS402Challenge(chosen ?? 's402/exact');
 }
 ```
+
+`parseAcceptPayment` and `selectBestScheme` ship today in `s402`. The MPP challenge builder arrives with the v0.3 compat module — until then, `chosen` tells you *which* protocol to route to, and you forward MPP-shaped requests to whatever MPP server you already operate.
 
 Result: MPP clients pay via MPP (card, Lightning, Tempo EVM). s402 clients pay via s402 (Sui Exact, Prepaid, etc.). Neither client stack changes.
 
