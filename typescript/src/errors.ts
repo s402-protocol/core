@@ -127,7 +127,7 @@ const ERROR_HINTS: Record<s402ErrorCodeType, { retryable: boolean; suggestedActi
 /**
  * Create a typed s402 error with recovery hints.
  *
- * @param code - One of the 16 s402 error codes (e.g. 'SETTLEMENT_FAILED')
+ * @param code - One of the s402 error codes (e.g. 'SETTLEMENT_FAILED')
  * @param message - Optional human-readable message (defaults to the code)
  * @returns Error info object with code, message, retryable flag, and suggestedAction
  *

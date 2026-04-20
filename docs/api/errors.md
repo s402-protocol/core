@@ -29,6 +29,14 @@ import { s402Error, s402ErrorCode, createS402Error } from 's402/errors';
 | `SIGNATURE_INVALID` | No | Re-sign the transaction with the correct keypair |
 | `REQUIREMENTS_EXPIRED` | Yes | Re-fetch payment requirements from the server |
 | `VERIFICATION_FAILED` | No | Check payment amount and transaction structure |
+| `DIGEST_MISMATCH` | **No** | Facilitator returned a tx digest that doesn't match the signed payload. Do NOT retry — treat as unsettled and investigate the facilitator. |
+| `EXTENSION_FAILED` | No | A critical extension blocked the flow. Contact the extension provider or disable the extension. |
+| `S402_TX_BINDING_MISMATCH` | **No** | Envelope `txBinding` doesn't match the locally recomputed value — the facilitator is bound to a different request than the one you sent. Do NOT retry against the same facilitator. Escalate out-of-band. |
+| `S402_UNKNOWN_ALGORITHM` | No | Envelope uses a digest or signature algorithm not in your accepted set. Upgrade the client or reject — never fall through to a weaker default. |
+
+::: warning Non-retryable security errors
+`DIGEST_MISMATCH` and `S402_TX_BINDING_MISMATCH` indicate the facilitator is bound to a different transaction or request than the one your client signed. Retrying is unsafe — a retry loop against a misbehaving facilitator is what turns a correctness bug into a financial incident.
+:::
 
 ## `s402Error` Class
 
