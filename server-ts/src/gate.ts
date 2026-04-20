@@ -247,6 +247,7 @@ async function build402(
       headers: {
         'content-type': JSON_CT,
         'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
         'access-control-expose-headers': CORS_EXPOSE,
         [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
       },
@@ -269,6 +270,7 @@ async function buildError(
       headers: {
         'content-type': JSON_CT,
         'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
         'access-control-expose-headers': CORS_EXPOSE,
       },
     },
@@ -283,11 +285,13 @@ async function buildError(
  */
 function withHygiene(response: Response): Response {
   const needsCache = !response.headers.has('cache-control');
+  const needsSniff = !response.headers.has('x-content-type-options');
   const needsExpose = !response.headers.has('access-control-expose-headers');
-  if (!needsCache && !needsExpose) return response;
+  if (!needsCache && !needsSniff && !needsExpose) return response;
 
   const headers = new Headers(response.headers);
   if (needsCache) headers.set('cache-control', 'no-store');
+  if (needsSniff) headers.set('x-content-type-options', 'nosniff');
   if (needsExpose) mergeExposeHeaders(headers);
   return new Response(response.body, {
     status: response.status,

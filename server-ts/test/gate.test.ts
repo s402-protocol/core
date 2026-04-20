@@ -361,6 +361,7 @@ describe('s402Gate — HTTP hygiene', () => {
 
     expect(res.status).toBe(402);
     expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     const expose = res.headers.get('access-control-expose-headers') ?? '';
     expect(expose.toLowerCase()).toContain(S402_HEADERS.PAYMENT_REQUIRED);
     expect(expose.toLowerCase()).toContain(S402_HEADERS.PAYMENT_RESPONSE);
@@ -378,6 +379,7 @@ describe('s402Gate — HTTP hygiene', () => {
 
     expect(res.status).toBe(402);
     expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(res.headers.get('access-control-expose-headers')?.toLowerCase())
       .toContain(S402_HEADERS.PAYMENT_REQUIRED);
   });
@@ -418,7 +420,7 @@ describe('s402Gate — HTTP hygiene', () => {
     expect(expose.toLowerCase()).toContain(S402_HEADERS.PAYMENT_RESPONSE);
   });
 
-  it('on402 custom response gains cache-control + CORS expose when absent', async () => {
+  it('on402 custom response gains cache-control + nosniff + CORS expose when absent', async () => {
     const gate = s402Gate({
       server,
       requirements,
@@ -430,6 +432,7 @@ describe('s402Gate — HTTP hygiene', () => {
 
     expect(res.status).toBe(402);
     expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('x-content-type-options')).toBe('nosniff');
     expect(res.headers.get('access-control-expose-headers')?.toLowerCase())
       .toContain(S402_HEADERS.PAYMENT_REQUIRED);
   });
