@@ -860,7 +860,13 @@ function validateSettleShape(obj: unknown): void {
 // Use body transport for large/complex DeFi PTBs.
 // ══════════════════════════════════════════════════════════════
 
-/** Content type for s402 JSON body transport */
+/**
+ * Content type for s402 JSON body transport.
+ *
+ * Covers generic s402 request/response bodies (payload, requirements, legacy
+ * settle). The settlement envelope (ADR-007) has its own more specific media
+ * type — see `S402_ENVELOPE_CONTENT_TYPE` in `./envelope`.
+ */
 export const S402_CONTENT_TYPE = 'application/s402+json' as const;
 
 /** Encode payment requirements as JSON string (for response body) */
@@ -932,14 +938,17 @@ export function decodeSettleBody(body: string): s402SettleResponse {
 /**
  * Detect transport mode from an incoming request.
  *
- * Checks Content-Type for body transport, then falls back to header detection.
- * Returns 'body' if Content-Type is application/s402+json.
+ * Checks Content-Type for body transport (generic `application/s402+json`
+ * OR the envelope-specific `application/vnd.s402.envelope+json`), then falls
+ * back to header detection.
+ * Returns 'body' if either s402 body media type is present.
  * Returns 'header' if x-payment header is present.
  * Returns 'unknown' otherwise.
  */
 export function detectTransport(request: { headers: Headers }): 'header' | 'body' | 'unknown' {
   const contentType = request.headers.get('content-type');
   if (contentType?.includes(S402_CONTENT_TYPE)) return 'body';
+  if (contentType?.includes('application/vnd.s402.envelope+json')) return 'body';
   if (request.headers.get(S402_HEADERS.PAYMENT)) return 'header';
   return 'unknown';
 }

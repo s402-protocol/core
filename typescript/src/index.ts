@@ -90,6 +90,38 @@ export {
   decodeSettleBody,
   detectTransport,
 } from './http.js';
+
+// Settlement envelope (ADR-007) — chain-agnostic, typed response format.
+export {
+  S402_ENVELOPE_CONTENT_TYPE,
+  computeTxBinding,
+  buildSettledEnvelope,
+  buildVerifiedEnvelope,
+  buildRejectedEnvelope,
+  buildPendingEnvelope,
+  encodeEnvelopeBody,
+  decodeEnvelopeBody,
+  validateEnvelopeShape,
+  verifyEnvelope,
+  constantTimeStringEqual,
+} from './envelope.js';
+export type {
+  s402Envelope,
+  s402EnvelopeBase,
+  s402EnvelopeSettled,
+  s402EnvelopeVerified,
+  s402EnvelopeRejected,
+  s402EnvelopePending,
+  s402Algs,
+  s402DigestAlg,
+  s402SigAlg,
+  BuildEnvelopeContext,
+  VerifyEnvelopeOptions,
+} from './envelope.js';
+
+// Canonicalization helpers (RFC 8785 JCS — primarily used internally for txBinding).
+export { canonicalize, canonicalizeToString } from './canonicalization.js';
+export type { JsonValue } from './canonicalization.js';
 // Internal validators (validateSubObjects, validateMandateShape, validate*Shape,
 // pickRequirementsFields) are available via 's402/http' for advanced use cases.
 

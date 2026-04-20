@@ -25,6 +25,8 @@ export const s402ErrorCode = {
   SETTLEMENT_FAILED: 'SETTLEMENT_FAILED',
   DIGEST_MISMATCH: 'DIGEST_MISMATCH',
   EXTENSION_FAILED: 'EXTENSION_FAILED',
+  S402_TX_BINDING_MISMATCH: 'S402_TX_BINDING_MISMATCH',
+  S402_UNKNOWN_ALGORITHM: 'S402_UNKNOWN_ALGORITHM',
 } as const;
 
 export type s402ErrorCodeType = (typeof s402ErrorCode)[keyof typeof s402ErrorCode];
@@ -107,6 +109,18 @@ const ERROR_HINTS: Record<s402ErrorCodeType, { retryable: boolean; suggestedActi
   EXTENSION_FAILED: {
     retryable: false,
     suggestedAction: 'A critical extension blocked the payment flow. Contact the extension provider or disable the extension.',
+  },
+  S402_TX_BINDING_MISMATCH: {
+    retryable: false,
+    suggestedAction:
+      'Envelope txBinding does not match locally recomputed value — the facilitator is bound to a different request than the one you sent. ' +
+      'Do NOT retry against the same facilitator. Treat as misbehavior and escalate out-of-band.',
+  },
+  S402_UNKNOWN_ALGORITHM: {
+    retryable: false,
+    suggestedAction:
+      'Envelope uses an algorithm (digest or signature) not in your accepted set. ' +
+      'Upgrade the client to support it or reject the envelope. Never fall through to a weaker default.',
   },
 };
 
