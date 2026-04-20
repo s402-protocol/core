@@ -94,6 +94,14 @@ export interface S402Gate extends S402Middleware {
 const JSON_CT = 'application/json; charset=utf-8';
 
 /**
+ * Headers we tell browsers they're allowed to read from the response. Without
+ * this, `fetch()` in a browser cannot see `payment-required` or
+ * `x-payment-response` due to CORS policy — the s402 flow silently breaks on
+ * cross-origin agent UIs.
+ */
+const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RESPONSE}`;
+
+/**
  * Create an s402 payment gate.
  *
  * @example Hono
@@ -149,8 +157,10 @@ export function s402Gate(options: S402GateOptions): S402Gate {
       }
 
       // Attach the settlement receipt header to the handler's response.
+      // Also ensure browsers can read the s402 headers cross-origin.
       const headers = new Headers(handlerResponse.headers);
       headers.set(S402_HEADERS.PAYMENT_RESPONSE, encodeSettleResponse(settleResult));
+      mergeExposeHeaders(headers);
       return new Response(handlerResponse.body, {
         status: handlerResponse.status,
         statusText: handlerResponse.statusText,
@@ -221,7 +231,7 @@ async function build402(
   requirements: s402PaymentRequirements,
 ): Promise<Response> {
   const custom = await options.on402?.(request, requirements);
-  if (custom) return custom;
+  if (custom) return withHygiene(custom);
 
   return new Response(
     JSON.stringify({
@@ -236,6 +246,8 @@ async function build402(
       status: 402,
       headers: {
         'content-type': JSON_CT,
+        'cache-control': 'no-store',
+        'access-control-expose-headers': CORS_EXPOSE,
         [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
       },
     },
@@ -248,13 +260,57 @@ async function buildError(
   error: { message: string; code?: string },
 ): Promise<Response> {
   const custom = await options.onError?.(request, error);
-  if (custom) return custom;
+  if (custom) return withHygiene(custom);
 
   return new Response(
     JSON.stringify({ error: error.message, errorCode: error.code ?? 'UNKNOWN' }),
     {
       status: 402,
-      headers: { 'content-type': JSON_CT },
+      headers: {
+        'content-type': JSON_CT,
+        'cache-control': 'no-store',
+        'access-control-expose-headers': CORS_EXPOSE,
+      },
     },
   );
+}
+
+/**
+ * Wrap a user-supplied (on402 / onError) `Response` with s402 hygiene headers
+ * without overwriting anything they set. Users keep full control of status +
+ * body; we only add defaults for `cache-control` and `access-control-expose-
+ * headers` when absent.
+ */
+function withHygiene(response: Response): Response {
+  const needsCache = !response.headers.has('cache-control');
+  const needsExpose = !response.headers.has('access-control-expose-headers');
+  if (!needsCache && !needsExpose) return response;
+
+  const headers = new Headers(response.headers);
+  if (needsCache) headers.set('cache-control', 'no-store');
+  if (needsExpose) mergeExposeHeaders(headers);
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/**
+ * Merge s402 header names into an existing `Access-Control-Expose-Headers`
+ * value (if the downstream handler already set one), preserving whatever else
+ * it already exposed.
+ */
+function mergeExposeHeaders(headers: Headers): void {
+  const existing = headers.get('access-control-expose-headers');
+  if (!existing) {
+    headers.set('access-control-expose-headers', CORS_EXPOSE);
+    return;
+  }
+  const tokens = new Set(existing.split(',').map((t) => t.trim().toLowerCase()).filter(Boolean));
+  const merged: string[] = existing.split(',').map((t) => t.trim()).filter(Boolean);
+  for (const name of [S402_HEADERS.PAYMENT_REQUIRED, S402_HEADERS.PAYMENT_RESPONSE]) {
+    if (!tokens.has(name.toLowerCase())) merged.push(name);
+  }
+  headers.set('access-control-expose-headers', merged.join(', '));
 }

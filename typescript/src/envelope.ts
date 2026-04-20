@@ -19,6 +19,7 @@ import type { s402Scheme, s402PaymentRequirements, s402PaymentPayload } from './
 import type { s402ErrorCodeType } from './errors.js';
 import { s402Error } from './errors.js';
 import { canonicalize } from './canonicalization.js';
+import { MAX_BODY_BYTES } from './http.js';
 
 // ══════════════════════════════════════════════════════════════
 // Media types
@@ -233,6 +234,10 @@ export function decodeEnvelopeBody(body: string): s402Envelope {
   if (typeof body !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `s402 envelope body must be a string, got ${typeof body}`);
+  }
+  if (body.length > MAX_BODY_BYTES) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 envelope body exceeds maximum size (${body.length} > ${MAX_BODY_BYTES})`);
   }
   let parsed: unknown;
   try {

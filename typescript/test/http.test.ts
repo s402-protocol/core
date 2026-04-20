@@ -726,7 +726,7 @@ describe('s402 HTTP encode/decode', () => {
 });
 
 // ══════════════════════════════════════════════════════════════
-// Body transport (JSON — no base64, no header size limit)
+// Body transport (JSON — no base64, 1 MB cap for defense-in-depth)
 // ══════════════════════════════════════════════════════════════
 
 describe('s402 body transport', () => {
@@ -858,6 +858,22 @@ describe('s402 body transport', () => {
       });
       const decoded = decodeRequirementsBody(json);
       expect((decoded as unknown as Record<string, unknown>).malicious).toBeUndefined();
+    });
+
+    it('decodeRequirementsBody rejects oversized body (> 1 MB)', () => {
+      const huge = 'A'.repeat(1024 * 1024 + 1);
+      expect(() => decodeRequirementsBody(huge)).toThrow(s402Error);
+      expect(() => decodeRequirementsBody(huge)).toThrow('exceeds maximum size');
+    });
+
+    it('decodePayloadBody rejects oversized body (> 1 MB)', () => {
+      const huge = 'A'.repeat(1024 * 1024 + 1);
+      expect(() => decodePayloadBody(huge)).toThrow('exceeds maximum size');
+    });
+
+    it('decodeSettleBody rejects oversized body (> 1 MB)', () => {
+      const huge = 'A'.repeat(1024 * 1024 + 1);
+      expect(() => decodeSettleBody(huge)).toThrow('exceeds maximum size');
     });
   });
 

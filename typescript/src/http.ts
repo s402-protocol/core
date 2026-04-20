@@ -869,6 +869,16 @@ function validateSettleShape(obj: unknown): void {
  */
 export const S402_CONTENT_TYPE = 'application/s402+json' as const;
 
+/**
+ * Maximum body size (1 MB). Defense-in-depth against oversized JSON payloads.
+ * Bigger than MAX_HEADER_BYTES (64KB) because body transport is designed for
+ * large PTBs; still bounded so a malicious client can't exhaust memory via
+ * JSON.parse. Hosts should also enforce their own limits upstream (Express
+ * `limit`, Nginx `client_max_body_size`), but a wire format library should
+ * not rely on runtime enforcement.
+ */
+export const MAX_BODY_BYTES = 1024 * 1024;
+
 /** Encode payment requirements as JSON string (for response body) */
 export function encodeRequirementsBody(requirements: s402PaymentRequirements): string {
   return JSON.stringify(requirements);
@@ -879,6 +889,10 @@ export function decodeRequirementsBody(body: string): s402PaymentRequirements {
   if (typeof body !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `s402 requirements body must be a string, got ${typeof body}`);
+  }
+  if (body.length > MAX_BODY_BYTES) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 requirements body exceeds maximum size (${body.length} > ${MAX_BODY_BYTES})`);
   }
   let parsed: unknown;
   try {
@@ -902,6 +916,10 @@ export function decodePayloadBody(body: string): s402PaymentPayload {
     throw new s402Error('INVALID_PAYLOAD',
       `s402 payload body must be a string, got ${typeof body}`);
   }
+  if (body.length > MAX_BODY_BYTES) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 payload body exceeds maximum size (${body.length} > ${MAX_BODY_BYTES})`);
+  }
   let parsed: unknown;
   try {
     parsed = JSON.parse(body);
@@ -923,6 +941,10 @@ export function decodeSettleBody(body: string): s402SettleResponse {
   if (typeof body !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `s402 settle body must be a string, got ${typeof body}`);
+  }
+  if (body.length > MAX_BODY_BYTES) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 settle body exceeds maximum size (${body.length} > ${MAX_BODY_BYTES})`);
   }
   let parsed: unknown;
   try {

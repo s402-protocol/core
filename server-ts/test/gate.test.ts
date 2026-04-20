@@ -343,3 +343,111 @@ describe('s402Gate — .check() escape hatch', () => {
     await expect(result.settle()).rejects.toThrow(/settle\(\) called more than once/);
   });
 });
+
+describe('s402Gate — HTTP hygiene', () => {
+  let server: s402ResourceServer;
+  let requirements: s402PaymentRequirements;
+
+  beforeEach(() => {
+    server = buildServer();
+    requirements = buildRequirements(server);
+  });
+
+  it('default 402 sets cache-control: no-store and exposes s402 headers via CORS', async () => {
+    const gate = s402Gate({ server, requirements });
+    const handler = gate(async () => Response.json({ data: 'nope' }));
+
+    const res = await handler(new Request('http://test/api/paid'));
+
+    expect(res.status).toBe(402);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    const expose = res.headers.get('access-control-expose-headers') ?? '';
+    expect(expose.toLowerCase()).toContain(S402_HEADERS.PAYMENT_REQUIRED);
+    expect(expose.toLowerCase()).toContain(S402_HEADERS.PAYMENT_RESPONSE);
+  });
+
+  it('default error response sets cache-control: no-store and CORS expose', async () => {
+    const gate = s402Gate({ server, requirements });
+    const handler = gate(async () => Response.json({ data: 'nope' }));
+
+    const res = await handler(
+      new Request('http://test/api/paid', {
+        headers: { [S402_HEADERS.PAYMENT]: 'not-base64!!' },
+      }),
+    );
+
+    expect(res.status).toBe(402);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('access-control-expose-headers')?.toLowerCase())
+      .toContain(S402_HEADERS.PAYMENT_REQUIRED);
+  });
+
+  it('200 response after settlement exposes x-payment-response via CORS', async () => {
+    const gate = s402Gate({ server, requirements });
+    const handler = gate(async () => Response.json({ data: 'paid content' }));
+
+    const res = await handler(
+      new Request('http://test/api/paid', {
+        headers: { [S402_HEADERS.PAYMENT]: buildValidPayment(requirements) },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    const expose = res.headers.get('access-control-expose-headers') ?? '';
+    expect(expose.toLowerCase()).toContain(S402_HEADERS.PAYMENT_RESPONSE);
+  });
+
+  it('merges CORS expose header when downstream handler already set one', async () => {
+    const gate = s402Gate({ server, requirements });
+    const handler = gate(
+      async () =>
+        new Response('ok', {
+          status: 200,
+          headers: { 'access-control-expose-headers': 'x-custom' },
+        }),
+    );
+
+    const res = await handler(
+      new Request('http://test/api/paid', {
+        headers: { [S402_HEADERS.PAYMENT]: buildValidPayment(requirements) },
+      }),
+    );
+
+    const expose = res.headers.get('access-control-expose-headers') ?? '';
+    expect(expose).toContain('x-custom');
+    expect(expose.toLowerCase()).toContain(S402_HEADERS.PAYMENT_RESPONSE);
+  });
+
+  it('on402 custom response gains cache-control + CORS expose when absent', async () => {
+    const gate = s402Gate({
+      server,
+      requirements,
+      on402: () => new Response('custom', { status: 402 }),
+    });
+    const handler = gate(async () => Response.json({ data: 'nope' }));
+
+    const res = await handler(new Request('http://test/api/paid'));
+
+    expect(res.status).toBe(402);
+    expect(res.headers.get('cache-control')).toBe('no-store');
+    expect(res.headers.get('access-control-expose-headers')?.toLowerCase())
+      .toContain(S402_HEADERS.PAYMENT_REQUIRED);
+  });
+
+  it('respects cache-control set by custom on402 (does not override)', async () => {
+    const gate = s402Gate({
+      server,
+      requirements,
+      on402: () =>
+        new Response('custom', {
+          status: 402,
+          headers: { 'cache-control': 'private, max-age=5' },
+        }),
+    });
+    const handler = gate(async () => Response.json({ data: 'nope' }));
+
+    const res = await handler(new Request('http://test/api/paid'));
+
+    expect(res.headers.get('cache-control')).toBe('private, max-age=5');
+  });
+});

@@ -79,9 +79,10 @@ export {
   validateRequirementsShape,
 } from './http.js';
 
-// HTTP helpers — body transport (raw JSON, no size limit)
+// HTTP helpers — body transport (raw JSON, 1 MB cap for defense-in-depth)
 export {
   S402_CONTENT_TYPE,
+  MAX_BODY_BYTES,
   encodeRequirementsBody,
   decodeRequirementsBody,
   encodePayloadBody,

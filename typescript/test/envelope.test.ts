@@ -246,6 +246,11 @@ describe('encodeEnvelopeBody / decodeEnvelopeBody', () => {
   it('rejects malformed JSON', () => {
     expect(() => decodeEnvelopeBody('not json')).toThrow(/parse/);
   });
+
+  it('rejects oversized body (> 1 MB)', () => {
+    const huge = 'A'.repeat(1024 * 1024 + 1);
+    expect(() => decodeEnvelopeBody(huge)).toThrow(/exceeds maximum size/);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════
