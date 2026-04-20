@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.6.0] - 2026-04-19
+
+### Added
+
+- **`s402/compat-mpp` — MPP read-path interop (DAN-339).** New entry point for consuming Stripe/Tempo Machine Payment Protocol 402 responses as native s402 types. All parsing is grounded against the actual MPP spec drafts in `tempoxyz/mpp-specs` (draft-httpauth-payment-00, draft-payment-intent-charge-00), not hearsay.
+  - `parseWwwAuthenticatePayment(header)` — RFC 9110 auth-params parser for `WWW-Authenticate: Payment`. Handles quoted-string escapes, unquoted tokens, enforces required `id`/`realm`/`method`/`intent`/`request`, preserves optional `digest`/`expires`/`description`/`opaque`.
+  - `parseMppAcceptPayment(header)` — method/intent pair grammar with wildcards on either side (`tempo/charge`, `tempo/*`, `*/session`, `*/*`) and q-values per core spec §6.1. Stable sort by descending q, preserves client order on ties.
+  - `matchMppRange(range, method, intent)` — specificity scoring (exact=2, one-wild=1, all-wild=0, no-match=−1) for the "prefer most specific matching range" rule.
+  - `decodeMppChargeRequest(challenge)` — decodes the base64url JCS `request` blob for the charge intent. Validates `amount` as non-negative integer, requires `currency`, preserves `methodDetails` untouched.
+  - `decodeMppCredential(authorizationHeader)` — base64url-nopad `Authorization: Payment <...>` decoder with trust-boundary shape validation on `challenge` and `payload`.
+  - `fromMppChargeChallenge(challenge, now?)` — translates blockchain-method Charge challenges (`tempo`/`evm`/`solana`/`lightning`/`stellar`) into `s402PaymentRequirements` with `scheme: 'exact'`. Resolves network via `eip155:{chainId}` / `tempo:{chainId}` conventions, carries challenge provenance into `extensions.mpp` for downstream routing, rejects processor-based methods (Stripe/card have no payTo in the Charge request), rejects expired challenges.
+- **40 spec-grounded unit tests** at `test/compat-mpp.test.ts` drawn from the spec's own §5.1.4 / §6.1 / §Request Schema fixtures.
+- **ADR-005 — Interop When Possible, Superset When Wise.** The governing strategic principle behind the compat layer: absorb x402/MPP as payment-in formats where their design is legitimate; superset them on primitives their business models forbid. See `docs/adr/005-interop-superset-principle.md`.
+
+### Scope (intentionally deferred to v0.7+)
+
+- Session intent (cumulative voucher ↔ Prepaid translation shim)
+- Method-specific credential-tier dispatch (EVM `permit2`/`authorization`/`transaction`/`hash`; Tempo `transaction`/`hash`/`proof`)
+- HMAC-SHA256 challenge-binding verification (server-side, needs secret)
+- Write path — emitting MPP-shaped `WWW-Authenticate: Payment` challenges from an s402 server
+
+### Changed
+
+- **956 tests across 21 files** (was 916). The 40 new compat-mpp tests join 30 unit + 6 live-server integration tests for `Accept-Payment` that shipped earlier in the 0.5 dev cycle.
+- Migration guide (`docs/guide/upgrade-mpp.md`) updated to reference real exported APIs rather than placeholder code.
+- `docs/integrations.md` compat-layer table updated: MPP Charge (read) is 🟡 v0.3, MPP `Accept-Payment` is ✅ Production, MPP Charge (write) and Session remain 📋 roadmap.
+
+### Compatibility
+
+- **Purely additive.** No changes to existing types, scheme interfaces, wire format, or conformance vectors. Existing 0.5.x consumers require no code changes.
+- **New sub-path export**: `s402/compat-mpp` sits alongside the existing `s402/compat` (x402 interop). Both are opt-in — importing from the root `s402` entry does not pull the compat bundles.
+
 ## [0.5.0] - 2026-04-12
 
 ### Added
