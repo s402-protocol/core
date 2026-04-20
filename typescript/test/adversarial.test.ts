@@ -340,13 +340,18 @@ describe('adversarial: facilitator starvation', () => {
     expect(results.every(r => r.success)).toBe(true);
   });
 
-  it('100 concurrent identical payloads: exactly 1 succeeds, 99 are deduped', async () => {
+  it('100 concurrent identical payloads: pipeline runs once, all 100 share the result', async () => {
+    // New dedup semantics (v0.6.0): concurrent duplicates share the in-flight promise
+    // instead of receiving a "Duplicate" error. This prevents retrying clients from
+    // seeing spurious errors while still guaranteeing exactly-once execution.
+    const verifyMock = vi.fn().mockImplementation(() =>
+      new Promise(resolve => setTimeout(() => resolve({ valid: true }), 50))
+    );
+    const settleMock = vi.fn().mockResolvedValue({ success: true, txDigest: 'X' });
     const scheme: s402FacilitatorScheme = {
       scheme: 'exact',
-      verify: vi.fn().mockImplementation(() =>
-        new Promise(resolve => setTimeout(() => resolve({ valid: true }), 50))
-      ),
-      settle: vi.fn().mockResolvedValue({ success: true, txDigest: 'X' }),
+      verify: verifyMock,
+      settle: settleMock,
     };
 
     const f = new s402Facilitator();
@@ -356,11 +361,11 @@ describe('adversarial: facilitator starvation', () => {
       Array.from({ length: 100 }, () => f.process(VALID_PAYLOAD, VALID_REQUIREMENTS))
     );
 
-    const successes = results.filter(r => r.success);
-    const dupes = results.filter(r => !r.success && r.error?.includes('Duplicate'));
-
-    expect(successes.length).toBe(1);
-    expect(dupes.length).toBe(99);
+    // All 100 callers observe the same success result
+    expect(results.every(r => r.success && r.txDigest === 'X')).toBe(true);
+    // Pipeline executed exactly once (no duplicate on-chain work)
+    expect(verifyMock).toHaveBeenCalledTimes(1);
+    expect(settleMock).toHaveBeenCalledTimes(1);
   });
 });
 

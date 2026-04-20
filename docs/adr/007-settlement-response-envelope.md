@@ -249,6 +249,42 @@ Full taxonomy (all error codes across ADR-006, ADR-007, and canonicalization): `
 
 ---
 
+## Idempotency semantics
+
+Settlement is a cross-chain spend — clients retry, networks partition, responses time out. The envelope itself is bound to a specific request (`txBinding`), but the **retry story** needs facilitator-side dedup to prevent the failure mode where a retry after a timed-out successful broadcast causes a second on-chain spend.
+
+**Wire-level (optional, Stripe-compatible):**
+
+Clients MAY send an `Idempotency-Key` HTTP header on `POST /settle`:
+
+```
+Idempotency-Key: <opaque caller-chosen string, ≤255 UTF-8 bytes>
+```
+
+When present, the facilitator MUST use this string as the dedup key. Otherwise, the facilitator MUST compute a deterministic fingerprint of the decoded payment payload (the object produced after canonical field ordering per `spec/canonicalization.md` §4).
+
+**Facilitator-side semantics:**
+
+| Arrival pattern | Facilitator behavior |
+|----------------|---------------------|
+| First request with key K | Execute pipeline; cache result |
+| Second request with key K while first is in flight | Await the in-flight promise; both callers receive the same envelope |
+| Second request with key K after first completes (within TTL) | Return cached envelope; pipeline does NOT re-execute |
+| Second request with key K after TTL expiry | Execute pipeline; cache new result |
+
+**Parameters:**
+
+- Cache TTL: implementation-defined, RECOMMENDED 5 minutes. Shorter TTLs risk double-spends on retrying clients; longer TTLs risk stale responses for evolving requirements.
+- Cache bound: implementation-defined LRU eviction to cap memory under load.
+
+**What gets cached:** all results, including failures (mirrors Stripe). Safe default: if `scheme.settle()` timed out but the transaction reached the chain, a retry with the same key returns the original failure envelope rather than broadcasting a second spend. Clients that want to retry a transient failure must either wait for TTL or use a fresh key.
+
+**What does NOT get cached:** requests rejected before dedup — `REQUIREMENTS_EXPIRED`, `SCHEME_NOT_SUPPORTED`, `INVALID_PAYLOAD`. These are cheap to re-evaluate and caching them offers no double-spend protection.
+
+**Relation to `txBinding`:** idempotency prevents double-execution; `txBinding` prevents response swaps. They are orthogonal — a correct client enforces both.
+
+---
+
 ## References
 
 - RFC 8785 (JSON Canonicalization Scheme)

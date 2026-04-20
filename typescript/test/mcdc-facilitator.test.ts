@@ -185,27 +185,29 @@ describe('mcdc: facilitator.process() — isolation tests', () => {
     expect(result.errorCode).toBe('SCHEME_NOT_SUPPORTED');
   });
 
-  // C8: duplicate in-flight dedup
-  it('mcdc-mc8: rejects duplicate concurrent request', async () => {
-    // Create a scheme that takes time to verify
-    const scheme = createMockScheme({
-      verify: vi.fn().mockImplementation(() => new Promise(resolve => setTimeout(() => resolve({ valid: true }), 100))),
-      settle: vi.fn().mockResolvedValue({ success: true, txDigest: 'X' }),
-    });
+  // C8: concurrent dedup — duplicate requests share the in-flight promise
+  it('mcdc-mc8: concurrent duplicates share the in-flight result', async () => {
+    const verifyMock = vi.fn().mockImplementation(() =>
+      new Promise(resolve => setTimeout(() => resolve({ valid: true }), 100))
+    );
+    const settleMock = vi.fn().mockResolvedValue({ success: true, txDigest: 'X' });
+    const scheme = createMockScheme({ verify: verifyMock, settle: settleMock });
     const f = createFacilitator(scheme);
 
-    // Fire two identical requests concurrently
+    // Fire two identical requests concurrently — should NOT double-execute the pipeline
     const [r1, r2] = await Promise.all([
       f.process(PAYLOAD, REQUIREMENTS),
       f.process(PAYLOAD, REQUIREMENTS),
     ]);
 
-    // Exactly one should succeed, one should be rejected as duplicate
-    const results = [r1, r2];
-    const successes = results.filter(r => r.success);
-    const dupes = results.filter(r => !r.success && r.error?.includes('Duplicate'));
-    expect(successes.length).toBe(1);
-    expect(dupes.length).toBe(1);
+    // Both callers see the same success result (shared promise, Stripe-style)
+    expect(r1.success).toBe(true);
+    expect(r2.success).toBe(true);
+    expect(r1.txDigest).toBe('X');
+    expect(r2.txDigest).toBe('X');
+    // Pipeline ran exactly once
+    expect(verifyMock).toHaveBeenCalledTimes(1);
+    expect(settleMock).toHaveBeenCalledTimes(1);
   });
 
   it('mcdc-mc8b: dedup key is cleaned up after completion (can resubmit)', async () => {
@@ -518,5 +520,74 @@ describe('mcdc: facilitator dedup cleanup', () => {
     // Different payload should also work (but we test same payload resubmission)
     const r2 = await f.process(PAYLOAD, expired);
     expect(r2.errorCode).toBe('REQUIREMENTS_EXPIRED'); // NOT duplicate
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Retry dedup: completed results are cached with TTL + LRU bound
+// ══════════════════════════════════════════════════════════════
+
+describe('mcdc: facilitator retry dedup', () => {
+  it('retry after success returns cached result without re-executing', async () => {
+    const verifyMock = vi.fn().mockResolvedValue({ valid: true });
+    const settleMock = vi.fn().mockResolvedValue({ success: true, txDigest: 'CACHED' });
+    const scheme = createMockScheme({ verify: verifyMock, settle: settleMock });
+    const f = createFacilitator(scheme);
+
+    const r1 = await f.process(PAYLOAD, REQUIREMENTS);
+    const r2 = await f.process(PAYLOAD, REQUIREMENTS);
+
+    expect(r1.success).toBe(true);
+    expect(r2.success).toBe(true);
+    expect(r2.txDigest).toBe('CACHED');
+    // Second call returned from cache — pipeline ran exactly once
+    expect(verifyMock).toHaveBeenCalledTimes(1);
+    expect(settleMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('caller-supplied Idempotency-Key scopes the cache', async () => {
+    const settleMock = vi.fn().mockResolvedValue({ success: true, txDigest: 'Y' });
+    const scheme = createMockScheme({ settle: settleMock });
+    const f = createFacilitator(scheme);
+
+    await f.process(PAYLOAD, REQUIREMENTS, { idempotencyKey: 'key-A' });
+    await f.process(PAYLOAD, REQUIREMENTS, { idempotencyKey: 'key-A' });
+    // Different key → fresh execution even for same payload
+    await f.process(PAYLOAD, REQUIREMENTS, { idempotencyKey: 'key-B' });
+
+    expect(settleMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('cache entry expires after dedupTtlMs', async () => {
+    vi.useFakeTimers();
+    try {
+      const settleMock = vi.fn().mockResolvedValue({ success: true, txDigest: 'Z' });
+      const scheme = createMockScheme({ settle: settleMock });
+      const f = new s402Facilitator({ dedupTtlMs: 1_000 });
+      f.register('sui:testnet', scheme);
+
+      await f.process(PAYLOAD, REQUIREMENTS);
+      vi.advanceTimersByTime(1_001);
+      await f.process(PAYLOAD, REQUIREMENTS);
+
+      expect(settleMock).toHaveBeenCalledTimes(2);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('LRU evicts oldest entries when cache exceeds dedupMaxEntries', async () => {
+    const settleMock = vi.fn().mockResolvedValue({ success: true, txDigest: 'L' });
+    const scheme = createMockScheme({ settle: settleMock });
+    const f = new s402Facilitator({ dedupMaxEntries: 2 });
+    f.register('sui:testnet', scheme);
+
+    await f.process(PAYLOAD, REQUIREMENTS, { idempotencyKey: 'k1' });
+    await f.process(PAYLOAD, REQUIREMENTS, { idempotencyKey: 'k2' });
+    await f.process(PAYLOAD, REQUIREMENTS, { idempotencyKey: 'k3' });
+    // k1 was evicted — retrying with k1 re-executes
+    await f.process(PAYLOAD, REQUIREMENTS, { idempotencyKey: 'k1' });
+
+    expect(settleMock).toHaveBeenCalledTimes(4);
   });
 });

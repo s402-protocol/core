@@ -44,13 +44,63 @@ export interface s402ProcessOptions {
    * @default false
    */
   skipVerify?: boolean;
+
+  /**
+   * Caller-supplied idempotency key (e.g., from an `Idempotency-Key` HTTP
+   * header). When present, this string becomes the dedup cache key instead of
+   * the auto-computed payload fingerprint.
+   *
+   * Semantics (Stripe-compatible):
+   * - Same key + same payload → returns the cached original result (retry dedup)
+   * - Same key while first call is in flight → awaits the in-flight promise (concurrent dedup)
+   * - Key collisions across distinct payloads are the caller's responsibility
+   *
+   * Omit this field to fall back to payload-based dedup (JSON fingerprint).
+   */
+  idempotencyKey?: string;
 }
+
+/**
+ * Constructor options for `s402Facilitator`.
+ */
+export interface s402FacilitatorOptions {
+  /**
+   * How long a completed result stays in the retry-dedup cache, in milliseconds.
+   * A retry arriving within this window returns the cached original result
+   * instead of re-executing. Tune based on your client's retry budget.
+   *
+   * @default 300_000 (5 minutes)
+   */
+  dedupTtlMs?: number;
+
+  /**
+   * Maximum entries retained in the retry-dedup cache. When the cache exceeds
+   * this size, the oldest entry (by insertion order) is evicted. Bound memory
+   * under high request volume; higher values retain more retry history.
+   *
+   * @default 10_000
+   */
+  dedupMaxEntries?: number;
+}
+
+type DedupCached = {
+  result: s402SettleResponse;
+  expiresAt: number;
+};
 
 export class s402Facilitator {
   private schemes = new Map<string, Map<s402Scheme, s402FacilitatorScheme>>();
-  private inFlight = new Set<string>();
+  private inFlight = new Map<string, Promise<s402SettleResponse>>();
+  private completed = new Map<string, DedupCached>();
+  private dedupTtlMs: number;
+  private dedupMaxEntries: number;
   private extensionRegistry = new s402ExtensionRegistry<s402FacilitatorExtension>();
   private extensionErrorHandler?: s402ExtensionErrorHandler;
+
+  constructor(options: s402FacilitatorOptions = {}) {
+    this.dedupTtlMs = options.dedupTtlMs ?? 300_000;
+    this.dedupMaxEntries = options.dedupMaxEntries ?? 10_000;
+  }
 
   /**
    * Register a scheme-specific facilitator for a network.
@@ -256,142 +306,195 @@ export class s402Facilitator {
       return { success: false, error: 'Failed to resolve payment scheme', errorCode: 'SCHEME_NOT_SUPPORTED' };
     }
 
-    // H-2: Deduplicate concurrent identical payloads — prevents free resource access
-    // if two identical requests arrive before either reaches scheme.settle().
+    // Dedup key: caller-supplied Idempotency-Key wins, else payload fingerprint.
     //
-    // Safety: JSON.stringify is canonical here because all payloads entering process()
+    // Payload fingerprint is canonical because all payloads entering process()
     // go through decodePaymentPayload() → pickPayloadFields(), which rebuilds the object
     // by iterating an ordered Set allowlist. The output always has keys in the same order
-    // (s402Version, scheme, payload.transaction, payload.signature, ...) regardless of
-    // the input JSON key order. This was verified empirically — two clients sending the
+    // regardless of input JSON key order. Verified empirically — two clients sending the
     // same payment with different JSON key order produce identical dedup keys after decode.
-    const dedupeKey = JSON.stringify(payload);
-    if (this.inFlight.has(dedupeKey)) {
-      return { success: false, error: 'Duplicate payment request already in flight', errorCode: 'INVALID_PAYLOAD' };
-    }
-    this.inFlight.add(dedupeKey);
+    const dedupeKey = options?.idempotencyKey ?? JSON.stringify(payload);
 
+    // Retry dedup: returning a cached result for a previously-completed request
+    // is Stripe-standard idempotency. Without this, a retry after a successful
+    // settle() would pay twice.
+    const cached = this.getCached(dedupeKey);
+    if (cached) {
+      return cached;
+    }
+
+    // Concurrent dedup: a second call arriving while the first is in flight
+    // awaits the same promise. Both callers see the same result — no double-spend,
+    // no bogus error. This replaces the previous "return error for duplicate"
+    // behavior, which surprised retrying clients.
+    const inFlight = this.inFlight.get(dedupeKey);
+    if (inFlight) {
+      return inFlight;
+    }
+
+    const resultPromise = this.executeProcess(payload, requirements, scheme, options).then(
+      (result) => {
+        this.cacheResult(dedupeKey, result);
+        return result;
+      },
+    );
+    this.inFlight.set(dedupeKey, resultPromise);
+
+    try {
+      return await resultPromise;
+    } finally {
+      this.inFlight.delete(dedupeKey);
+    }
+  }
+
+  private async executeProcess(
+    payload: s402PaymentPayload,
+    requirements: s402PaymentRequirements,
+    scheme: s402FacilitatorScheme,
+    options?: s402ProcessOptions,
+  ): Promise<s402SettleResponse> {
     // Get sorted extensions once (cached after first call, zero-cost when empty)
     const extensions = this.extensionRegistry.size > 0
       ? this.extensionRegistry.sorted()
       : null;
 
-    try {
-      // V6 optimization: skip verify dry-run when caller knows failures are free.
-      // All pre-flight checks (expiration, scheme-mismatch, dedup) still run above.
-      if (!options?.skipVerify) {
-        // Extension hook: beforeVerify (rate limiting, allowlisting, pre-checks)
-        if (extensions) {
-          try {
-            await runExtensionHooks(extensions, 'beforeVerify',
-              (ext) => ext.beforeVerify ? ext.beforeVerify(payload, requirements) : Promise.resolve(),
-              this.extensionErrorHandler);
-          } catch (e) {
-            if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
-            return { success: false, error: 'Extension beforeVerify failed', errorCode: 'EXTENSION_FAILED' };
-          }
-        }
-
-        // H-1 + H-3: Verify with timeout to prevent hanging RPC calls from exhausting the event loop
-        let verifyResult: s402VerifyResponse;
-        try {
-          let verifyTimer: ReturnType<typeof setTimeout>;
-          verifyResult = await Promise.race([
-            scheme.verify(payload, requirements),
-            new Promise<never>((_, reject) => {
-              verifyTimer = setTimeout(() => reject(new Error('Verification timed out after 5s')), 5_000);
-            }),
-          ]).finally(() => clearTimeout(verifyTimer));
-        } catch (e) {
-          return {
-            success: false,
-            error: e instanceof Error ? e.message : 'Verification threw an unexpected error',
-            errorCode: 'VERIFICATION_FAILED',
-          };
-        }
-
-        if (!verifyResult.valid) {
-          return {
-            success: false,
-            error: verifyResult.invalidReason ?? 'Payment verification failed',
-            errorCode: 'VERIFICATION_FAILED',
-          };
-        }
-
-        // Extension hook: afterVerify (logging, metrics, post-verification checks)
-        if (extensions) {
-          try {
-            await runExtensionHooks(extensions, 'afterVerify',
-              (ext) => ext.afterVerify ? ext.afterVerify(payload, verifyResult) : Promise.resolve(),
-              this.extensionErrorHandler);
-          } catch (e) {
-            if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
-            return { success: false, error: 'Extension afterVerify failed', errorCode: 'EXTENSION_FAILED' };
-          }
-        }
-
-        // Latency guard: if the dry-run took a long time, don't waste gas on stale requirements.
-        // Note: this is NOT a TOCTOU fix — Sui PTBs are atomic. This just avoids broadcasting
-        // a transaction for requirements the server has already expired.
-        // Type already validated above, so only check expiration here.
-        if (typeof requirements.expiresAt === 'number' && Date.now() > requirements.expiresAt) {
-          return {
-            success: false,
-            error: `Payment requirements expired during verification at ${new Date(requirements.expiresAt).toISOString()}`,
-            errorCode: 'REQUIREMENTS_EXPIRED',
-          };
-        }
-      }
-
-      // Extension hook: beforeSettle (final fraud checks, balance confirmation)
+    // V6 optimization: skip verify dry-run when caller knows failures are free.
+    // All pre-flight checks (expiration, scheme-mismatch, dedup) still run above.
+    if (!options?.skipVerify) {
+      // Extension hook: beforeVerify (rate limiting, allowlisting, pre-checks)
       if (extensions) {
         try {
-          await runExtensionHooks(extensions, 'beforeSettle',
-            (ext) => ext.beforeSettle ? ext.beforeSettle(payload, requirements) : Promise.resolve(),
+          await runExtensionHooks(extensions, 'beforeVerify',
+            (ext) => ext.beforeVerify ? ext.beforeVerify(payload, requirements) : Promise.resolve(),
             this.extensionErrorHandler);
         } catch (e) {
           if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
-          return { success: false, error: 'Extension beforeSettle failed', errorCode: 'EXTENSION_FAILED' };
+          return { success: false, error: 'Extension beforeVerify failed', errorCode: 'EXTENSION_FAILED' };
         }
       }
 
-      // H-1 + H-3 + M-5: Settle with timeout; SETTLEMENT_FAILED is retryable (transient RPC errors)
-      let settleResult: s402SettleResponse;
+      // H-1 + H-3: Verify with timeout to prevent hanging RPC calls from exhausting the event loop
+      let verifyResult: s402VerifyResponse;
       try {
-        let settleTimer: ReturnType<typeof setTimeout>;
-        settleResult = await Promise.race([
-          scheme.settle(payload, requirements),
+        let verifyTimer: ReturnType<typeof setTimeout>;
+        verifyResult = await Promise.race([
+          scheme.verify(payload, requirements),
           new Promise<never>((_, reject) => {
-            settleTimer = setTimeout(() => reject(new Error('Settlement timed out after 15s')), 15_000);
+            verifyTimer = setTimeout(() => reject(new Error('Verification timed out after 5s')), 5_000);
           }),
-        ]).finally(() => clearTimeout(settleTimer));
+        ]).finally(() => clearTimeout(verifyTimer));
       } catch (e) {
         return {
           success: false,
-          error: e instanceof Error ? e.message : 'Settlement failed with an unexpected error',
-          errorCode: 'SETTLEMENT_FAILED',
+          error: e instanceof Error ? e.message : 'Verification threw an unexpected error',
+          errorCode: 'VERIFICATION_FAILED',
         };
       }
 
-      // Extension hook: afterSettle (indexing, receipts, analytics)
-      // Only fires on successful settlement — extensions observing failures should
-      // use beforeSettle or external monitoring. Post-settle hooks never change the result.
-      if (extensions && settleResult.success) {
+      if (!verifyResult.valid) {
+        return {
+          success: false,
+          error: verifyResult.invalidReason ?? 'Payment verification failed',
+          errorCode: 'VERIFICATION_FAILED',
+        };
+      }
+
+      // Extension hook: afterVerify (logging, metrics, post-verification checks)
+      if (extensions) {
         try {
-          await runExtensionHooks(extensions, 'afterSettle',
-            (ext) => ext.afterSettle ? ext.afterSettle(payload, settleResult) : Promise.resolve(),
+          await runExtensionHooks(extensions, 'afterVerify',
+            (ext) => ext.afterVerify ? ext.afterVerify(payload, verifyResult) : Promise.resolve(),
             this.extensionErrorHandler);
         } catch (e) {
-          // Even critical extension failure after settle doesn't change the result —
-          // the transaction is already on-chain. Forward to error handler for observability
-          // but always return the true settle result.
-          this.extensionErrorHandler?.({ key: 'afterSettle', version: '0', critical: true }, e);
+          if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
+          return { success: false, error: 'Extension afterVerify failed', errorCode: 'EXTENSION_FAILED' };
         }
       }
 
-      return settleResult;
-    } finally {
-      this.inFlight.delete(dedupeKey);
+      // Latency guard: if the dry-run took a long time, don't waste gas on stale requirements.
+      // Note: this is NOT a TOCTOU fix — Sui PTBs are atomic. This just avoids broadcasting
+      // a transaction for requirements the server has already expired.
+      // Type already validated above, so only check expiration here.
+      if (typeof requirements.expiresAt === 'number' && Date.now() > requirements.expiresAt) {
+        return {
+          success: false,
+          error: `Payment requirements expired during verification at ${new Date(requirements.expiresAt).toISOString()}`,
+          errorCode: 'REQUIREMENTS_EXPIRED',
+        };
+      }
+    }
+
+    // Extension hook: beforeSettle (final fraud checks, balance confirmation)
+    if (extensions) {
+      try {
+        await runExtensionHooks(extensions, 'beforeSettle',
+          (ext) => ext.beforeSettle ? ext.beforeSettle(payload, requirements) : Promise.resolve(),
+          this.extensionErrorHandler);
+      } catch (e) {
+        if (e instanceof s402Error) return { success: false, error: e.message, errorCode: e.code };
+        return { success: false, error: 'Extension beforeSettle failed', errorCode: 'EXTENSION_FAILED' };
+      }
+    }
+
+    // H-1 + H-3 + M-5: Settle with timeout; SETTLEMENT_FAILED is retryable (transient RPC errors)
+    let settleResult: s402SettleResponse;
+    try {
+      let settleTimer: ReturnType<typeof setTimeout>;
+      settleResult = await Promise.race([
+        scheme.settle(payload, requirements),
+        new Promise<never>((_, reject) => {
+          settleTimer = setTimeout(() => reject(new Error('Settlement timed out after 15s')), 15_000);
+        }),
+      ]).finally(() => clearTimeout(settleTimer));
+    } catch (e) {
+      return {
+        success: false,
+        error: e instanceof Error ? e.message : 'Settlement failed with an unexpected error',
+        errorCode: 'SETTLEMENT_FAILED',
+      };
+    }
+
+    // Extension hook: afterSettle (indexing, receipts, analytics)
+    // Only fires on successful settlement — extensions observing failures should
+    // use beforeSettle or external monitoring. Post-settle hooks never change the result.
+    if (extensions && settleResult.success) {
+      try {
+        await runExtensionHooks(extensions, 'afterSettle',
+          (ext) => ext.afterSettle ? ext.afterSettle(payload, settleResult) : Promise.resolve(),
+          this.extensionErrorHandler);
+      } catch (e) {
+        // Even critical extension failure after settle doesn't change the result —
+        // the transaction is already on-chain. Forward to error handler for observability
+        // but always return the true settle result.
+        this.extensionErrorHandler?.({ key: 'afterSettle', version: '0', critical: true }, e);
+      }
+    }
+
+    return settleResult;
+  }
+
+  private getCached(key: string): s402SettleResponse | null {
+    const entry = this.completed.get(key);
+    if (!entry) return null;
+    if (Date.now() > entry.expiresAt) {
+      this.completed.delete(key);
+      return null;
+    }
+    return entry.result;
+  }
+
+  private cacheResult(key: string, result: s402SettleResponse): void {
+    this.completed.set(key, {
+      result,
+      expiresAt: Date.now() + this.dedupTtlMs,
+    });
+    // LRU eviction: Map iteration is insertion-ordered, so the first key is the
+    // oldest. Evict one per insertion to keep size bounded without periodic sweeps.
+    if (this.completed.size > this.dedupMaxEntries) {
+      const oldestKey = this.completed.keys().next().value;
+      if (oldestKey !== undefined) {
+        this.completed.delete(oldestKey);
+      }
     }
   }
 
