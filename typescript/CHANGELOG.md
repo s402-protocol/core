@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **`s402/compat-l402` — L402 read-path interop (DAN-344).** New entry point for consuming Lightning Labs' L402 (formerly LSAT) challenges as native s402 types. L402 is the oldest 402 dialect in production — shipping this turns the "universal read" positioning pillar from aspirational into airtight.
+  - `parseWwwAuthenticateL402(header)` — RFC 9110 auth-params parser accepting both `L402` and legacy `LSAT` auth-schemes (canonicalized to `L402` in output). Handles quoted-string + unquoted-token forms. Enforces required `macaroon` and `invoice` params.
+  - `decodeBolt11Summary(invoice)` — partial BOLT-11 decoder over the human-readable part only. Extracts network (`lightning:mainnet|testnet|regtest|signet`) and amount (converting m/u/n/p multipliers to millisatoshi with BigInt arithmetic). Rejects pico-BTC amounts not divisible by 10.
+  - `fromL402Challenge(challenge)` — translates an L402 challenge into `s402PaymentRequirements` with `scheme: 'exact'`, `asset: 'lightning:msat'`, sentinel `payTo: 'lightning:invoice'` (real destination lives in the invoice). Surfaces macaroon + invoice in `extensions.l402` for retry construction. Rejects amountless invoices as spec violations.
+- **~20 unit tests** at `test/compat-l402.test.ts` covering all four multiplier classes, all four network prefixes, LSAT/L402 alias handling, amountless invoices, malformed HRPs, and end-to-end header-to-requirements flows.
+- **Positioning document** at `docs/positioning.md` — canonical three-pillar USP: expressiveness (6 schemes), universal read (every 402 dialect), on-chain enforcement (Move invariants). Single source of truth for landing page, pitch, and grant copy.
+- **Universal 402 Absorption** project tracker on Linear ([project link](https://linear.app/dannydevs/project/universal-402-absorption-f6e181082db4)) with child issues DAN-344 (L402), DAN-345 (MPP Session), DAN-346 (MPP write path), DAN-347 (Google AP2), DAN-348 (IETF reference impl), DAN-349 (ERC-7824 watch).
+
+### Scope (intentionally deferred)
+
+- **L402 write path** — emitting L402 challenges requires a Lightning node to mint BOLT-11 invoices; out of scope for a wire-format library. Teams that need emission should keep Aperture in the path.
+- **Macaroon caveat decoding** — passed through opaque in v0.7; caveat introspection delegated to `node-macaroon` or equivalent.
+- **Full BOLT-11 tagged-field decoding** — node pubkey, routing hints, payment hash, description. Lightning wallets already decode these; we do not duplicate their work.
+- **BOLT-12 offers** — newer offer-based protocol, spec still evolving.
+
+### Changed
+
+- `docs/integrations.md` — added L402 compat-layer row (✅ v0.7).
+- `docs/guide/upgrade-l402.md` — new migration guide covering consumption, coexistence via `Accept-Payment`, BOLT-11 multiplier table, and honest comparison with L402.
+
+### Compatibility
+
+- **Purely additive.** No changes to existing types, scheme interfaces, wire format, or conformance vectors. Existing 0.6.x consumers require no code changes.
+- **New sub-path export**: `s402/compat-l402` sits alongside `s402/compat` (x402) and `s402/compat-mpp` (Stripe/Tempo). All three are opt-in — importing from the root `s402` entry does not pull any compat bundle.
+
 ## [0.6.0] - 2026-04-19
 
 ### Added

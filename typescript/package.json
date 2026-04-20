@@ -82,6 +82,13 @@
       },
       "default": "./dist/compat-mpp.mjs"
     },
+    "./compat-l402": {
+      "import": {
+        "types": "./dist/compat-l402.d.mts",
+        "default": "./dist/compat-l402.mjs"
+      },
+      "default": "./dist/compat-l402.mjs"
+    },
     "./errors": {
       "import": {
         "types": "./dist/errors.d.mts",
