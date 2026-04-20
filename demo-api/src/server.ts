@@ -27,6 +27,9 @@ import {
   encodePaymentRequired,
   decodePaymentPayload,
   encodeSettleResponse,
+  parseAcceptPayment,
+  formatAcceptPayment,
+  selectBestScheme,
   S402_HEADERS,
   S402_VERSION,
 } from 's402';
@@ -228,6 +231,13 @@ const routeMap = new Map(
   ]),
 );
 
+// ── Accept-Payment advertisement ────────────────────────
+
+const SUPPORTED_SCHEMES = ['s402/exact'] as const;
+const ACCEPT_PAYMENT_HEADER = formatAcceptPayment(
+  SUPPORTED_SCHEMES.map((scheme) => ({ scheme, q: 1 })),
+);
+
 // ── Stats ───────────────────────────────────────────────
 
 let totalRequests = 0;
@@ -239,8 +249,11 @@ let totalRevenue = 0n;
 function setCors(res: ServerResponse): void {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'x-payment, content-type');
-  res.setHeader('Access-Control-Expose-Headers', 'payment-required, x-payment-response');
+  res.setHeader('Access-Control-Allow-Headers', 'x-payment, accept-payment, content-type');
+  res.setHeader(
+    'Access-Control-Expose-Headers',
+    'payment-required, x-payment-response, accept-payment',
+  );
 }
 
 function json(res: ServerResponse, status: number, body: unknown): void {
@@ -317,12 +330,18 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   const { route, requirements } = entry;
   const paymentHeader = req.headers[S402_HEADERS.PAYMENT] as string | undefined;
+  const acceptPaymentHeader = req.headers[S402_HEADERS.ACCEPT_PAYMENT] as string | undefined;
+  const clientPreferences = parseAcceptPayment(acceptPaymentHeader);
+  const negotiated = selectBestScheme(clientPreferences, SUPPORTED_SCHEMES);
 
   // No payment → 402
   if (!paymentHeader) {
-    console.log(`  402 ${route.path} → ${route.priceDisplay}`);
+    console.log(
+      `  402 ${route.path} → ${route.priceDisplay}${negotiated ? ` (negotiated ${negotiated})` : ''}`,
+    );
     res.writeHead(402, {
       [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
+      [S402_HEADERS.ACCEPT_PAYMENT]: ACCEPT_PAYMENT_HEADER,
       'content-type': 'application/json; charset=utf-8',
     });
     res.end(
