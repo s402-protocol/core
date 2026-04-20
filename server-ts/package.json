@@ -1,0 +1,69 @@
+{
+  "name": "@sweefi/server",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Framework-agnostic s402 server middleware. `s402Gate()` works with Hono, Next.js Route Handlers, Bun, Deno, Cloudflare Workers, and any host that speaks the Web Fetch API.",
+  "license": "Apache-2.0",
+  "author": "SweeInc <daniel@sweeinc.com> (https://sweefi.xyz)",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/s402-protocol/core.git",
+    "directory": "server-ts"
+  },
+  "homepage": "https://s402-protocol.org",
+  "bugs": {
+    "url": "https://github.com/s402-protocol/core/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "keywords": [
+    "s402",
+    "hono",
+    "middleware",
+    "http-402",
+    "payments",
+    "agent-payments",
+    "web-fetch",
+    "next-route-handler",
+    "cloudflare-workers",
+    "bun",
+    "deno"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "main": "./dist/index.mjs",
+  "module": "./dist/index.mjs",
+  "types": "./dist/index.d.mts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.mts",
+        "default": "./dist/index.mjs"
+      },
+      "default": "./dist/index.mjs"
+    }
+  },
+  "scripts": {
+    "build": "tsdown",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "peerDependencies": {
+    "s402": ">=0.5.0 <1.0.0"
+  },
+  "devDependencies": {
+    "s402": "workspace:*",
+    "tsdown": "^0.20.3",
+    "typescript": "^5.7.0",
+    "vitest": "^3.0.5"
+  }
+}

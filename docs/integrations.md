@@ -50,10 +50,11 @@ Drop-in middleware for popular HTTP frameworks.
 
 | Framework | Package | Status | Pattern |
 |---|---|---|---|
-| **Hono** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | ✅ Production | `s402Gate({ ... })` middleware |
-| **Express** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | ✅ Production | Same `s402Gate` — framework-agnostic |
-| **Fastify** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | ✅ Production | Wraps standard `Request`/`Response` |
-| **Next.js API routes** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | ✅ Production | Works in Route Handlers |
+| **Hono** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | ✅ Production | `s402Gate({ ... })` middleware over `c.req.raw` |
+| **Next.js Route Handlers** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | ✅ Production | Native Web Fetch — use `s402Gate` as the handler |
+| **Bun / Deno / Cloudflare Workers** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | ✅ Production | Native Web Fetch — `fetch: s402Gate(...)` |
+| **Express** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | 🟡 Beta | Use `.check()` escape hatch (Node `IncomingMessage` adapter planned) |
+| **Fastify** | [`@sweefi/server`](https://www.npmjs.com/package/@sweefi/server) | 🟡 Beta | Use `.check()` escape hatch (plugin planned) |
 | **FastAPI (Python)** | `s402[fastapi]` | 🟡 Beta | Dependency injection pattern |
 | **Flask (Python)** | `s402[flask]` | 🟡 Beta | `@require_payment` decorator |
 | **net/http (Go)** | `s402-go` | 🟡 Beta | Standard `http.Handler` wrapper |
