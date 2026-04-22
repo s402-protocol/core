@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-04-22
+
 ### Added
 
 - **`s402/compat-l402` — L402 read-path interop (DAN-344).** New entry point for consuming Lightning Labs' L402 (formerly LSAT) challenges as native s402 types. L402 is the oldest 402 dialect in production — shipping this turns the "universal read" positioning pillar from aspirational into airtight.
