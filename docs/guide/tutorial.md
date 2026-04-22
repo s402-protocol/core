@@ -28,7 +28,7 @@ npm init -y
 npm install s402        # or: pnpm add s402 / bun add s402 / deno add npm:s402
 ```
 
-> **Node.js >= 18 required** (for native `fetch` and `Headers`).
+> **Node.js >= 20 required** (for native `fetch`, `Headers`, and `globalThis.crypto`).
 
 ## Step 1: The Server
 

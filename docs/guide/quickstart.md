@@ -20,7 +20,7 @@ pip install s402
 
 :::
 
-> **TypeScript:** ESM-only. Requires Node.js >= 18. **Python:** Requires Python >= 3.10. Both have **zero runtime dependencies**.
+> **TypeScript:** ESM-only. Requires Node.js >= 20. **Python:** Requires Python >= 3.10. Both have **zero runtime dependencies**.
 
 ## Sub-path Imports (TypeScript)
 

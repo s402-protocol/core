@@ -30,9 +30,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `docs/integrations.md` — added L402 compat-layer row (✅ v0.7).
 - `docs/guide/upgrade-l402.md` — new migration guide covering consumption, coexistence via `Accept-Payment`, BOLT-11 multiplier table, and honest comparison with L402.
 
+### Breaking
+
+- **Minimum Node.js bumped to 20** (from 18). Node 18 reached end-of-life April 2025; `envelope.ts`'s `computeTxBinding` relies on `globalThis.crypto.subtle` which is only available unflagged in Node 19+. `engines.node` updated to `>=20`, CI matrix dropped Node 18, README/docs updated. Node 20 and Node 22 remain fully supported.
+
 ### Compatibility
 
-- **Purely additive.** No changes to existing types, scheme interfaces, wire format, or conformance vectors. Existing 0.6.x consumers require no code changes.
+- **Non-compat consumers are additive.** No changes to existing types, scheme interfaces, wire format, or conformance vectors.
 - **Compat sub-path exports reorganized**: all three compat layers now live under `s402/compat/*` for symmetry and clearer intent.
   - `s402/compat` → **`s402/compat/x402`** (breaking rename — x402 is now explicit, not the unlabeled default)
   - `s402/compat-mpp` → **`s402/compat/mpp`**
