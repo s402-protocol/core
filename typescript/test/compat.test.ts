@@ -17,7 +17,7 @@ import {
   normalizeRequirements,
   type x402PaymentRequirements,
   type x402PaymentRequiredEnvelope,
-} from '../src/compat.js';
+} from '../src/compat/x402.js';
 
 const VALID_PAY_TO = '0x' + 'a'.repeat(64);
 

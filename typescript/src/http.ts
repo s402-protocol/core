@@ -560,7 +560,7 @@ export function validateRequirementsShape(obj: unknown): void {
   // (x402 format should go through normalizeRequirements in compat.ts instead.)
   if (record.s402Version === undefined) {
     throw new s402Error('INVALID_PAYLOAD',
-      'Missing s402Version. For x402 format, use normalizeRequirements() from s402/compat.');
+      'Missing s402Version. For x402 format, use normalizeRequirements() from s402/compat/x402.');
   }
   if (record.s402Version !== '1') {
     throw new s402Error('INVALID_PAYLOAD',

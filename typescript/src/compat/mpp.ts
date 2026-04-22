@@ -23,10 +23,10 @@
  *   - Write path (s402 → MPP emission)
  */
 
-import type { s402PaymentRequirements } from './types.js';
-import { S402_VERSION } from './types.js';
-import { s402Error } from './errors.js';
-import { isValidAmount } from './http.js';
+import type { s402PaymentRequirements } from '../types.js';
+import { S402_VERSION } from '../types.js';
+import { s402Error } from '../errors.js';
+import { isValidAmount } from '../http.js';
 
 // ══════════════════════════════════════════════════════════════
 // MPP wire types (read-side; fields we consume)

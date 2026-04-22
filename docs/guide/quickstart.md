@@ -30,7 +30,7 @@ s402 provides focused sub-paths so you only import what you need:
 import { ... } from 's402';           // Everything
 import type { ... } from 's402/types'; // Types + constants only (zero runtime)
 import { ... } from 's402/http';       // HTTP encode/decode
-import { ... } from 's402/compat';     // x402 interop
+import { ... } from 's402/compat/x402';     // x402 interop
 import { ... } from 's402/errors';     // Error types
 ```
 
@@ -143,7 +143,7 @@ import {
   isX402,
   toX402Requirements,
   fromX402Requirements,
-} from 's402/compat';
+} from 's402/compat/x402';
 
 // Auto-normalize: works with s402 or x402 (V1 or V2) format
 const requirements = normalizeRequirements(rawJsonFromAnySource);

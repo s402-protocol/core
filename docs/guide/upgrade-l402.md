@@ -1,5 +1,5 @@
 ---
-description: Migrating from L402 (Lightning Labs) to s402 — consume L402 challenges natively via s402/compat-l402, coexist via Accept-Payment, and optionally graduate off Lightning to on-chain schemes.
+description: Migrating from L402 (Lightning Labs) to s402 — consume L402 challenges natively via s402/compat/l402, coexist via Accept-Payment, and optionally graduate off Lightning to on-chain schemes.
 ---
 
 # Migrating from L402
@@ -9,12 +9,12 @@ Already running an L402-gated API (Aperture or similar)? s402 is the first 402 p
 This guide is for teams running Aperture-style Lightning paywalls who want to extend — not replace — their setup.
 
 ::: info Availability
-L402 read-path lands in v0.7 — the code is in the `s402/compat-l402` entry point. Write-path emission (s402 server emitting an L402 challenge with an issued macaroon + fresh invoice) is not scoped: it requires a running Lightning node to mint invoices, which is out of scope for a wire-format library. Teams that want to emit L402 should keep using Aperture.
+L402 read-path lands in v0.7 — the code is in the `s402/compat/l402` entry point. Write-path emission (s402 server emitting an L402 challenge with an issued macaroon + fresh invoice) is not scoped: it requires a running Lightning node to mint invoices, which is out of scope for a wire-format library. Teams that want to emit L402 should keep using Aperture.
 :::
 
 ## TL;DR
 
-- s402 will read L402 / LSAT challenges via `s402/compat-l402` (shipping v0.7)
+- s402 will read L402 / LSAT challenges via `s402/compat/l402` (shipping v0.7)
 - Your existing Aperture deployment keeps working
 - You gain six schemes Lightning structurally cannot express: Upto ceiling, Escrow with arbiter, Stream with on-chain rate cap, Unlock pay-to-decrypt, Prepaid batched settlement, Exact on any chain beyond Bitcoin
 - Coexistence via `Accept-Payment`: advertise both L402 and s402 on the same endpoint
@@ -47,7 +47,7 @@ This is the primary v0.7 capability — an s402 client receives a 402 from an Ap
 import {
   parseWwwAuthenticateL402,
   fromL402Challenge,
-} from 's402/compat-l402';
+} from 's402/compat/l402';
 
 const res = await fetch('https://api.example.com/data');
 if (res.status === 402) {

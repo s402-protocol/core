@@ -9,7 +9,7 @@ Already running MPP (Stripe's Machine Payment Protocol on Tempo)? s402 is design
 This guide is for teams evaluating s402 alongside MPP, or already running MPP and considering s402 for the patterns MPP doesn't cover.
 
 ::: info Availability
-MPP compat **read path** (challenge parsing + Charge-to-s402 translation) ships with v0.3 — the code is in the `s402/compat-mpp` entry point. Write-path emission (s402 → MPP challenges) and the Session-to-Prepaid shim are on the v0.4 roadmap ([DAN-339](https://linear.app/dannydevs/issue/DAN-339)). Today you can consume MPP Charge 402 responses natively; emitting MPP challenges still requires routing to an MPP-native server.
+MPP compat **read path** (challenge parsing + Charge-to-s402 translation) ships with v0.3 — the code is in the `s402/compat/mpp` entry point. Write-path emission (s402 → MPP challenges) and the Session-to-Prepaid shim are on the v0.4 roadmap ([DAN-339](https://linear.app/dannydevs/issue/DAN-339)). Today you can consume MPP Charge 402 responses natively; emitting MPP challenges still requires routing to an MPP-native server.
 :::
 
 ## TL;DR
@@ -63,7 +63,7 @@ async function handle(req: Request): Promise<Response> {
   const chosen = selectBestScheme(preferred, supported);
 
   if (chosen?.startsWith('tempo/') || chosen?.startsWith('stripe/')) {
-    // v0.3: delegate to 's402/compat-mpp' challenge builder.
+    // v0.3: delegate to 's402/compat/mpp' challenge builder.
     // Until then, route MPP traffic to your existing MPP server path.
     return routeToMppHandler(req, chosen);
   }
@@ -86,7 +86,7 @@ Some teams want to consolidate on a single protocol. s402's compat layer makes t
 import {
   parseWwwAuthenticatePayment,
   fromMppChargeChallenge,
-} from 's402/compat-mpp';
+} from 's402/compat/mpp';
 
 const challenge = parseWwwAuthenticatePayment(
   response.headers.get('WWW-Authenticate'),
@@ -146,7 +146,7 @@ No. s402 is a chain-agnostic wire format. You can deploy on any chain, but Sui i
 
 ### Does s402 speak MPP's `WWW-Authenticate: Payment` header?
 
-Read path lands in v0.3: `parseWwwAuthenticatePayment` + `fromMppChargeChallenge` in `s402/compat-mpp`. Write-path emission (s402 server sending an MPP-shaped `WWW-Authenticate: Payment` header) is v0.4 roadmap. Native s402 uses its own headers (`payment-required`, `x-payment`); the two coexist via the `Accept-Payment` negotiation.
+Read path lands in v0.3: `parseWwwAuthenticatePayment` + `fromMppChargeChallenge` in `s402/compat/mpp`. Write-path emission (s402 server sending an MPP-shaped `WWW-Authenticate: Payment` header) is v0.4 roadmap. Native s402 uses its own headers (`payment-required`, `x-payment`); the two coexist via the `Accept-Payment` negotiation.
 
 ### Can MPP clients consume s402 NFT receipts?
 

@@ -40,7 +40,7 @@ async createPayment(
 ): Promise<s402PaymentPayload>;
 ```
 
-Accepts typed `s402PaymentRequirements`. For x402 input, normalize first via `normalizeRequirements()` from `s402/compat`.
+Accepts typed `s402PaymentRequirements`. For x402 input, normalize first via `normalizeRequirements()` from `s402/compat/x402`.
 
 **Throws:**
 - `NETWORK_MISMATCH` — no schemes registered for the requirements' network

@@ -1,5 +1,5 @@
 /**
- * Unit tests for s402/compat-l402 — L402 (Lightning Labs) read-path interop.
+ * Unit tests for s402/compat/l402 — L402 (Lightning Labs) read-path interop.
  *
  * BOLT-11 vectors are drawn from the canonical BOLT-11 test vectors in the
  * Lightning bolts repo (bolts/11-payment-encoding.md) — these have been
@@ -14,7 +14,7 @@ import {
   decodeBolt11Summary,
   fromL402Challenge,
   type L402Challenge,
-} from '../src/compat-l402.js';
+} from '../src/compat/l402.js';
 import { s402Error } from '../src/errors.js';
 
 // A representative (synthetic) BOLT-11 invoice body. Real BOLT-11 invoices are
@@ -33,7 +33,8 @@ const INV_10P_BTC   = 'lnbc10p1pvjluezpp5qqqsyqcyq5rqwzqfqqq';        // 10 pBTC
 const INV_AMOUNTLESS = 'lnbc1pvjluezpp5qqqsyqcyq5rqwzqfqqq';          // no amount
 const INV_TESTNET   = 'lntb25u1pvjluezpp5qqqsyqcyq5rqwzqfqqq';        // testnet
 const INV_REGTEST   = 'lnbcrt500u1pvjluezpp5qqqsyqcyq5rqwzqfqqq';     // regtest
-const INV_SIGNET    = 'lnsb25u1pvjluezpp5qqqsyqcyq5rqwzqfqqq';        // signet
+const INV_SIGNET_CANONICAL = 'lntbs25u1pvjluezpp5qqqsyqcyq5rqwzqfqqq'; // signet — canonical `tbs` prefix (current BOLT-11)
+const INV_SIGNET_LEGACY    = 'lnsb25u1pvjluezpp5qqqsyqcyq5rqwzqfqqq';  // signet — legacy `sb` prefix (older LND)
 
 describe('parseWwwAuthenticateL402', () => {
   it('returns null for absent / non-L402 headers', () => {
@@ -140,8 +141,12 @@ describe('decodeBolt11Summary — BOLT-11 HRP decoding', () => {
     expect(decodeBolt11Summary(INV_REGTEST).network).toBe('lightning:regtest');
   });
 
-  it('recognizes signet (lnsb) prefix', () => {
-    expect(decodeBolt11Summary(INV_SIGNET).network).toBe('lightning:signet');
+  it('recognizes signet canonical prefix (lntbs, current BOLT-11 spec)', () => {
+    expect(decodeBolt11Summary(INV_SIGNET_CANONICAL).network).toBe('lightning:signet');
+  });
+
+  it('recognizes signet legacy prefix (lnsb, older LND emissions)', () => {
+    expect(decodeBolt11Summary(INV_SIGNET_LEGACY).network).toBe('lightning:signet');
   });
 
   it('is case-insensitive on the invoice string', () => {
@@ -192,13 +197,35 @@ describe('fromL402Challenge — L402 → s402 translation', () => {
     expect(ext.invoice).toBe(INV_2500_UBTC);
   });
 
-  it('propagates network from invoice prefix across all four networks', () => {
+  it('propagates network from invoice prefix across all networks (canonical + legacy signet)', () => {
     expect(fromL402Challenge({ ...baseChallenge, invoice: INV_TESTNET }).network)
       .toBe('lightning:testnet');
     expect(fromL402Challenge({ ...baseChallenge, invoice: INV_REGTEST }).network)
       .toBe('lightning:regtest');
-    expect(fromL402Challenge({ ...baseChallenge, invoice: INV_SIGNET }).network)
+    expect(fromL402Challenge({ ...baseChallenge, invoice: INV_SIGNET_CANONICAL }).network)
       .toBe('lightning:signet');
+    expect(fromL402Challenge({ ...baseChallenge, invoice: INV_SIGNET_LEGACY }).network)
+      .toBe('lightning:signet');
+  });
+
+  it('stamps a conservative expiresAt so S1 (stale payment rejection) stays load-bearing', () => {
+    const before = Date.now();
+    const requirements = fromL402Challenge(baseChallenge);
+    const after = Date.now();
+
+    expect(requirements.expiresAt).toBeDefined();
+    // Window is now + 60s (±a few ms for test clock drift)
+    expect(requirements.expiresAt!).toBeGreaterThanOrEqual(before + 60_000);
+    expect(requirements.expiresAt!).toBeLessThanOrEqual(after + 60_000);
+  });
+
+  it('expiresAt is a fresh stamp per call (two calls produce two windows)', () => {
+    const r1 = fromL402Challenge(baseChallenge);
+    // Busy-wait a tick to guarantee Date.now() advances
+    const deadline = Date.now() + 2;
+    while (Date.now() < deadline) { /* spin */ }
+    const r2 = fromL402Challenge(baseChallenge);
+    expect(r2.expiresAt!).toBeGreaterThan(r1.expiresAt!);
   });
 
   it('rejects amountless invoices (L402 spec violation)', () => {

@@ -27,9 +27,9 @@
  *   - BOLT-12 offers (spec still evolving)
  */
 
-import type { s402PaymentRequirements } from './types.js';
-import { S402_VERSION } from './types.js';
-import { s402Error } from './errors.js';
+import type { s402PaymentRequirements } from '../types.js';
+import { S402_VERSION } from '../types.js';
+import { s402Error } from '../errors.js';
 
 // ══════════════════════════════════════════════════════════════
 // L402 wire types (read-side)
@@ -185,12 +185,22 @@ function parseAuthParams(input: string): Record<string, string | undefined> {
 // BOLT-11 HRP decoding
 // ══════════════════════════════════════════════════════════════
 
-const HRP_PATTERN = /^ln(bc|tb|bcrt|sb)(\d+)?([munp])?1[a-z0-9]+$/;
+// HRP-only sanity check — does NOT validate the bech32 body (checksum, data
+// payload). Real BOLT-11 invoices have a 520-bit signature and tagged fields
+// past the `1` separator; Lightning wallets validate those. Ordering in the
+// alternation matters: `bcrt` before `bc`, `tbs` before `tb` — the regex picks
+// the FIRST match, so longer prefixes must come first to avoid being shadowed.
+const HRP_PATTERN = /^ln(bcrt|tbs|bc|tb|sb)(\d+)?([munp])?1[a-z0-9]+$/;
 
+// BOLT-11 network prefixes. Two signet prefixes are recognized:
+//   - `tbs` — canonical per current BOLT-11 spec (core-lightning, recent LND)
+//   - `sb`  — legacy LND emissions still in the wild
+// Both canonicalize to `lightning:signet` in the output.
 const NETWORK_BY_PREFIX: Record<string, Bolt11Summary['network']> = {
   bc: 'lightning:mainnet',
   tb: 'lightning:testnet',
   bcrt: 'lightning:regtest',
+  tbs: 'lightning:signet',
   sb: 'lightning:signet',
 };
 
@@ -286,6 +296,26 @@ export function decodeBolt11Summary(invoice: string): Bolt11Summary {
 const LIGHTNING_INVOICE_SENTINEL = 'lightning:invoice';
 
 /**
+ * Conservative default expiry window applied to L402-derived requirements.
+ *
+ * BOLT-11 invoices carry their own expiry as a tagged field (type `x`) past
+ * the `1` separator, defaulting to 3600 seconds per spec. This partial decoder
+ * reads only the HRP, so the real invoice expiry is not surfaced. To keep
+ * S1 (stale payment rejection) load-bearing for L402-derived requirements,
+ * we stamp a conservative 60s window: an s402 client that caches requirements
+ * longer than 60s must re-fetch the 402 response rather than reusing stale
+ * ones against a possibly-expired invoice.
+ *
+ * Tradeoff: a long-lived invoice (e.g., Aperture's default 1-hour expiry) is
+ * rejected by s402 after 60s even though the invoice is still payable. The
+ * re-fetch cost is one extra round-trip, not a payment failure.
+ *
+ * A future v0.8 full BOLT-11 decoder can read the `x` tag and use the real
+ * expiry. Until then, 60s is the safe floor.
+ */
+const L402_DEFAULT_EXPIRY_WINDOW_MS = 60_000;
+
+/**
  * Translate an L402 challenge into s402 payment requirements using the `exact`
  * scheme.
  *
@@ -314,6 +344,9 @@ export function fromL402Challenge(challenge: L402Challenge): s402PaymentRequirem
     asset: 'lightning:msat',
     amount: summary.amountMsat,
     payTo: LIGHTNING_INVOICE_SENTINEL,
+    // Conservative expiry keeps S1 (stale payment rejection) honest for
+    // L402-derived requirements — see L402_DEFAULT_EXPIRY_WINDOW_MS doc.
+    expiresAt: Date.now() + L402_DEFAULT_EXPIRY_WINDOW_MS,
     extensions: {
       l402: {
         macaroon: challenge.macaroon,

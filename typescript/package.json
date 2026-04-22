@@ -68,26 +68,26 @@
       },
       "default": "./dist/http.mjs"
     },
-    "./compat": {
+    "./compat/x402": {
       "import": {
-        "types": "./dist/compat.d.mts",
-        "default": "./dist/compat.mjs"
+        "types": "./dist/compat/x402.d.mts",
+        "default": "./dist/compat/x402.mjs"
       },
-      "default": "./dist/compat.mjs"
+      "default": "./dist/compat/x402.mjs"
     },
-    "./compat-mpp": {
+    "./compat/mpp": {
       "import": {
-        "types": "./dist/compat-mpp.d.mts",
-        "default": "./dist/compat-mpp.mjs"
+        "types": "./dist/compat/mpp.d.mts",
+        "default": "./dist/compat/mpp.mjs"
       },
-      "default": "./dist/compat-mpp.mjs"
+      "default": "./dist/compat/mpp.mjs"
     },
-    "./compat-l402": {
+    "./compat/l402": {
       "import": {
-        "types": "./dist/compat-l402.d.mts",
-        "default": "./dist/compat-l402.mjs"
+        "types": "./dist/compat/l402.d.mts",
+        "default": "./dist/compat/l402.mjs"
       },
-      "default": "./dist/compat-l402.mjs"
+      "default": "./dist/compat/l402.mjs"
     },
     "./errors": {
       "import": {

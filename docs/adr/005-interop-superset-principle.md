@@ -26,7 +26,7 @@ But expressiveness alone is insufficient if adopters have to *choose* between pr
 
 Where a competing protocol has a legitimate design that s402 can accept without compromise, s402 **absorbs** the competing protocol as a payment-in format. Specifically:
 
-1. **x402 compatibility** — `s402/compat` normalizes x402 `exact` and `upto` payloads to s402 payloads. An s402 resource server accepts x402 clients transparently. Already shipped (ADR-001 §3).
+1. **x402 compatibility** — `s402/compat/x402` normalizes x402 `exact` and `upto` payloads to s402 payloads. An s402 resource server accepts x402 clients transparently. Already shipped (ADR-001 §3).
 2. **MPP compatibility** — a future `@sweefi/mpp-adapter` will accept MPP intent payloads and convert to s402 payment payloads where semantics map cleanly. Intents that cannot map (e.g., scheme-specific Stripe-only fields) return `UNSUPPORTED_INTENT` with clear guidance.
 3. **Future protocols** — the compat layer is the contract; new protocols get adapters in `@sweefi/*-adapter` packages, never in the `s402` core.
 
@@ -61,7 +61,7 @@ This includes: s402 README, SweeFi README, talks (AIEWF 2026 pitch), ADRs, blog 
 ## Alternatives Considered
 
 **Alt A — Pure superset (no interop layer).**
-Rejected. Without `s402/compat`, every x402 adopter must migrate or fork. Migration friction kills adoption. The Let's Encrypt analogue is instructive: LE did not require abandoning commercial CAs; it worked alongside them, then ate the market.
+Rejected. Without `s402/compat/x402`, every x402 adopter must migrate or fork. Migration friction kills adoption. The Let's Encrypt analogue is instructive: LE did not require abandoning commercial CAs; it worked alongside them, then ate the market.
 
 **Alt B — Pure interop (no superset schemes).**
 Rejected. Without prepaid, streaming, escrow, and unlock, s402 offers no durable reason to exist. Interop is a distribution vector, not a strategy. The strategy is *what s402 can ship that competitors structurally cannot*.

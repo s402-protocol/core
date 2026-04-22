@@ -12,7 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`s402/compat-l402` — L402 read-path interop (DAN-344).** New entry point for consuming Lightning Labs' L402 (formerly LSAT) challenges as native s402 types. L402 is the oldest 402 dialect in production — shipping this turns the "universal read" positioning pillar from aspirational into airtight.
   - `parseWwwAuthenticateL402(header)` — RFC 9110 auth-params parser accepting both `L402` and legacy `LSAT` auth-schemes (canonicalized to `L402` in output). Handles quoted-string + unquoted-token forms. Enforces required `macaroon` and `invoice` params.
   - `decodeBolt11Summary(invoice)` — partial BOLT-11 decoder over the human-readable part only. Extracts network (`lightning:mainnet|testnet|regtest|signet`) and amount (converting m/u/n/p multipliers to millisatoshi with BigInt arithmetic). Rejects pico-BTC amounts not divisible by 10.
-  - `fromL402Challenge(challenge)` — translates an L402 challenge into `s402PaymentRequirements` with `scheme: 'exact'`, `asset: 'lightning:msat'`, sentinel `payTo: 'lightning:invoice'` (real destination lives in the invoice). Surfaces macaroon + invoice in `extensions.l402` for retry construction. Rejects amountless invoices as spec violations.
+  - `fromL402Challenge(challenge)` — translates an L402 challenge into `s402PaymentRequirements` with `scheme: 'exact'`, `asset: 'lightning:msat'`, sentinel `payTo: 'lightning:invoice'` (real destination lives in the invoice). Surfaces macaroon + invoice in `extensions.l402` for retry construction. Rejects amountless invoices as spec violations. Stamps a conservative `expiresAt = now + 60s` so that **S1 (stale payment rejection) stays load-bearing** for L402-derived requirements — the real BOLT-11 expiry tag is not decoded in v0.7 (scope deferral); the 60s floor guards against stale-invoice replay, with the tradeoff that long-expiry invoices trigger a re-fetch after 60s.
+  - **Signet prefix support**: recognizes both the canonical current-BOLT-11 prefix (`lntbs`, core-lightning + recent LND) and the legacy prefix (`lnsb`, older LND emissions). Both canonicalize to `lightning:signet` in the parsed output.
 - **~20 unit tests** at `test/compat-l402.test.ts` covering all four multiplier classes, all four network prefixes, LSAT/L402 alias handling, amountless invoices, malformed HRPs, and end-to-end header-to-requirements flows.
 - **Positioning document** at `docs/positioning.md` — canonical three-pillar USP: expressiveness (6 schemes), universal read (every 402 dialect), on-chain enforcement (Move invariants). Single source of truth for landing page, pitch, and grant copy.
 - **Universal 402 Absorption** project tracker on Linear ([project link](https://linear.app/dannydevs/project/universal-402-absorption-f6e181082db4)) with child issues DAN-344 (L402), DAN-345 (MPP Session), DAN-346 (MPP write path), DAN-347 (Google AP2), DAN-348 (IETF reference impl), DAN-349 (ERC-7824 watch).
@@ -32,7 +33,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Compatibility
 
 - **Purely additive.** No changes to existing types, scheme interfaces, wire format, or conformance vectors. Existing 0.6.x consumers require no code changes.
-- **New sub-path export**: `s402/compat-l402` sits alongside `s402/compat` (x402) and `s402/compat-mpp` (Stripe/Tempo). All three are opt-in — importing from the root `s402` entry does not pull any compat bundle.
+- **Compat sub-path exports reorganized**: all three compat layers now live under `s402/compat/*` for symmetry and clearer intent.
+  - `s402/compat` → **`s402/compat/x402`** (breaking rename — x402 is now explicit, not the unlabeled default)
+  - `s402/compat-mpp` → **`s402/compat/mpp`**
+  - `s402/compat-l402` → **`s402/compat/l402`** (new in this release; shipped under the new path from day one)
+  - Source tree moved from flat `src/compat.ts`, `src/compat-mpp.ts`, `src/compat-l402.ts` to `src/compat/x402.ts`, `src/compat/mpp.ts`, `src/compat/l402.ts`. Pre-1.0 minor bump licenses the rename; no backward-compat aliases shipped — consumers update imports once.
+  - **Migration**: find-replace `'s402/compat'` → `'s402/compat/x402'`, `'s402/compat-mpp'` → `'s402/compat/mpp'`, `'s402/compat-l402'` → `'s402/compat/l402'`. Exported symbol names are unchanged.
+- Root `s402` entry still pulls no compat bundle — compat layers remain opt-in.
 
 ## [0.6.0] - 2026-04-19
 

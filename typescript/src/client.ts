@@ -45,7 +45,7 @@ export class s402Client {
    * `accepts` array that we have a registered implementation for.
    *
    * Accepts typed s402PaymentRequirements only. For x402 input, normalize
-   * first via `normalizeRequirements()` from 's402/compat'.
+   * first via `normalizeRequirements()` from 's402/compat/x402'.
    *
    * @param requirements - Server's payment requirements (from a 402 response)
    * @returns Payment payload ready to send in the `x-payment` header

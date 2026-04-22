@@ -17,7 +17,7 @@ The first wave of HTTP 402 protocols — [x402](https://github.com/coinbase/x402
 - **x402** ships one payment pattern (exact amount, one call, one payment) across EVM chains.
 - **MPP** ships one formally-registered intent (Charge) with a rich card/Lightning/ACH multi-rail story anchored in Stripe's existing merchant network.
 
-s402 is a superset. It reads both natively (via `s402/compat` and `s402/compat-mpp`) and adds five payment schemes neither expresses as first-class primitives.
+s402 is a superset. It reads both natively (via `s402/compat/x402` and `s402/compat/mpp`) and adds five payment schemes neither expresses as first-class primitives.
 
 ## Why an Agent Would Default to s402
 

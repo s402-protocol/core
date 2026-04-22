@@ -13,7 +13,7 @@ import {
   normalizeRequirements,
   isS402,
   isX402,
-} from 's402/compat';
+} from 's402/compat/x402';
 ```
 
 ## Why This Exists
@@ -41,7 +41,7 @@ Handles three formats:
 
 ```typescript
 import { decodePaymentRequired } from 's402/http';
-import { normalizeRequirements } from 's402/compat';
+import { normalizeRequirements } from 's402/compat/x402';
 
 // Option A: decode s402 headers directly (validates s402Version)
 const requirements = decodePaymentRequired(header);
@@ -146,7 +146,7 @@ import type {
   x402PaymentRequirements,
   x402PaymentRequiredEnvelope,
   x402PaymentPayload,
-} from 's402/compat';
+} from 's402/compat/x402';
 ```
 
 ### `x402PaymentRequirements`

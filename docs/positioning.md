@@ -33,16 +33,16 @@ x402 ships 2 schemes. MPP ships 1 formally registered intent. L402 ships 1. s402
 
 | Dialect | Status | Module |
 |---|---|---|
-| **x402 V1/V2** (Coinbase) | ✅ Production | `s402/compat` |
-| **MPP Charge** — crypto rails (Stripe/Tempo) | ✅ v0.6 | `s402/compat-mpp` |
-| **MPP Accept-Payment** | ✅ v0.6 | `s402/compat-mpp` |
-| **MPP Session** | 📋 v0.7 | `s402/compat-mpp` |
-| **L402** (Lightning Labs) | 📋 v0.7 | `s402/compat-l402` |
+| **x402 V1/V2** (Coinbase) | ✅ Production | `s402/compat/x402` |
+| **MPP Charge** — crypto rails (Stripe/Tempo) | ✅ v0.6 | `s402/compat/mpp` |
+| **MPP Accept-Payment** | ✅ v0.6 | `s402/compat/mpp` |
+| **MPP Session** | 📋 v0.7 | `s402/compat/mpp` |
+| **L402** (Lightning Labs) | 📋 v0.7 | `s402/compat/l402` |
 | **IETF `draft-ryan-httpauth-payment`** | 🟡 Partial via MPP | (reference impl path) |
-| **Google AP2** (Agent Payments Protocol) | 📋 research | `s402/compat-ap2` |
+| **Google AP2** (Agent Payments Protocol) | 📋 research | `s402/compat/ap2` |
 | **ERC-7824 statechannels** | 📋 watch | — |
 
-Any client speaking any dialect in the "Production" rows can hit an s402 server unchanged. A new dialect becomes a sub-path export (`s402/compat-*`) with its own conformance vectors — zero core pollution.
+Any client speaking any dialect in the "Production" rows can hit an s402 server unchanged. A new dialect becomes a sub-path export (`s402/compat/*`) with its own conformance vectors — zero core pollution.
 
 ### Pillar 3 — On-Chain Enforcement
 
@@ -70,7 +70,7 @@ s402 absorbs every 402 dialect we discover in production. This is a standing com
 
 **Rule:** when a new 402 dialect is identified in-the-wild, a compat layer plan is opened within two weeks. Each compat layer:
 
-1. Lives in its own sub-path export (`s402/compat-{name}`) with zero core imports.
+1. Lives in its own sub-path export (`s402/compat/{name}`) with zero core imports.
 2. Implements the read path first (decode, translate to s402 types). Write path is a separate milestone.
 3. Passes its own conformance vectors sourced from the dialect's canonical spec.
 4. Documents exactly what it does *not* translate (e.g., processor methods, session intents, bespoke auth).

@@ -37,8 +37,8 @@ s402 is chain-agnostic. The protocol layer contains no chain-specific logic (see
 | Chain | Package | Status | Schemes supported |
 |---|---|---|---|
 | **Sui** | [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui) | ✅ Production | All six (Exact, Upto, Prepaid, Escrow, Stream, Unlock) |
-| **EVM (via compat)** | `s402/compat` | ✅ Production | Exact, Upto — reads x402 V1/V2 payloads natively |
-| **Tempo (via compat)** | `s402/compat-mpp` | 📋 v0.3 roadmap | Charge ↔ Exact, Session ↔ Prepaid |
+| **EVM (via compat)** | `s402/compat/x402` | ✅ Production | Exact, Upto — reads x402 V1/V2 payloads natively |
+| **Tempo (via compat)** | `s402/compat/mpp` | 📋 v0.3 roadmap | Charge ↔ Exact, Session ↔ Prepaid |
 | **Solana** | — | 📋 Community | Open for contributions |
 | **Aptos** | — | 📋 Community | Open for contributions |
 
@@ -89,14 +89,14 @@ The compat layers let existing x402 and MPP traffic flow through an s402 server 
 
 | Source protocol | s402 module | Status | What it handles |
 |---|---|---|---|
-| **x402 V1** | `s402/compat` | ✅ Production | `x-payment` header, base64 JSON, `exact` scheme |
-| **x402 V2** | `s402/compat` | ✅ Production | Multi-chain extensions, new error shapes |
-| **MPP Charge (read)** | `s402/compat-mpp` | 🟡 v0.3 | Challenge parsing + `fromMppChargeChallenge` for blockchain methods (tempo/evm/solana/lightning/stellar) |
-| **MPP Charge (write)** | `s402/compat-mpp` | 📋 v0.4 roadmap | Emit MPP-shaped `WWW-Authenticate: Payment` challenges |
-| **MPP Session** | `s402/compat-mpp` | 📋 v0.4 roadmap | Cumulative voucher ↔ Prepaid translation |
-| **MPP `Accept-Payment`** | `s402/compat-mpp` | ✅ Production | `parseMppAcceptPayment` — method/intent pairs with wildcards + q-values |
+| **x402 V1** | `s402/compat/x402` | ✅ Production | `x-payment` header, base64 JSON, `exact` scheme |
+| **x402 V2** | `s402/compat/x402` | ✅ Production | Multi-chain extensions, new error shapes |
+| **MPP Charge (read)** | `s402/compat/mpp` | 🟡 v0.3 | Challenge parsing + `fromMppChargeChallenge` for blockchain methods (tempo/evm/solana/lightning/stellar) |
+| **MPP Charge (write)** | `s402/compat/mpp` | 📋 v0.4 roadmap | Emit MPP-shaped `WWW-Authenticate: Payment` challenges |
+| **MPP Session** | `s402/compat/mpp` | 📋 v0.4 roadmap | Cumulative voucher ↔ Prepaid translation |
+| **MPP `Accept-Payment`** | `s402/compat/mpp` | ✅ Production | `parseMppAcceptPayment` — method/intent pairs with wildcards + q-values |
 | **s402 `Accept-Payment`** | core `s402` | ✅ Production | Flat scheme token negotiation ([DAN-341](https://linear.app/dannydevs/issue/DAN-341)) |
-| **L402 / LSAT** (Lightning Labs) | `s402/compat-l402` | ✅ v0.7 | `parseWwwAuthenticateL402` + `fromL402Challenge` — BOLT-11 HRP decode, macaroon+invoice passthrough |
+| **L402 / LSAT** (Lightning Labs) | `s402/compat/l402` | ✅ v0.7 | `parseWwwAuthenticateL402` + `fromL402Challenge` — BOLT-11 HRP decode, macaroon+invoice passthrough |
 
 See [Migrating from x402](/guide/upgrade-x402) and [Migrating from MPP](/guide/upgrade-mpp) for code.
 

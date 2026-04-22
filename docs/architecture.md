@@ -152,4 +152,4 @@ The vectors live in `test/conformance/vectors/` in the repository. They are gene
 - **`extensions` field** on requirements allows arbitrary data without breaking parsers
 - **`accepts` array** lets servers advertise multiple schemes, and clients pick the best one
 - **Version field** (`s402Version: '1'`) enables future protocol evolution
-- **Sub-path exports** (`s402/types`, `s402/http`, `s402/errors`, `s402/compat`) let consumers import only what they need
+- **Sub-path exports** (`s402/types`, `s402/http`, `s402/errors`, `s402/compat/x402`) let consumers import only what they need
