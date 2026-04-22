@@ -124,7 +124,7 @@ This is only possible because of Sui's architecture:
 | **Agent authorization** | None | None | AP2-aligned mandate delegation |
 | **Direct settlement** | No | No | Yes |
 | **Receipts** | Off-chain | Off-chain | On-chain NFT proofs |
-| **x402 compatibility** | Native | Native | Full (via `s402/compat` layer) |
+| **x402 compatibility** | Native | Native | Full (via `s402/compat/x402` layer) |
 
 *Note: x402 V2 (December 2025) is a significant evolution — multi-chain support, formalized Extensions, and backing from Google, Cloudflare, and Visa via the x402 Foundation. s402's differentiation is on-chain contract enforcement of payment caps and Sui's PTB atomicity, not "more schemes" alone.*
 
@@ -138,7 +138,7 @@ This is the most common question. The answer is architectural:
 
 3. **x402 has no concept of ongoing payment relationships.** Streams, prepaid balances, and escrows are stateful — they exist on-chain beyond a single request/response. x402's model is stateless per-request.
 
-4. **Compatibility is already solved.** s402's `exact` scheme *is* x402. The wire format is identical. An x402 client can talk to an s402 server out of the box. The `s402/compat` layer handles format normalization in both directions. Building a "Sui adapter for x402" would give you less capability, not more.
+4. **Compatibility is already solved.** s402's `exact` scheme *is* x402. The wire format is identical. An x402 client can talk to an s402 server out of the box. The `s402/compat/x402` layer handles format normalization in both directions. Building a "Sui adapter for x402" would give you less capability, not more.
 
 ### The ecosystem vision
 
@@ -812,7 +812,7 @@ This is NOT a TOCTOU (time-of-check-to-time-of-use) fix — Sui's PTBs are atomi
 
 ### x402 compatibility layer
 
-The compat layer (`s402/compat`) is an **adapter pattern** that handles three input formats:
+The compat layer (`s402/compat/x402`) is an **adapter pattern** that handles three input formats:
 
 ```
 x402 V1 (flat)           normalizeRequirements()
@@ -897,7 +897,7 @@ The `s402` package has no `dependencies` in package.json. Not even the Sui SDK.
 
 ### Decision 5: Optional x402 compatibility
 
-The compat layer is a sub-path import (`s402/compat`), not part of the main barrel export.
+The compat layer is a sub-path import (`s402/compat/x402`), not part of the main barrel export.
 
 **Why:** Most s402 consumers will never need x402 conversion. Including it in the main export would:
 1. Increase the mental surface area ("what are all these x402 types?")

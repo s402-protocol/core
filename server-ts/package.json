@@ -1,6 +1,6 @@
 {
   "name": "@sweefi/server",
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "description": "Framework-agnostic s402 server middleware. `s402Gate()` works with Hono, Next.js Route Handlers, Bun, Deno, Cloudflare Workers, and any host that speaks the Web Fetch API.",
   "license": "Apache-2.0",

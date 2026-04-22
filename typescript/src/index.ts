@@ -4,7 +4,7 @@
  * Six payment schemes: exact, upto, prepaid, stream, escrow, unlock.
  * AP2 mandate support. Direct settlement. On-chain receipts.
  * Wire-compatible with x402. Zero runtime dependencies.
- * Optional x402 compat layer available via 's402/compat'.
+ * Optional x402 compat layer available via 's402/compat/x402'.
  *
  * @packageDocumentation
  */
@@ -126,9 +126,9 @@ export type { JsonValue } from './canonicalization.js';
 // Internal validators (validateSubObjects, validateMandateShape, validate*Shape,
 // pickRequirementsFields) are available via 's402/http' for advanced use cases.
 
-// Compatibility — available via 's402/compat' sub-path import.
+// Compatibility — available via 's402/compat/x402' sub-path import.
 // Not re-exported here to keep the main barrel focused on s402-native APIs.
-// import { normalizeRequirements, fromX402Requirements } from 's402/compat';
+// import { normalizeRequirements, fromX402Requirements } from 's402/compat/x402';
 
 // Accept-Payment content negotiation (RFC 7231-style q-values)
 export {

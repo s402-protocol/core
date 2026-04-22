@@ -9,10 +9,10 @@
  * s402-only fields (mandate, stream, escrow, unlock extensions) are stripped.
  */
 
-import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload } from './types.js';
-import { S402_VERSION } from './types.js';
-import { s402Error } from './errors.js';
-import { isValidAmount, validateRequirementsShape, pickRequirementsFields } from './http.js';
+import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload } from '../types.js';
+import { S402_VERSION } from '../types.js';
+import { s402Error } from '../errors.js';
+import { isValidAmount, validateRequirementsShape, pickRequirementsFields } from '../http.js';
 
 // ══════════════════════════════════════════════════════════════
 // x402 types (minimal — just what we need for conversion)
@@ -262,7 +262,7 @@ export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope, now?: nu
  *
  * @example
  * ```ts
- * import { normalizeRequirements } from 's402/compat';
+ * import { normalizeRequirements } from 's402/compat/x402';
  *
  * // Works with any format — auto-detects s402 vs x402
  * const rawJson = JSON.parse(atob(header));

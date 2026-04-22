@@ -80,7 +80,7 @@ async function handlePaidRequest(req: Request): Promise<Response> {
 For **x402 V2 requirements** (the envelope format with `accepts: [{...}, ...]`), use the compat layer to normalize them into s402 shape:
 
 ```typescript
-import { normalizeRequirements } from 's402/compat';
+import { normalizeRequirements } from 's402/compat/x402';
 
 // Auto-detects s402 vs x402 V1 flat vs x402 V2 envelope.
 const requirements = normalizeRequirements(JSON.parse(atob(headerFromUpstream)));
@@ -137,7 +137,7 @@ No. You can speak both simultaneously. Use `detectProtocol()` on incoming payloa
 
 ### What about x402 V2's multi-chain support?
 
-The x402 V2 compat layer handles V2 inputs. See [`s402/compat`](/api/compat) for the full API.
+The x402 V2 compat layer handles V2 inputs. See [`s402/compat/x402`](/api/compat) for the full API.
 
 ### Is there gas sponsorship?
 

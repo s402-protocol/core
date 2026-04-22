@@ -228,7 +228,16 @@ two concurrent calls with the same payload will be serialized:
 
 ⚠️ Limitation: This is per-process dedup. Multiple facilitator
 instances could both process the same payload. On-chain, Sui's
-transaction dedup (by digest) provides the final safety net.  ∎
+transaction dedup (by digest) provides the final safety net.
+
+⚠️ Cross-process dedup: S5's in-flight Set provides per-process
+safety. Multi-instance facilitator deployments (federated or
+horizontally-scaled) obtain cross-process dedup via the
+Idempotency-Key header defined in ADR-007 §"Idempotency semantics",
+combined with a shared dedup cache (Redis, DynamoDB, or equivalent)
+keyed on the Idempotency-Key value. S5 itself does not mandate shared
+caching — operators who run multiple instances without a shared cache
+rely on Sui validator dedup as the final safety net.  ∎
 ```
 
 ---
@@ -374,6 +383,8 @@ this at ~2^128 work — infeasible by any current or projected compute.  ∎
 
 ⚠️ **Known gap: unlock-TX2.** `unlock-TX2` is constructed by the facilitator after TX1 settles (see `s402UnlockPayload` comments in types.ts:270-288). S8 as stated does NOT cover this transaction. This is the single narrow case where the April 2026 council's original S13 "causal binding" proposal would bite, and it needs a separate invariant in v0.3. Filed as a follow-up against ADR-001.
 
+⚠️ **S8 × S15 interaction.** S8 binds a single transaction's digest to the signer of *that* transaction. Long-running schemes (`stream`, `prepaid`, `escrow`, multi-phase `unlock`) span many transactions and may be signed by multiple pubkeys across their lifecycle (see S15, ADR-010). Each individual transaction's S8 binding remains intact — the long-lived scheme's *authority* is independently tracked per S15 via session-anchor capabilities. S8 is per-tx; S15 is per-session. Both hold; neither subsumes the other.
+
 ### Implementation template — verifySettlement for any client-signed Sui scheme
 
 The digest-binding check is **identical** across all client-signed schemes on Sui, because the digest is a pure function of the signed BCS bytes regardless of what the transaction does (transfer, Move call, shared-object mutation, etc.). When implementing a new client-signed scheme adapter, copy this template directly:
@@ -431,6 +442,134 @@ verifySettlement(
 
 ---
 
+## S15. Mid-Session Signer Rotation (Safety)
+
+**Statement**: For any long-running scheme whose state persists across multiple on-chain transactions (`stream`, `prepaid`, `escrow`, multi-phase `unlock`), scheme state is bound to a stable **session anchor** (mandate capability, or the scheme's shared-object ID) rather than to the signer's public key. Rotation of the signer mid-session MUST NOT invalidate, truncate, or double-bill the in-flight scheme, provided the new signer is authorized by the session anchor.
+
+**Formally**: For a scheme instance S with state-bearing object `obj(S)` and per-tx signer pubkey `pk_n`:
+
+```
+Let auth(pk, obj) = on-chain authorization predicate on obj(S) admits pk.
+
+For all n, m where tx_n and tx_m act on obj(S):
+  settlement(tx_n) succeeds  ⟺  auth(pk_n, obj(S)) = true
+  settlement(tx_m) succeeds  ⟺  auth(pk_m, obj(S)) = true
+  pk_n ≠ pk_m  does NOT imply  invalidation or double-billing of S
+```
+
+**Motivation (Sui-specific sharpness).** zkLogin ephemeral keys cycle on a max-epoch window by construction. Any long-running stream/prepaid/escrow will outlive multiple ephemeral keys. A protocol that binds scheme state to "the pubkey that signed the first tx" is incompatible with zkLogin at the limit. S15 makes the protocol explicitly rotation-tolerant.
+
+**Per-scheme cases**:
+
+| Scheme | Session anchor | Rotation tolerated | Authorization predicate |
+|--------|---------------|--------------------|-------------------------|
+| exact | None (one-shot) | N/A | Signer signs bytes |
+| prepaid | `PrepaidBalance` object ID | YES | Caller ∈ `balance.authorized_claimants` OR holds mandate referenced by `balance.mandate_id` |
+| stream | `Stream` object ID | YES | Caller holds stream's withdrawal capability OR matches `stream.provider` |
+| escrow | `Escrow` object ID | PARTIAL — arbiter rotation tolerated; payer/payee fixed at lock | Arbiter cap transferable via `escrow::transfer_arbiter` |
+| unlock | TX1 digest + `UnlockReceipt` | NO for TX1 (single-shot); facilitator rotation per ADR-009 G1 | S11 binds TX2 to TX1 cryptographically |
+
+**Proof (prepaid case, representative)**:
+
+```
+PrepaidBalance is a shared object with state:
+  - authorized_claimants: vector<address>   (or)
+  - mandate_id: Option<ID>                  (Swee Mandate capability ref)
+  - last_claimed_counter: u64                (S9 replay bound)
+
+At claim time, the Move entry function verifies:
+  let caller = tx_context::sender(ctx)
+  assert!( vector::contains(&balance.authorized_claimants, &caller)
+           OR swee_mandate::holds_capability(mandate_id, caller),
+           EUnauthorizedClaim )
+
+If signer rotates from pk_n to pk_{n+1} between claims, the new
+signer is admitted iff auth(pk_{n+1}, balance) holds. S9 (monotonic
+counter) continues to prevent replay regardless of which authorized
+signer claims. Therefore: rotation preserves S1 + S5 + S9 without
+truncating the scheme's lifecycle.                                  ∎
+```
+
+**What S15 forbids**:
+1. SDKs MUST NOT cache "the signer for this stream is pubkey X" in memory and reject later envelopes from a different but still-authorized signer.
+2. Scheme Move modules MUST NOT store `signer: address` as sole authority on the shared object. Authority MUST be a capability, a vector, or a mandate reference.
+3. SDK-level session objects MUST expose `rotateSigner(newSigner)` OR be constructed with a capability reference rather than a pubkey.
+
+⚠️ **Limitation**: S15 does not prevent lost authority. An agent that rotates without updating the on-chain authorization predicate will correctly be rejected. This is a coordination concern, not a protocol concern. S15 guarantees the protocol is *capable* of tolerating rotation.
+
+See ADR-010 for the full discussion, enforcement (`s402/no-captured-signer` lint rule), and the Move capability-authority audit check.
+
+---
+
+## S16. Protocol Version Binding (Safety)
+
+**Statement**: The protocol version and scheme spec digest that a client commits to at signing time MUST be cryptographically bound into the signed payload, not transmitted only as transport headers. A facilitator that receives a signed payload for scheme X under version `V_old` MUST NOT be able to present it as a payload for scheme X under version `V_new`.
+
+**Formally**: For all signed payment payloads P with `sig = sign(sk, bytes(P))`:
+
+```
+bytes(P)  includes  version_tag       (protocol version, e.g. "0.5.0")
+bytes(P)  includes  spec_digest(P.scheme)  (SRI-format hash of scheme spec)
+
+Therefore:
+  sign(sk, bytes(P_v0.5.0))  ≠  sign(sk, bytes(P_v0.6.0))
+  (even when every other field is identical)
+```
+
+**Motivation**. ADR-006 binds `s402-Version` and `s402-Spec-Digest` into **HTTP transport headers only**. These are not part of the bytes the signer signs over. This leaves a semantic-downgrade attack window: consider scheme `exact` upgrading v0.5.1 → v0.6.0 with a new field. A signed v0.5.1 `exact` payload does not commit to v0.5.1 semantics. A malicious facilitator that speaks v0.6.0 could present the same bytes under v0.6.0 semantics — the signature still verifies (same bytes), but the on-chain interpretation differs. Same bytes, different meaning, unchanged signature.
+
+**Proof (that S16 closes the semantic-downgrade attack, Sui case)**:
+
+```
+Attack model: adversarial facilitator F receives client-signed payload P
+under v0.5.1 exact semantics. F wants to submit under v0.6.0 semantics
+(where v0.6.0 adds, e.g., an optional refund field that F populates to
+route funds elsewhere).
+
+Without S16 (post-ADR-006 state):
+  Signed bytes B = BCS(TransactionData{ ptb: [
+    Move_call(exact::pay, [Coin, recipient, amount])
+  ]})
+  B contains no commitment to version. F submits B to the chain.
+  Chain executes whichever version of `exact` is currently published.
+  Signature verifies against B. Attack succeeds.
+
+With S16:
+  Signed bytes B' = BCS(TransactionData{ ptb: [
+    Move_call(exact::assert_protocol_version, ["0.5.1", "sha256-a1b2..."]),
+    Move_call(exact::pay, [Coin, recipient, amount])
+  ]})
+  B' contains an explicit version assertion as the first PTB instruction.
+  Chain executes assert_protocol_version, comparing "0.5.1" and
+  "sha256-a1b2..." against the exact module's compiled-in constants.
+  If on-chain exact is v0.6.0 without v0.5.1 in supported_versions, the
+  assertion aborts. Entire PTB reverts. No state change. Attack defeated. ∎
+```
+
+**Implementation (Sui)**: every s402 scheme Move module exposes `assert_protocol_version(version, spec_digest)` and SDKs constructing a PTB prepend it as the first instruction.
+
+**Implementation (non-Sui)**: for chains with opaque-bytes signing APIs (EVM `personal_sign`), binding is achieved by embedding the version tuple inside the signed message under a reserved domain prefix:
+
+```
+message = "s402-v1\0"
+       || u32_be(len(version_tag))  || version_tag
+       || u32_be(len(spec_digest))  || spec_digest
+       || chain_payload_bytes
+```
+
+**Facilitator obligation**: on intake, compare `s402-Version` + `s402-Spec-Digest` headers against version/digest embedded in the signed payload; reject with `S402_VERSION_MISMATCH` (400) on disagreement.
+
+**Client obligation**: after receiving a `settled` envelope, verify `envelope.specDigest` equals the digest the client bound into its own signed payload (constant-time compare, per S14).
+
+⚠️ **Limitation**:
+1. Sui: adds one extra PTB command (~300 gas, ~6% overhead on minimal `exact` settlement).
+2. Non-Sui: enforcement is facilitator-layer, not chain-layer. A facilitator that strips the version prefix before on-chain submission breaks S16 — detected only if the client runs S8-style digest verification.
+3. Presumes a trustworthy scheme-digest registry (ADR-006 history trust model).
+
+See ADR-010 for the full implementation spec, `s402/require-version-assertion` lint rule, and the Move CI audit requirement.
+
+---
+
 ## Assumptions
 
 1. **Wall-clock nature of Date.now()**: `Date.now()` is wall time and CAN go backwards. Under NTP discipline, backward motion is slewed (not stepped); absent NTP, the S1 proof degrades. See S1 Assumption block for the detailed threat model.
@@ -439,3 +578,5 @@ verifySettlement(
 4. **TLS transport**: HTTP payloads are not tampered with in transit (HTTPS assumed).
 5. **Blake2b-256 collision resistance**: S8's digest-binding argument depends on blake2b-256 being collision-resistant at the ~2^128 work level.
 6. **Ed25519 signature unforgeability**: The `exact` scheme's replay defense depends on the facilitator being unable to forge a signature over mutated transaction bytes.
+7. **On-chain authority evaluation (S15)**: Move's `tx_context::sender` correctly reflects the transaction's signer at the point of capability/vector lookup, and Sui validators reject transactions whose signer fails the scheme's on-chain authorization predicate.
+8. **Scheme-digest registry integrity (S16)**: The `supported_versions` constants compiled into a scheme's on-chain Move package at publish time accurately reflect the canonical spec digest for each advertised version. A backdoored registry defeats S16 — this is the ADR-006 history trust model problem, out of scope for S16 itself.

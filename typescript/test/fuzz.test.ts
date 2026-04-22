@@ -31,7 +31,7 @@ import {
   isS402,
   isX402,
   isX402Envelope,
-} from '../src/compat.js';
+} from '../src/compat/x402.js';
 
 // ══════════════════════════════════════════════════════════════
 // Arbitraries — structured generators for protocol objects

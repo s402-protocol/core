@@ -27,7 +27,7 @@ import {
   decodeSettleBody,
 } from '../../src/http.js';
 
-import { normalizeRequirements } from '../../src/compat.js';
+import { normalizeRequirements } from '../../src/compat/x402.js';
 import { formatReceiptHeader, parseReceiptHeader } from '../../src/receipts.js';
 import { s402Error } from '../../src/errors.js';
 

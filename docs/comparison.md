@@ -97,13 +97,13 @@ s402 is designed to absorb x402 and MPP traffic at the edge.
 
 | Direction | x402 V1 | x402 V2 | MPP | s402 |
 |---|---|---|---|---|
-| **Read x402 `payment-required`** | ✅ native | ✅ via compat | — | ✅ via `s402/compat` |
+| **Read x402 `payment-required`** | ✅ native | ✅ via compat | — | ✅ via `s402/compat/x402` |
 | **Accept x402 `x-payment`** | ✅ | ✅ | — | ✅ (exact scheme) |
 | **Read MPP `WWW-Authenticate: Payment`** | — | — | ✅ | ⚠️ adapter in development |
 | **Emit x402-compatible response** | — | — | — | ✅ `toX402Requirements()` |
 
 ```typescript
-import { detectProtocol, normalizeRequirements } from 's402/compat';
+import { detectProtocol, normalizeRequirements } from 's402/compat/x402';
 
 // Works whether the server sent s402, x402, or MPP
 const protocol = detectProtocol(response.headers);

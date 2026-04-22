@@ -1,5 +1,5 @@
 /**
- * Unit tests for s402/compat-mpp — MPP read-path interop.
+ * Unit tests for s402/compat/mpp — MPP read-path interop.
  *
  * Fixtures are drawn from the actual MPP spec drafts in tempoxyz/mpp-specs:
  *   - specs/core/draft-httpauth-payment-00.md (§5.1 challenge, §5.2 credential, §6.1 Accept-Payment)
@@ -14,7 +14,7 @@ import {
   decodeMppCredential,
   fromMppChargeChallenge,
   type MppChallenge,
-} from '../src/compat-mpp.js';
+} from '../src/compat/mpp.js';
 import { s402Error } from '../src/errors.js';
 
 function base64url(input: string): string {

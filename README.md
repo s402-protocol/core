@@ -14,7 +14,7 @@ bun add s402
 deno add npm:s402
 ```
 
-> **ESM-only.** This package ships ES modules only (`"type": "module"`). Requires Node.js >= 18. CommonJS `require()` is not supported.
+> **ESM-only.** This package ships ES modules only (`"type": "module"`). Requires Node.js >= 20. CommonJS `require()` is not supported.
 
 ## Governing Principle
 

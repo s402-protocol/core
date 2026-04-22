@@ -303,11 +303,11 @@ s402 v0.1.1 (February 2026) addressed findings from an internal security audit: 
 
 s402 is designed to work within the existing x402 ecosystem. Wire compatibility is a first-class property, not an afterthought.
 
-An x402 V1 client making an exact payment can interact with an s402 server — the `payment-required` and `x-payment` headers are structurally identical in the exact scheme. An s402 client detects which protocol a server is using via the `detectProtocol()` function, which checks for `s402Version` in decoded requirements. x402 V1 and V2 formats normalize into s402 types via the optional `s402/compat` layer. Note: x402 V2 renamed the client payment header to `payment-signature`; s402 uses `x-payment` (V1-compatible). The compat layer handles this normalization, but x402 V2 clients communicating natively require the compat layer on the s402 side.
+An x402 V1 client making an exact payment can interact with an s402 server — the `payment-required` and `x-payment` headers are structurally identical in the exact scheme. An s402 client detects which protocol a server is using via the `detectProtocol()` function, which checks for `s402Version` in decoded requirements. x402 V1 and V2 formats normalize into s402 types via the optional `s402/compat/x402` layer. Note: x402 V2 renamed the client payment header to `payment-signature`; s402 uses `x-payment` (V1-compatible). The compat layer handles this normalization, but x402 V2 clients communicating natively require the compat layer on the s402 side.
 
 **x402 V2 in context:** x402's December 2025 V2 release adds multi-chain support (Base, Solana, and traditional payment rails), formalized Extensions for session-based and subscription-like patterns, and Google, Cloudflare, and Visa as x402 Foundation members. This is a significant step. s402's differentiation from V2 lies in protocol-layer enforcement: s402's Prepaid and Stream schemes are Move contracts with on-chain rate caps; x402 V2's session patterns are application-layer conventions. Both are valid architectures with different trust guarantees.
 
-The compat package is a deliberate sub-path import (`s402/compat`), not part of the main barrel export. The framing: x402 serves Base, Solana, and traditional rails. s402 serves Sui's unique capabilities. The protocols are complementary.
+The compat package is a deliberate sub-path import (`s402/compat/x402`), not part of the main barrel export. The framing: x402 serves Base, Solana, and traditional rails. s402 serves Sui's unique capabilities. The protocols are complementary.
 
 ---
 
@@ -318,7 +318,7 @@ The `s402` npm package (v0.5.0, Apache-2.0) is the protocol layer:
 - **TypeScript** — types, encoding logic, scheme dispatch, error model, extension system
 - **831 tests** including property-based fuzzing, MC/DC coverage, and 161-vector conformance suite
 - **Zero runtime dependencies** — pure TypeScript using only built-in APIs (`TextEncoder`, `btoa/atob`, `JSON`)
-- **Sub-path exports** — import only what you need: `s402/types`, `s402/http`, `s402/errors`, `s402/compat`
+- **Sub-path exports** — import only what you need: `s402/types`, `s402/http`, `s402/errors`, `s402/compat/x402`
 
 The layered architecture:
 
