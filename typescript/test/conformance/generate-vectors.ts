@@ -27,7 +27,9 @@ import {
 
 import {
   normalizeRequirements,
-} from '../../src/compat.js';
+} from '../../src/compat/x402.js';
+
+import { mcpTransport, a2aTransport } from '../../src/transport.js';
 
 import {
   formatReceiptHeader,
@@ -1823,6 +1825,68 @@ function generateRoundtrip(): TestVector[] {
   return vectors;
 }
 
+// ── Transport carriers (MCP + A2A) ───────────────
+// ADR-011: the cross-language contract for the non-HTTP carriers. HTTP is
+// already covered by the header/body vectors above (base64 strings); MCP and
+// A2A frames are structured JSON objects, captured here directly. The Python
+// runner does not yet load this file (it has no MCP/A2A codec) — that is the
+// carrier-tagging: the contract exists for when other languages implement it.
+
+function generateTransportCarriers(): TestVector[] {
+  const vectors: TestVector[] = [];
+
+  const reqs = MINIMAL_EXACT;
+  const payload: s402PaymentPayload = {
+    s402Version: '1',
+    scheme: 'exact',
+    payload: { transaction: '74785f6578616374', signature: '7369675f6578616374' },
+  };
+  const settled: s402SettleResponse = { success: true, txDigest: '0x' + 'ab'.repeat(32) };
+
+  // MCP — payment in the JSON-RPC `_meta` slot (structured JSON, not base64).
+  vectors.push({
+    description: 'MCP requirements: encode → _meta[s402/payment]; decode round-trips; status=required',
+    input: { type: 'requirements', carrier: 'mcp', value: reqs },
+    expected: { encoded: mcpTransport.encodeRequirements(reqs), status: 'required' },
+    shouldReject: false,
+  });
+  vectors.push({
+    description: 'MCP payload: encode → _meta[s402/payment]; decode round-trips; status=submitted',
+    input: { type: 'payload', carrier: 'mcp', value: payload },
+    expected: { encoded: mcpTransport.encodePayload(payload), status: 'submitted' },
+    shouldReject: false,
+  });
+  vectors.push({
+    description: 'MCP settlement: encode → _meta[s402/payment]; decode round-trips; status=completed',
+    input: { type: 'settle', carrier: 'mcp', value: settled },
+    expected: { encoded: mcpTransport.encodeSettlement(settled), status: 'completed' },
+    shouldReject: false,
+  });
+
+  // A2A — payment on the task-lifecycle metadata; status is EXPLICIT (read, not derived).
+  const a2aCtx = { correlationId: 'task-abc-123' };
+  vectors.push({
+    description: 'A2A requirements: explicit status + correlation in metadata; decode reads status back',
+    input: { type: 'requirements', carrier: 'a2a', value: reqs, correlationId: a2aCtx.correlationId },
+    expected: { encoded: a2aTransport.encodeRequirements(reqs, a2aCtx), status: 'required', correlationId: a2aCtx.correlationId },
+    shouldReject: false,
+  });
+  vectors.push({
+    description: 'A2A payload: explicit payment-submitted status + correlation; decode round-trips',
+    input: { type: 'payload', carrier: 'a2a', value: payload, correlationId: a2aCtx.correlationId },
+    expected: { encoded: a2aTransport.encodePayload(payload, a2aCtx), status: 'submitted', correlationId: a2aCtx.correlationId },
+    shouldReject: false,
+  });
+  vectors.push({
+    description: 'A2A settlement: receipts array + explicit payment-completed status; decode round-trips',
+    input: { type: 'settle', carrier: 'a2a', value: settled, correlationId: a2aCtx.correlationId },
+    expected: { encoded: a2aTransport.encodeSettlement(settled, a2aCtx), status: 'completed', correlationId: a2aCtx.correlationId },
+    shouldReject: false,
+  });
+
+  return vectors;
+}
+
 // ── Main ─────────────────────────────────────────
 
 console.log('Generating s402 conformance vectors...\n');
@@ -1840,6 +1904,7 @@ const allVectors: Array<[string, TestVector[]]> = [
   ['receipt-parse.json', generateReceiptParse()],
   ['validation-reject.json', generateValidationReject()],
   ['roundtrip.json', generateRoundtrip()],
+  ['transport-carriers.json', generateTransportCarriers()],
 ];
 
 let total = 0;

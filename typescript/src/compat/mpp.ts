@@ -1,32 +1,45 @@
 /**
- * s402 ↔ MPP Compatibility Layer — read path
+ * s402 ↔ MPP Compatibility Layer (bidirectional)
  *
  * Enables s402 servers and clients to interop with Stripe/Tempo's Machine
  * Payment Protocol (MPP). MPP uses `WWW-Authenticate: Payment` with auth-params
  * and a method/intent pair — not a flat scheme token like s402 or x402.
  *
- * Spec references (tempoxyz/mpp-specs):
+ * Spec references (tempoxyz/mpp-specs HEAD as of 2026-05-12: e731a13):
  *   - Core:   specs/core/draft-httpauth-payment-00.md
  *   - Charge: specs/intents/draft-payment-intent-charge-00.md
+ *   - EVM:    specs/methods/evm/draft-evm-charge-00.md
  *
- * Scope (v0.3 DAN-339):
+ * Scope (v0.3 DAN-339, read-path):
  *   - Parse `WWW-Authenticate: Payment` challenges
  *   - Parse MPP-style `Accept-Payment` (method/intent pairs with wildcards)
  *   - Decode `Authorization: Payment` credentials
  *   - Translate the canonical `charge` intent into s402 exact requirements
  *
+ * Scope (v0.4, write-path, 2026-05-12):
+ *   - Build MppChargeRequest objects from direct input
+ *   - Emit MppChallenge objects with JCS-canonicalized + base64url-encoded
+ *     `request` parameter ready for `WWW-Authenticate: Payment` header
+ *
  * Not in scope here:
  *   - Session intent (cumulative voucher model; needs Prepaid translation shim)
- *   - HMAC-SHA256 challenge binding verification (server-side, needs secret)
+ *   - HMAC-SHA256 challenge binding computation (server-side, needs secret).
+ *     Per mpp-specs §Challenge-Binding Secret Management (PR #233): callers
+ *     that compute digests MUST keep the secret server-side only, MUST NOT
+ *     log it, and SHOULD support graceful rotation. This module accepts a
+ *     pre-computed `digest` as input and never sees the secret.
  *   - Method-specific credential dispatch (EVM permit2/authorization/transaction/hash,
  *     Tempo transaction/hash/proof — each method spec defines its own payload)
- *   - Write path (s402 → MPP emission)
+ *   - WWW-Authenticate / Authorization header string assembly (the
+ *     MppChallenge / MppCredential objects produced here can be rendered to
+ *     header strings by callers that need them).
  */
 
 import type { s402PaymentRequirements } from '../types.js';
 import { S402_VERSION } from '../types.js';
 import { s402Error } from '../errors.js';
 import { isValidAmount } from '../http.js';
+import { canonicalizeToString } from '../canonicalization.js';
 
 // ══════════════════════════════════════════════════════════════
 // MPP wire types (read-side; fields we consume)
@@ -238,6 +251,31 @@ const INTENT_PATTERN = /^[a-zA-Z0-9\-_]+$|^\*$/;
 const Q_VALUE_PATTERN = /^(?:0(?:\.\d{0,3})?|1(?:\.0{0,3})?)$/;
 
 /**
+ * MPP charge method-id grammar — `payment-method-id = 1*LOWERALPHA`
+ * (mpp-specs §Method Identifier Format). Stricter than {@link METHOD_ID_PATTERN}:
+ * no `*` wildcard, because a concrete *emitted* method is never a range.
+ */
+const CHARGE_METHOD_ID = /^[a-z]+$/;
+
+/**
+ * Validate + normalize an MPP charge method id: lowercase, then enforce the
+ * lowercase-ASCII-letter grammar so the write-path can never emit a method the
+ * read-path ({@link parseMppAcceptPayment}) would reject. Non-string input
+ * becomes a typed {@link s402Error}, never a raw `TypeError`.
+ */
+function normalizeChargeMethod(method: unknown): string {
+  if (typeof method !== 'string' || method.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD', 'MPP Charge "method" is required and must be a non-empty string');
+  }
+  const normalized = method.toLowerCase();
+  if (!CHARGE_METHOD_ID.test(normalized)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `MPP method "${method}" must be lowercase ASCII letters per mpp-specs §Method Identifier Format (1*LOWERALPHA)`);
+  }
+  return normalized;
+}
+
+/**
  * Parse an MPP `Accept-Payment` header per core spec §6.1.
  *
  * Grammar: `Accept-Payment = #(method-or-* "/" intent-or-* [weight])`.
@@ -344,6 +382,28 @@ function base64urlDecodeToString(input: string): string {
     if (e instanceof s402Error) throw e;
     throw new s402Error('INVALID_PAYLOAD', 'Failed to decode base64url value');
   }
+}
+
+/**
+ * Encode a UTF-8 string as base64url (RFC 4648 §5) with no padding. Symmetric
+ * counterpart to {@link base64urlDecodeToString}: roundtrip-stable for any
+ * valid UTF-8 input.
+ */
+function base64urlEncode(input: string): string {
+  const bytes = new TextEncoder().encode(input);
+  let b64: string;
+  if (typeof globalThis.btoa === 'function') {
+    let bin = '';
+    for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+    b64 = globalThis.btoa(bin);
+  } else {
+    const BufferCtor = (globalThis as { Buffer?: { from: (b: Uint8Array) => { toString: (enc: string) => string } } }).Buffer;
+    if (!BufferCtor) {
+      throw new s402Error('INVALID_PAYLOAD', 'No base64 encoder available in this runtime');
+    }
+    b64 = BufferCtor.from(bytes).toString('base64');
+  }
+  return b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 /**
@@ -557,4 +617,147 @@ export function fromMppChargeChallenge(
       },
     },
   };
+}
+
+// ══════════════════════════════════════════════════════════════
+// Translation: s402 → MPP Charge (write path)
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Direct-input shape for {@link toMppChargeChallenge}. Mirrors the MPP Charge
+ * request structure rather than the s402 wire format — this is deliberate:
+ * the write-path's primary use case is fresh emission for processor methods
+ * (stripe, card) which don't have a clean s402 expression (no payTo, no asset
+ * — Stripe routes internally). Callers with an s402PaymentRequirements in
+ * hand can derive these fields trivially.
+ */
+export interface ToMppChargeInput {
+  /** Payment method identifier per the MPP method registry (tempo, evm, solana, stripe, card, lightning, stellar, ...). Lowercased on emission. */
+  method: string;
+  /** Charge amount in smallest unit, as a canonical non-negative integer string. */
+  amount: string;
+  /** Currency or asset identifier (e.g., 'USD', '0x...USDC contract', '0x2::sui::SUI'). */
+  currency: string;
+  /** REQUIRED for blockchain methods (tempo, evm, solana, lightning, stellar). OPTIONAL for processor methods (stripe, card) which route internally. */
+  recipient?: string;
+  /** Method-specific data (chainId, permit2Address, intentId, paymentMethodTypes, networkId, ...). */
+  methodDetails?: Record<string, unknown>;
+  /** Human-readable description of the payment. */
+  description?: string;
+  /** Client-supplied idempotency / correlation identifier. */
+  externalId?: string;
+  /** Challenge ID. Auto-generated via crypto.randomUUID() if not provided. */
+  id?: string;
+  /** Protection realm. Defaults to `'s402'`. */
+  realm?: string;
+  /** RFC 3339 expiration timestamp. Optional. */
+  expires?: string;
+  /** Opaque server-data for replay binding. Optional. */
+  opaque?: string;
+  /** HMAC digest of challenge fields for stateless challenge-binding. Optional. Per mpp-specs §Challenge-Binding Secret Management (PR #233), callers that compute digests MUST keep the secret server-side only. */
+  digest?: string;
+}
+
+/**
+ * Build an {@link MppChargeRequest} from direct input. The shape follows
+ * `draft-payment-intent-charge-00` §Request Schema: `amount` + `currency` are
+ * REQUIRED across every method; `recipient` is REQUIRED for blockchain
+ * methods and OPTIONAL for processor methods; `methodDetails` carries
+ * method-specific extension data.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` for malformed amount or for missing
+ *   recipient on a known blockchain method.
+ */
+export function toMppChargeRequest(input: ToMppChargeInput): MppChargeRequest {
+  if (!isValidAmount(input.amount)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `MPP Charge "amount" must be a canonical non-negative integer string, got "${input.amount}"`);
+  }
+  if (!input.currency || typeof input.currency !== 'string') {
+    throw new s402Error('INVALID_PAYLOAD', 'MPP Charge "currency" is required and must be a string');
+  }
+  const method = normalizeChargeMethod(input.method);
+  if (BLOCKCHAIN_CHARGE_METHODS.has(method) && (!input.recipient || typeof input.recipient !== 'string')) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `MPP method "${method}" is a blockchain method and requires "recipient" — processor methods (stripe, card) route internally and may omit it`);
+  }
+
+  const request: MppChargeRequest = {
+    amount: input.amount,
+    currency: input.currency,
+  };
+  if (input.recipient) request.recipient = input.recipient;
+  if (input.description) request.description = input.description;
+  if (input.externalId) request.externalId = input.externalId;
+  if (input.methodDetails) request.methodDetails = input.methodDetails;
+  return request;
+}
+
+/**
+ * Build an {@link MppChallenge} ready for `WWW-Authenticate: Payment` emission.
+ * The `request` field is JCS-canonicalized (RFC 8785) then base64url-encoded
+ * with no padding, matching the read-path's decoding expectation (see
+ * {@link decodeMppChargeRequest}).
+ *
+ * Symmetric to {@link fromMppChargeChallenge} on the read-path:
+ *   fromMppChargeChallenge(toMppChargeChallenge(s402)) ≈ s402
+ * (for blockchain methods only; processor methods don't roundtrip through s402).
+ *
+ * The function never computes HMAC digests itself — those require the server's
+ * challenge-binding secret, which is intentionally kept outside this library
+ * per mpp-specs §Challenge-Binding Secret Management (PR #233). Callers that
+ * need challenge-binding MUST compute the digest server-side and pass it via
+ * `input.digest`.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` for malformed amount, missing
+ *   currency, or missing recipient on a known blockchain method.
+ *
+ * @example
+ * ```ts
+ * const challenge = toMppChargeChallenge({
+ *   method: 'stripe',
+ *   amount: '1000',
+ *   currency: 'USD',
+ *   methodDetails: { intentId: 'pi_demo_0000000000000000000' },
+ *   description: 'Demo payment-gated tool',
+ * });
+ * // challenge.request is base64url(JCS({amount,currency,...,methodDetails}))
+ * ```
+ */
+export function toMppChargeChallenge(input: ToMppChargeInput): MppChallenge {
+  const method = normalizeChargeMethod(input.method);
+
+  const request = toMppChargeRequest(input);
+  const requestEncoded = base64urlEncode(canonicalizeToString(request));
+
+  const challenge: MppChallenge = {
+    id: input.id ?? mintChallengeId(),
+    realm: input.realm ?? 's402',
+    method,
+    intent: 'charge',
+    request: requestEncoded,
+  };
+  if (input.digest) challenge.digest = input.digest;
+  if (input.expires) challenge.expires = input.expires;
+  if (input.description) challenge.description = input.description;
+  if (input.opaque) challenge.opaque = input.opaque;
+  return challenge;
+}
+
+/**
+ * Generate a unique challenge ID. Prefers `crypto.randomUUID()` (Node 20+,
+ * modern browsers) and falls back to a hex string from `crypto.getRandomValues`.
+ */
+function mintChallengeId(): string {
+  const c = (globalThis as { crypto?: Crypto }).crypto;
+  if (c && typeof c.randomUUID === 'function') {
+    return `s402-${c.randomUUID()}`;
+  }
+  if (c && typeof c.getRandomValues === 'function') {
+    const bytes = new Uint8Array(16);
+    c.getRandomValues(bytes);
+    return `s402-${Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('')}`;
+  }
+  throw new s402Error('INVALID_PAYLOAD',
+    'No crypto.randomUUID or getRandomValues available; supply input.id explicitly');
 }

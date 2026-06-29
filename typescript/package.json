@@ -1,6 +1,6 @@
 {
   "name": "s402",
-  "version": "0.7.0",
+  "version": "0.8.0",
   "type": "module",
   "description": "s402 — Chain-agnostic HTTP 402 wire format. Types, HTTP encoding, and scheme registry for six payment schemes. Wire-compatible with x402. Zero runtime dependencies.",
   "license": "Apache-2.0",
@@ -67,6 +67,13 @@
         "default": "./dist/http.mjs"
       },
       "default": "./dist/http.mjs"
+    },
+    "./server": {
+      "import": {
+        "types": "./dist/gate.d.mts",
+        "default": "./dist/gate.mjs"
+      },
+      "default": "./dist/gate.mjs"
     },
     "./compat/x402": {
       "import": {

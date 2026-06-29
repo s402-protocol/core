@@ -5,6 +5,7 @@ export default defineConfig({
     index: 'src/index.ts',
     types: 'src/types.ts',
     http: 'src/http.ts',
+    gate: 'src/gate.ts',
     'compat/x402': 'src/compat/x402.ts',
     'compat/mpp': 'src/compat/mpp.ts',
     'compat/l402': 'src/compat/l402.ts',

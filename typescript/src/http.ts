@@ -693,8 +693,14 @@ export function validateRequirementsShape(obj: unknown): void {
   validateSubObjects(record);
 }
 
-/** Validate that a decoded payment payload has the required shape. */
-function validatePayloadShape(obj: unknown): void {
+/**
+ * Validate that a decoded payment payload has the required shape.
+ *
+ * Exported so non-HTTP carriers (e.g. the MCP `_meta` codec in `transport.ts`)
+ * can validate an already-parsed payload object through the SAME canonical
+ * trust-boundary check the HTTP path uses — no duplicated validation logic.
+ */
+export function validatePayloadShape(obj: unknown): void {
   if (obj == null || typeof obj !== 'object') {
     throw new s402Error('INVALID_PAYLOAD', 'Payment payload is not an object');
   }
@@ -788,8 +794,14 @@ function validatePayloadShape(obj: unknown): void {
   }
 }
 
-/** Validate that a decoded settle response has the required shape. */
-function validateSettleShape(obj: unknown): void {
+/**
+ * Validate that a decoded settle response has the required shape.
+ *
+ * Exported so non-HTTP carriers (e.g. the MCP `_meta` codec in `transport.ts`)
+ * can validate an already-parsed settle object through the SAME canonical
+ * trust-boundary check the HTTP path uses — no duplicated validation logic.
+ */
+export function validateSettleShape(obj: unknown): void {
   if (obj == null || typeof obj !== 'object') {
     throw new s402Error('INVALID_PAYLOAD', 'Settle response is not an object');
   }

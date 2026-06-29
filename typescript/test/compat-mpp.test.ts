@@ -13,6 +13,8 @@ import {
   decodeMppChargeRequest,
   decodeMppCredential,
   fromMppChargeChallenge,
+  toMppChargeRequest,
+  toMppChargeChallenge,
   type MppChallenge,
 } from '../src/compat/mpp.js';
 import { s402Error } from '../src/errors.js';
@@ -379,5 +381,187 @@ describe('fromMppChargeChallenge', () => {
     expect(() =>
       fromMppChargeChallenge({ ...baseChallenge, intent: 'session' }),
     ).toThrow(/intent="charge"/);
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Write path: toMppChargeRequest + toMppChargeChallenge
+// ══════════════════════════════════════════════════════════════
+
+describe('toMppChargeRequest (write path)', () => {
+  it('builds a minimal valid Charge request for a processor method', () => {
+const req = toMppChargeRequest({
+      method: 'stripe',
+      amount: '1000',
+      currency: 'USD',
+      methodDetails: { intentId: 'pi_test' },
+    });
+    expect(req).toEqual({
+      amount: '1000',
+      currency: 'USD',
+      methodDetails: { intentId: 'pi_test' },
+    });
+  });
+
+  it('includes recipient + description + externalId when provided', () => {
+const req = toMppChargeRequest({
+      method: 'evm',
+      amount: '500',
+      currency: '0x' + 'd'.repeat(40),
+      recipient: '0x' + 'a'.repeat(40),
+      description: 'API access',
+      externalId: 'order-42',
+      methodDetails: { chainId: 8453 },
+    });
+    expect(req.recipient).toBe('0x' + 'a'.repeat(40));
+    expect(req.description).toBe('API access');
+    expect(req.externalId).toBe('order-42');
+  });
+
+  it('rejects non-canonical amount', () => {
+expect(() =>
+      toMppChargeRequest({ method: 'stripe', amount: '1.5', currency: 'USD' }),
+    ).toThrow(/canonical non-negative integer/);
+    expect(() =>
+      toMppChargeRequest({ method: 'stripe', amount: '-1', currency: 'USD' }),
+    ).toThrow(/canonical non-negative integer/);
+  });
+
+  it('rejects empty currency', () => {
+expect(() =>
+      toMppChargeRequest({ method: 'stripe', amount: '1000', currency: '' }),
+    ).toThrow(/currency/);
+  });
+
+  it('rejects blockchain method without recipient', () => {
+expect(() =>
+      toMppChargeRequest({
+        method: 'evm',
+        amount: '1000',
+        currency: '0x' + 'd'.repeat(40),
+      }),
+    ).toThrow(/requires "recipient"/);
+  });
+
+  it('allows processor method without recipient (Stripe routes internally)', () => {
+expect(() =>
+      toMppChargeRequest({ method: 'stripe', amount: '1000', currency: 'USD' }),
+    ).not.toThrow();
+  });
+
+  it('rejects a method outside the lowercase-alpha grammar (write/read symmetry)', () => {
+    for (const bad of ['a,b', 'a b', 'evm2', 'a"b', 'EVM-2']) {
+      expect(() =>
+        toMppChargeRequest({ method: bad, amount: '1000', currency: 'USD' }),
+      ).toThrow(/lowercase ASCII letters/);
+    }
+  });
+
+  it('rejects a non-string method with a typed s402Error, not a TypeError', () => {
+    expect(() =>
+      toMppChargeRequest({ method: 123 as never, amount: '1000', currency: 'USD' }),
+    ).toThrow(/required.*non-empty string/);
+  });
+});
+
+describe('toMppChargeChallenge (write path)', () => {
+  it('produces a roundtrip-stable challenge for a Stripe processor charge', () => {
+const input = {
+      method: 'stripe',
+      amount: '1000',
+      currency: 'USD',
+      methodDetails: { intentId: 'pi_test_abc123' },
+      description: 'Test charge',
+      id: 'fixed-id-001',
+      realm: 'test-realm',
+    };
+    const challenge = toMppChargeChallenge(input);
+    const decoded = decodeMppChargeRequest(challenge);
+    expect(decoded.amount).toBe('1000');
+    expect(decoded.currency).toBe('USD');
+    expect(decoded.description).toBe('Test charge');
+    expect(decoded.methodDetails).toEqual({ intentId: 'pi_test_abc123' });
+    expect(challenge.id).toBe('fixed-id-001');
+    expect(challenge.realm).toBe('test-realm');
+    expect(challenge.method).toBe('stripe');
+    expect(challenge.intent).toBe('charge');
+  });
+
+  it('lowercases method and defaults realm to "s402"', () => {
+const challenge = toMppChargeChallenge({
+      method: 'STRIPE',
+      amount: '1000',
+      currency: 'USD',
+      methodDetails: { intentId: 'pi_x' },
+    });
+    expect(challenge.method).toBe('stripe');
+    expect(challenge.realm).toBe('s402');
+  });
+
+  it('rejects an injection-style method (the WWW-Authenticate header guard)', () => {
+    // A method containing a space / comma / quote could corrupt a rendered
+    // `WWW-Authenticate: Payment` header — it must be refused at emit time.
+    for (const bad of ['foo bar', 'a,b', 'a"b']) {
+      expect(() =>
+        toMppChargeChallenge({ method: bad, amount: '1000', currency: 'USD' }),
+      ).toThrow(/lowercase ASCII letters/);
+    }
+  });
+
+  it('auto-generates an id when not provided', () => {
+const a = toMppChargeChallenge({
+      method: 'stripe',
+      amount: '1000',
+      currency: 'USD',
+      methodDetails: { intentId: 'pi_a' },
+    });
+    const b = toMppChargeChallenge({
+      method: 'stripe',
+      amount: '1000',
+      currency: 'USD',
+      methodDetails: { intentId: 'pi_b' },
+    });
+    expect(a.id).toMatch(/^s402-/);
+    expect(b.id).toMatch(/^s402-/);
+    expect(a.id).not.toBe(b.id);
+  });
+
+  it('includes optional digest / expires / opaque when provided', () => {
+const challenge = toMppChargeChallenge({
+      method: 'stripe',
+      amount: '1000',
+      currency: 'USD',
+      methodDetails: { intentId: 'pi_x' },
+      digest: 'hmac-deadbeef',
+      expires: '2099-01-01T00:00:00Z',
+      opaque: 'server-data',
+    });
+    expect(challenge.digest).toBe('hmac-deadbeef');
+    expect(challenge.expires).toBe('2099-01-01T00:00:00Z');
+    expect(challenge.opaque).toBe('server-data');
+  });
+
+  it('roundtrips via parseWwwAuthenticatePayment when emitted as header form', () => {
+const challenge = toMppChargeChallenge({
+      method: 'evm',
+      amount: '500',
+      currency: '0x' + 'd'.repeat(40),
+      recipient: '0x' + 'a'.repeat(40),
+      methodDetails: { chainId: 8453 },
+      id: 'rt-test-001',
+    });
+    const headerStr =
+      `Payment realm="${challenge.realm}", ` +
+      `id="${challenge.id}", ` +
+      `method="${challenge.method}", ` +
+      `intent="${challenge.intent}", ` +
+      `request="${challenge.request}"`;
+    const parsed = parseWwwAuthenticatePayment(headerStr);
+    expect(parsed).not.toBeNull();
+    expect(parsed!.id).toBe('rt-test-001');
+    expect(parsed!.method).toBe('evm');
+    const decoded = decodeMppChargeRequest(parsed!);
+    expect(decoded.amount).toBe('500');
+    expect(decoded.recipient).toBe('0x' + 'a'.repeat(40));
   });
 });

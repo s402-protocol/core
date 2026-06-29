@@ -1,0 +1,182 @@
+[
+  {
+    "description": "MCP requirements: encode → _meta[s402/payment]; decode round-trips; status=required",
+    "input": {
+      "type": "requirements",
+      "carrier": "mcp",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      }
+    },
+    "expected": {
+      "encoded": {
+        "s402/payment": {
+          "s402Version": "1",
+          "accepts": [
+            "exact"
+          ],
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        }
+      },
+      "status": "required"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "MCP payload: encode → _meta[s402/payment]; decode round-trips; status=submitted",
+    "input": {
+      "type": "payload",
+      "carrier": "mcp",
+      "value": {
+        "s402Version": "1",
+        "scheme": "exact",
+        "payload": {
+          "transaction": "74785f6578616374",
+          "signature": "7369675f6578616374"
+        }
+      }
+    },
+    "expected": {
+      "encoded": {
+        "s402/payment": {
+          "s402Version": "1",
+          "scheme": "exact",
+          "payload": {
+            "transaction": "74785f6578616374",
+            "signature": "7369675f6578616374"
+          }
+        }
+      },
+      "status": "submitted"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "MCP settlement: encode → _meta[s402/payment]; decode round-trips; status=completed",
+    "input": {
+      "type": "settle",
+      "carrier": "mcp",
+      "value": {
+        "success": true,
+        "txDigest": "0xabababababababababababababababababababababababababababababababab"
+      }
+    },
+    "expected": {
+      "encoded": {
+        "s402/payment": {
+          "success": true,
+          "txDigest": "0xabababababababababababababababababababababababababababababababab"
+        }
+      },
+      "status": "completed"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "A2A requirements: explicit status + correlation in metadata; decode reads status back",
+    "input": {
+      "type": "requirements",
+      "carrier": "a2a",
+      "value": {
+        "s402Version": "1",
+        "accepts": [
+          "exact"
+        ],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000000",
+        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+      },
+      "correlationId": "task-abc-123"
+    },
+    "expected": {
+      "encoded": {
+        "s402.payment.status": "payment-required",
+        "s402.payment.correlationId": "task-abc-123",
+        "s402.payment.required": {
+          "s402Version": "1",
+          "accepts": [
+            "exact"
+          ],
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        }
+      },
+      "status": "required",
+      "correlationId": "task-abc-123"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "A2A payload: explicit payment-submitted status + correlation; decode round-trips",
+    "input": {
+      "type": "payload",
+      "carrier": "a2a",
+      "value": {
+        "s402Version": "1",
+        "scheme": "exact",
+        "payload": {
+          "transaction": "74785f6578616374",
+          "signature": "7369675f6578616374"
+        }
+      },
+      "correlationId": "task-abc-123"
+    },
+    "expected": {
+      "encoded": {
+        "s402.payment.status": "payment-submitted",
+        "s402.payment.correlationId": "task-abc-123",
+        "s402.payment.payload": {
+          "s402Version": "1",
+          "scheme": "exact",
+          "payload": {
+            "transaction": "74785f6578616374",
+            "signature": "7369675f6578616374"
+          }
+        }
+      },
+      "status": "submitted",
+      "correlationId": "task-abc-123"
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "A2A settlement: receipts array + explicit payment-completed status; decode round-trips",
+    "input": {
+      "type": "settle",
+      "carrier": "a2a",
+      "value": {
+        "success": true,
+        "txDigest": "0xabababababababababababababababababababababababababababababababab"
+      },
+      "correlationId": "task-abc-123"
+    },
+    "expected": {
+      "encoded": {
+        "s402.payment.status": "payment-completed",
+        "s402.payment.correlationId": "task-abc-123",
+        "s402.payment.receipts": [
+          {
+            "success": true,
+            "txDigest": "0xabababababababababababababababababababababababababababababababab"
+          }
+        ]
+      },
+      "status": "completed",
+      "correlationId": "task-abc-123"
+    },
+    "shouldReject": false
+  }
+]

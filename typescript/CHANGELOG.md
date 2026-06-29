@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-06-28
+
+The transport-abstraction release (ADR-011): **one seam, three carriers — HTTP, MCP, and A2A.**
+`s402` now speaks the surfaces agents actually use, with opt-in x402 inbound bridges for each,
+the protocol core staying chain-agnostic (S7) and x402-free throughout. Purely additive.
+
+### Added
+
+- **Transport abstraction (`PaymentTransport`) — ADR-011, Chunk 1a-i.** A chain-agnostic seam that maps the canonical `{ PaymentRequirements, PaymentPayload, SettleResponse }` to a carrier's out-of-band metadata slot, so payment can ride any carrier (HTTP today; MCP `_meta` and A2A task-state next). Motivated by x402 V2 moving all protocol data into headers and defining `transports-v2/` for HTTP/MCP/A2A — this is the seam that lets s402 match and then leapfrog that (x402 has only an A2A *spec*, no impl).
+  - `PaymentTransport<TFrame>` interface + `httpTransport` (`src/transport.ts`). `TFrame` is the carrier-native container — `Headers` for HTTP; the `_meta` record for MCP; task metadata for A2A.
+  - **Stateful-ready by design (ADR-011 blind-spot review):** every method threads an optional `PaymentCarrierContext` (`correlationId` + lifecycle `status`) so the *stateful* A2A carrier (task lifecycle: `input-required → completed/failed`, `taskId` correlation) becomes a thin adapter rather than forcing an interface break later. HTTP ignores `correlationId` (no wire slot) and *derives* `status`; A2A populates both.
+  - New barrel exports: `httpTransport`, and types `PaymentTransport`, `PaymentCarrierContext`, `PaymentStatus`, `Decoded`.
+  - **10 unit tests** at `test/transport.test.ts` proving `httpTransport` is byte-identical to the raw `http.ts` codec (encode equivalence + roundtrip), correct status derivation, null-on-absent, case-insensitive reads, and trust-boundary error propagation.
+- **x402 inbound payload bridge — `fromX402PayloadHeaders()` in `s402/compat/x402` (ADR-011, Chunk 1a-ii).** The opt-in inbound half of "s402 servers transparently accept x402 clients" (ADR-005): reads an x402 payload header — `PAYMENT-SIGNATURE` (x402 V2) or `X-PAYMENT` (V1) — base64-decodes it, and normalizes the shape to an s402 payload via `fromX402Payload`. Returns `null` when absent so callers fall back to the native `x-payment` path. Lives in the **opt-in compat layer**, keeping the protocol core x402-free (AGENTS.md). **8 unit tests** at `test/compat-x402-inbound.test.ts` (V1/V2 normalization, case-insensitive read, header preference, null-on-absent, malformed/non-object/no-s402-equivalent rejection).
+  - **ALL-CAPS emit was rejected**, not deferred: the Fetch `Headers` API byte-lowercases field names and HTTP/2 (RFC 9113 §8.2.1) requires lowercase — so uppercase emit is a no-op/spec violation. Lowercase emit is correct by design. Outbound interop is already covered: `payment-response` matches x402 V2's `PAYMENT-RESPONSE` case-insensitively.
+- **MCP transport (`mcpTransport`) — payment in the JSON-RPC `_meta` slot (ADR-011, Chunk 1a-iii).** `s402` now speaks MCP, the surface agents actually use. `mcpTransport` (`PaymentTransport<McpMetaFrame>`) maps the canonical objects to/from `_meta['s402/payment']` as **structured JSON** (MCP's idiom — not base64), validated through the SAME canonical `validate*Shape`/`pick*Fields` as the HTTP path, so untrusted MCP input crosses the identical trust boundary. **Zero MCP-SDK dependency** — it is pure object-mapping; the SDK wiring lives in the Sui-aware `@sweefi/mcp` that consumes it. New barrel exports: `mcpTransport`, `S402_MCP_META_KEY`, type `McpMetaFrame`. Two private validators (`validatePayloadShape`, `validateSettleShape`) are now exported from `s402/http` so non-HTTP carriers reuse them.
+  - **x402-over-MCP inbound bridge — `fromX402PayloadMeta()` in `s402/compat/x402`.** The MCP analogue of `fromX402PayloadHeaders`: reads `_meta['x402/payment']` and normalizes via `fromX402Payload`. Opt-in, in compat, keeping core `mcpTransport` x402-free.
+  - **12 unit tests** at `test/mcp-transport.test.ts` (round-trips, status derivation, null-on-absent, wrong-decoder rejection, unknown-key stripping, x402 bridge).
+  - Cross-language MCP conformance vectors are **deferred to a follow-up** (Chunk 1a-iv) — covered by TS unit tests for now; the language-agnostic JSON vectors touch the generator + Python runner.
+- **A2A transport (`a2aTransport`) — payment on the Agent-to-Agent task lifecycle (ADR-011, Chunk 2). The leapfrog: x402 has only an A2A *spec*; s402 now ships the implementation.** `a2aTransport` (`PaymentTransport<A2aMetadataFrame>`) maps the canonical objects onto A2A task/message `metadata` under `s402.payment.*` keys (`status`, `required`, `payload`, `receipts`, `correlationId`), mirroring x402's `x402.payment.*` convention. A2A is fully stateful, so — unlike HTTP/MCP — the lifecycle **status is carried explicitly and READ back** (not derived), and `ctx.correlationId` threads the `taskId`. Settlement uses A2A's plural `receipts` array. Validation routes through the same canonical `validate*Shape`/`pick*Fields` — identical trust boundary across all three carriers. New barrel exports: `a2aTransport`, `S402_A2A_KEYS`, type `A2aMetadataFrame`.
+  - **x402-over-A2A inbound bridge — `fromX402PayloadA2A()` in `s402/compat/x402`.** Completes the opt-in x402-inbound trio (HTTP · MCP · A2A); reads `metadata['x402.payment.payload']` and normalizes via `fromX402Payload`. Core `a2aTransport` stays x402-free.
+  - **13 unit tests** at `test/a2a-transport.test.ts`, including the defining check that A2A *reads* the explicit status rather than deriving it.
+- **Cross-language conformance vectors for the MCP + A2A carriers (ADR-011, Chunk 1a-iv).** `spec/vectors/transport-carriers.json` — 6 vectors (3 MCP + 3 A2A) pinning the wire contract (encoded frame + decoded value + carrier status/correlation) for other-language implementations. A new `Conformance: transport-carriers` block in the TS runner validates them; the Python runner is untouched (it loads only named files), so it stays green until a Python codec exists.
+
+### Fixed
+
+- **Conformance vector generator restored.** `test/conformance/generate-vectors.ts` imported `../../src/compat.js`, which moved to `compat/x402.js` in the 0.7.0 compat reorg — the generator had been broken/unrunnable since (nothing in CI exercises it; only the runner reads the committed vectors). Fixed the import; regenerating now reproduces the existing vectors byte-for-byte (confirming no committed drift) plus the new transport file. See `LESSONS.md`.
+
+### Changed
+
+- **1075 tests across 27 files** (was 1032 at 0.7.0). The transport refactor (1a-i) is **behavior-preserving**: `httpTransport` delegates to the existing `http.ts` `encode*/decode*` functions and `S402_HEADERS` — same header names, same base64 — so all pre-existing tests pass unchanged as the regression proof. Chunks 1a-ii (x402 HTTP inbound bridge), 1a-iii (`mcpTransport` + x402 `_meta` bridge), and 2 (`a2aTransport` + x402 A2A bridge) are purely additive; no core wire change. The two newly-exported validators are additive to `s402/http`. **One seam, three carriers: HTTP, MCP, A2A.**
+
+### Compatibility
+
+- **Purely additive.** No changes to existing types, scheme interfaces, wire format, or conformance vectors. `httpTransport` is opt-in; the root barrel adds exports but changes no existing ones.
+
 ## [0.7.0] - 2026-04-22
 
 ### Added
@@ -277,6 +313,7 @@ _Version bump for npm publish after license change._
 - Property-based fuzz testing via fast-check
 - 207 tests, zero runtime dependencies
 
+[0.8.0]: https://github.com/s402-protocol/core/compare/v0.7.0...v0.8.0
 [0.4.0]: https://github.com/s402-protocol/core/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/s402-protocol/core/compare/v0.2.3...v0.3.0
 [0.2.1]: https://github.com/s402-protocol/core/compare/v0.2.0...v0.2.1

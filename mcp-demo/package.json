@@ -1,0 +1,28 @@
+{
+  "name": "s402-mcp-demo",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Reference implementation for SEP-2007 — Sui-native MCP server advertising three coexisting payment protocols (x402, s402, stripe-mpp) in a single payment[] envelope. One dependency: s402. No external x402 or Stripe SDKs.",
+  "scripts": {
+    "dev:server": "tsx watch src/server.ts",
+    "dev:agent": "tsx src/agent.ts",
+    "build": "tsc",
+    "start": "node dist/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "s402": "workspace:*",
+    "hono": "^4.6.0",
+    "@hono/node-server": "^1.13.0",
+    "@mysten/sui": "^1.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

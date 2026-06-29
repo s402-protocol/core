@@ -11,6 +11,8 @@ import {
   fromX402Envelope,
   toX402Requirements,
   toX402Payload,
+  toX402V2Requirements,
+  toX402V2Envelope,
   isS402,
   isX402,
   isX402Envelope,
@@ -520,5 +522,132 @@ describe('s402 compat layer', () => {
       expect(() => normalizeRequirements(undefined as any)).toThrow(s402Error);
       expect(() => normalizeRequirements(undefined as any)).toThrow('plain object');
     });
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// x402 V2 write path: toX402V2Requirements + toX402V2Envelope
+// ══════════════════════════════════════════════════════════════
+
+describe('toX402V2Requirements (write path)', () => {
+  const SAMPLE_S402: s402PaymentRequirements = {
+    s402Version: '1',
+    accepts: ['exact'],
+    network: 'eip155:8453',
+    asset: '0x' + 'd'.repeat(40),
+    amount: '10000',
+    payTo: '0x' + 'a'.repeat(40),
+  };
+
+  it('emits V2 shape with required extra field and no V1 carry-over', () => {
+    const v2 = toX402V2Requirements(SAMPLE_S402);
+    expect(v2).toEqual({
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0x' + 'd'.repeat(40),
+      amount: '10000',
+      payTo: '0x' + 'a'.repeat(40),
+      maxTimeoutSeconds: 60,
+      extra: {},
+    });
+    expect('x402Version' in v2).toBe(false);
+    expect('maxAmountRequired' in v2).toBe(false);
+    expect('resource' in v2).toBe(false);
+    expect('description' in v2).toBe(false);
+  });
+
+  it('defaults maxTimeoutSeconds to 60 and extra to empty object', () => {
+    const v2 = toX402V2Requirements(SAMPLE_S402);
+    expect(v2.maxTimeoutSeconds).toBe(60);
+    expect(v2.extra).toEqual({});
+  });
+
+  it('respects custom maxTimeoutSeconds + extra overrides', () => {
+    const v2 = toX402V2Requirements(SAMPLE_S402, {
+      maxTimeoutSeconds: 120,
+      extra: { permit2Address: '0x' + 'b'.repeat(40) },
+    });
+    expect(v2.maxTimeoutSeconds).toBe(120);
+    expect(v2.extra).toEqual({ permit2Address: '0x' + 'b'.repeat(40) });
+  });
+
+  it('throws when accepts[0] is not "exact" (prevents silent scheme downgrade)', () => {
+    const nonExactS402: s402PaymentRequirements = {
+      ...SAMPLE_S402,
+      accepts: ['prepaid'],
+    };
+    expect(() => toX402V2Requirements(nonExactS402)).toThrow(s402Error);
+    expect(() => toX402V2Requirements(nonExactS402)).toThrow(/only translates s402.accepts\[0\] === 'exact'/);
+  });
+
+  it('throws on empty accepts array', () => {
+    const emptyAcceptsS402: s402PaymentRequirements = {
+      ...SAMPLE_S402,
+      accepts: [],
+    };
+    expect(() => toX402V2Requirements(emptyAcceptsS402)).toThrow(s402Error);
+  });
+
+  it('accepts arrays where exact is first, even if other schemes follow', () => {
+    const multiSchemeS402: s402PaymentRequirements = {
+      ...SAMPLE_S402,
+      accepts: ['exact', 'upto'],
+    };
+    const v2 = toX402V2Requirements(multiSchemeS402);
+    expect(v2.scheme).toBe('exact');
+  });
+});
+
+describe('toX402V2Envelope (write path)', () => {
+  const SAMPLE_S402: s402PaymentRequirements = {
+    s402Version: '1',
+    accepts: ['exact'],
+    network: 'eip155:8453',
+    asset: '0x' + 'd'.repeat(40),
+    amount: '10000',
+    payTo: '0x' + 'a'.repeat(40),
+  };
+
+  it('wraps the requirement in a PaymentRequired envelope with x402Version=2', () => {
+    const envelope = toX402V2Envelope(SAMPLE_S402, {
+      url: 'mcp://tool/summarize',
+      description: 'Document summarizer',
+    });
+    expect(envelope.x402Version).toBe(2);
+    expect(envelope.resource).toEqual({
+      url: 'mcp://tool/summarize',
+      description: 'Document summarizer',
+    });
+    expect(envelope.accepts).toHaveLength(1);
+    expect(envelope.accepts[0].scheme).toBe('exact');
+    expect(envelope.accepts[0].extra).toEqual({});
+  });
+
+  it('includes optional extensions and error when provided', () => {
+    const envelope = toX402V2Envelope(
+      SAMPLE_S402,
+      { url: 'mcp://tool/summarize' },
+      {
+        extensions: { sep2007: { multiRail: true } },
+        error: 'Optional error string',
+      },
+    );
+    expect(envelope.extensions).toEqual({ sep2007: { multiRail: true } });
+    expect(envelope.error).toBe('Optional error string');
+  });
+
+  it('roundtrips via fromX402Envelope to preserve s402 fields', () => {
+    const envelope = toX402V2Envelope(SAMPLE_S402, { url: 'mcp://tool/summarize' });
+    const recovered = fromX402Envelope(envelope as unknown as x402PaymentRequiredEnvelope);
+    expect(recovered.network).toBe(SAMPLE_S402.network);
+    expect(recovered.asset).toBe(SAMPLE_S402.asset);
+    expect(recovered.amount).toBe(SAMPLE_S402.amount);
+    expect(recovered.payTo).toBe(SAMPLE_S402.payTo);
+  });
+
+  it('omits extensions / error when not provided (no undefined keys leak)', () => {
+    const envelope = toX402V2Envelope(SAMPLE_S402, { url: 'mcp://tool/summarize' });
+    expect('extensions' in envelope).toBe(false);
+    expect('error' in envelope).toBe(false);
   });
 });

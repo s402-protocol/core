@@ -92,6 +92,17 @@ export {
   detectTransport,
 } from './http.js';
 
+// Transport abstraction (ADR-011) — one seam, any carrier: HTTP, MCP, and A2A.
+export { httpTransport, mcpTransport, a2aTransport, S402_MCP_META_KEY, S402_A2A_KEYS } from './transport.js';
+export type {
+  PaymentTransport,
+  PaymentCarrierContext,
+  PaymentStatus,
+  Decoded,
+  McpMetaFrame,
+  A2aMetadataFrame,
+} from './transport.js';
+
 // Settlement envelope (ADR-007) — chain-agnostic, typed response format.
 export {
   S402_ENVELOPE_CONTENT_TYPE,

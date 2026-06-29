@@ -1,3 +1,4 @@
 packages:
   - 'typescript'
   - 'server-ts'
+  - 'mcp-demo'

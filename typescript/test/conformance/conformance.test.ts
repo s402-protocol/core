@@ -30,6 +30,8 @@ import {
 import { normalizeRequirements } from '../../src/compat/x402.js';
 import { formatReceiptHeader, parseReceiptHeader } from '../../src/receipts.js';
 import { s402Error } from '../../src/errors.js';
+import { mcpTransport, a2aTransport } from '../../src/transport.js';
+import type { PaymentStatus, PaymentTransport } from '../../src/transport.js';
 
 import type {
   s402PaymentRequirements,
@@ -401,6 +403,58 @@ describe('Conformance: roundtrip', () => {
   }
 });
 
+// ── Transport carriers (MCP + A2A) ───────────────
+// Cross-language contract for the non-HTTP carriers (ADR-011). HTTP is covered
+// by the header/body vectors above. The Python runner does not load this file
+// (no MCP/A2A codec yet) — the contract exists for when other languages add them.
+
+describe('Conformance: transport-carriers', () => {
+  const vectors = loadVectors('transport-carriers.json');
+
+  it(`loaded ${vectors.length} vectors`, () => {
+    expect(vectors.length).toBeGreaterThanOrEqual(6);
+  });
+
+  for (const v of vectors) {
+    it(v.description, () => {
+      const input = v.input as {
+        type: 'requirements' | 'payload' | 'settle';
+        carrier: 'mcp' | 'a2a';
+        value: Record<string, unknown>;
+        correlationId?: string;
+      };
+      const expected = v.expected as {
+        encoded: Record<string, unknown>;
+        status: PaymentStatus;
+        correlationId?: string;
+      };
+      const transport: PaymentTransport<Record<string, unknown>> =
+        input.carrier === 'mcp' ? mcpTransport : a2aTransport;
+      const ctx = input.correlationId ? { correlationId: input.correlationId } : undefined;
+
+      let frame: Record<string, unknown>;
+      let decoded;
+      if (input.type === 'requirements') {
+        frame = transport.encodeRequirements(input.value as unknown as s402PaymentRequirements, ctx);
+        decoded = transport.decodeRequirements(frame);
+      } else if (input.type === 'payload') {
+        frame = transport.encodePayload(input.value as unknown as s402PaymentPayload, ctx);
+        decoded = transport.decodePayload(frame);
+      } else {
+        frame = transport.encodeSettlement(input.value as unknown as s402SettleResponse, ctx);
+        decoded = transport.decodeSettlement(frame);
+      }
+
+      // Encode matches the committed wire contract; decode round-trips value + carrier context.
+      expect(frame).toEqual(expected.encoded);
+      expect(decoded).not.toBeNull();
+      expect(decoded!.value).toEqual(input.value);
+      expect(decoded!.ctx.status).toBe(expected.status);
+      expect(decoded!.ctx.correlationId).toBe(expected.correlationId);
+    });
+  }
+});
+
 // ── Meta: vector file completeness ───────────────
 
 describe('Conformance: meta', () => {
@@ -418,6 +472,7 @@ describe('Conformance: meta', () => {
       'receipt-parse.json',
       'validation-reject.json',
       'roundtrip.json',
+      'transport-carriers.json',
     ];
     const actual = readdirSync(VECTORS_DIR).filter(f => f.endsWith('.json'));
     for (const file of expectedFiles) {
