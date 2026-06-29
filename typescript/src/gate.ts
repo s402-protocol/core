@@ -104,6 +104,17 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
 /**
  * Create an s402 payment gate.
  *
+ * ⚠️ **Settlement model — optimistic serve-then-settle.** The incoming payload is
+ * shape-decoded (base64/JSON/scheme — NOT cryptographically verified) before the
+ * protected handler runs; verification + settlement happen *after*, in
+ * `server.process()`. On settlement failure the response **body is withheld**
+ * (paywalled content never leaks), but the handler has **already executed**. So:
+ * keep protected handlers idempotent / side-effect-free, or verify before any
+ * side effect (mint, send, paid downstream call). The trade-off is intentional —
+ * it avoids a verify round-trip, aligned with `skipVerify` on zero-failed-gas
+ * chains like Sui — but a `verifyBeforeServe` option is a roadmap item for
+ * side-effecting handlers. See ADR/THREAT_MODEL.
+ *
  * @example Hono
  * ```ts
  * import { s402Gate } from '@sweefi/server';

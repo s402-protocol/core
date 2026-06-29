@@ -316,7 +316,14 @@ const A2A_STATUS_ENUM: Record<string, PaymentStatus> = {
 function a2aStatus(frame: A2aMetadataFrame, fallback: PaymentStatus): PaymentStatus {
   const raw = frame[S402_A2A_KEYS.STATUS];
   if (typeof raw !== 'string') return fallback;
-  return A2A_STATUS_ENUM[raw] ?? fallback;
+  // hasOwnProperty guard: `raw` is attacker-controlled (an A2A peer sets the
+  // metadata). A bare `A2A_STATUS_ENUM[raw]` would walk the prototype chain, so
+  // raw='constructor'/'__proto__'/'toString' would return an inherited member
+  // (a function/object) that survives the `?? fallback` and violates the
+  // PaymentStatus return type. Only accept own enum keys.
+  return Object.prototype.hasOwnProperty.call(A2A_STATUS_ENUM, raw)
+    ? A2A_STATUS_ENUM[raw]
+    : fallback;
 }
 
 /** Recover the optional s402-namespaced correlation id from metadata. */

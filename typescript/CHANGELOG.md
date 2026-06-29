@@ -35,9 +35,19 @@ the protocol core staying chain-agnostic (S7) and x402-free throughout. Purely a
 
 - **Conformance vector generator restored.** `test/conformance/generate-vectors.ts` imported `../../src/compat.js`, which moved to `compat/x402.js` in the 0.7.0 compat reorg — the generator had been broken/unrunnable since (nothing in CI exercises it; only the runner reads the committed vectors). Fixed the import; regenerating now reproduces the existing vectors byte-for-byte (confirming no committed drift) plus the new transport file. See `LESSONS.md`.
 
+### Security
+
+Pre-publish adversarial review (2026-06-28) hardened three trust-boundary issues before the 0.8.0 publish (regression tests in `test/security-hardening.test.ts`):
+
+- **A2A status decode** (`transport.ts`) — `a2aStatus` indexed a plain enum object with an attacker-controlled key, so a malicious A2A peer sending `s402.payment.status: "constructor"` (or `__proto__` / `toString` / …) got back an inherited prototype member (a function/object) instead of a `PaymentStatus`. Now `hasOwnProperty`-guarded.
+- **MPP empty challenge id** (`compat/mpp.ts`) — `parseWwwAuthenticatePayment` and `decodeMppCredential` accepted an empty `id` (`typeof "" === 'string'`); MPP hardened `id` to MUST-be-non-empty (an empty id is replay-ambiguous). Now rejected for all required auth-params.
+- **`pickPayloadFields`** (`http.ts`) — the exported helper indexed the scheme map with an untrusted key; `scheme: "constructor"` threw a raw `TypeError` on a direct call. Now `hasOwnProperty`-guarded.
+- **Defense-in-depth:** 64KB size cap added to the MPP base64url decoder (mirrors the HTTP header cap).
+- **Documented (not changed):** `s402Gate` uses optimistic serve-then-settle — the protected handler runs before cryptographic verification (response body is withheld on failure, but side effects execute). JSDoc now warns; a `verifyBeforeServe` option is a roadmap item.
+
 ### Changed
 
-- **1075 tests across 27 files** (was 1032 at 0.7.0). The transport refactor (1a-i) is **behavior-preserving**: `httpTransport` delegates to the existing `http.ts` `encode*/decode*` functions and `S402_HEADERS` — same header names, same base64 — so all pre-existing tests pass unchanged as the regression proof. Chunks 1a-ii (x402 HTTP inbound bridge), 1a-iii (`mcpTransport` + x402 `_meta` bridge), and 2 (`a2aTransport` + x402 A2A bridge) are purely additive; no core wire change. The two newly-exported validators are additive to `s402/http`. **One seam, three carriers: HTTP, MCP, A2A.**
+- **1095 tests across 28 files** (was 1032 at 0.7.0). The transport refactor (1a-i) is **behavior-preserving**: `httpTransport` delegates to the existing `http.ts` `encode*/decode*` functions and `S402_HEADERS` — same header names, same base64 — so all pre-existing tests pass unchanged as the regression proof. Chunks 1a-ii (x402 HTTP inbound bridge), 1a-iii (`mcpTransport` + x402 `_meta` bridge), and 2 (`a2aTransport` + x402 A2A bridge) are purely additive; no core wire change. The two newly-exported validators are additive to `s402/http`. **One seam, three carriers: HTTP, MCP, A2A.**
 
 ### Compatibility
 

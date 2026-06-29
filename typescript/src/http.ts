@@ -216,7 +216,13 @@ export function pickPayloadFields(obj: Record<string, unknown>): s402PaymentPayl
   }
   // Strip unknown inner payload fields based on scheme
   if (result.payload && typeof result.payload === 'object' && typeof result.scheme === 'string') {
-    const allowedInner = S402_PAYLOAD_INNER_KEYS[result.scheme];
+    // hasOwnProperty guard: `result.scheme` is untrusted. A bare index would
+    // walk the prototype chain (scheme='constructor' → the Object constructor,
+    // truthy, then `for...of` on it throws a raw TypeError). Internal callers
+    // run validatePayloadShape first, but this helper is exported via s402/http.
+    const allowedInner = Object.prototype.hasOwnProperty.call(S402_PAYLOAD_INNER_KEYS, result.scheme)
+      ? S402_PAYLOAD_INNER_KEYS[result.scheme]
+      : undefined;
     if (allowedInner) {
       const inner = result.payload as Record<string, unknown>;
       const cleanInner: Record<string, unknown> = {};

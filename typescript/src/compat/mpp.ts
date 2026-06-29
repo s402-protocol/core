@@ -161,7 +161,10 @@ export function parseWwwAuthenticatePayment(
 
   const params = parseAuthParams(paramString);
   const required = ['id', 'realm', 'method', 'intent', 'request'] as const;
-  const missing = required.filter((k) => typeof params[k] !== 'string');
+  // A required auth-param that parsed to an empty string is effectively missing.
+  // MPP hardened `id` to MUST-be-non-empty (mpp-specs PR #285): an empty challenge
+  // id is replay-ambiguous (nothing to bind the challenge to). Apply to all required.
+  const missing = required.filter((k) => typeof params[k] !== 'string' || params[k] === '');
   if (missing.length > 0) {
     throw new s402Error('INVALID_PAYLOAD',
       `Payment challenge missing required auth-params: ${missing.join(', ')}`);
@@ -360,6 +363,12 @@ export function matchMppRange(
 // ══════════════════════════════════════════════════════════════
 
 function base64urlDecodeToString(input: string): string {
+  // Defense-in-depth size cap (mirrors http.ts MAX_HEADER_BYTES). MPP header
+  // params are bounded by the HTTP server upstream, but this trust-boundary
+  // decoder shouldn't rely on that.
+  if (input.length > 64 * 1024) {
+    throw new s402Error('INVALID_PAYLOAD', 'base64url value exceeds maximum size (65536)');
+  }
   if (!/^[A-Za-z0-9_-]*$/.test(input)) {
     throw new s402Error('INVALID_PAYLOAD', 'Value is not valid base64url (no-padding)');
   }
@@ -495,7 +504,7 @@ export function decodeMppCredential(
   }
   const ch = obj.challenge as Record<string, unknown>;
   for (const k of ['id', 'realm', 'method', 'intent', 'request'] as const) {
-    if (typeof ch[k] !== 'string') {
+    if (typeof ch[k] !== 'string' || ch[k] === '') {
       throw new s402Error('INVALID_PAYLOAD', `Credential challenge missing "${k}" (string)`);
     }
   }
