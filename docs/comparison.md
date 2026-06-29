@@ -133,6 +133,7 @@ const requirements = normalizeRequirements(decoded);
 - Permissionless trust model (no validator set, no intermediary)
 - Pay-to-decrypt via SEAL + Walrus — **no EVM equivalent exists**
 - Arbiter-backed escrow for agent-to-agent commerce with no prior relationship
+- Transport reach — payment rides HTTP, MCP, *and* A2A through one `PaymentTransport` seam (carriers are thin adapters over one validation core, not parallel re-implementations). s402 ships a working **A2A** implementation; x402 defines A2A only as a spec
 
 ## Why an Agent Would Default to s402
 
