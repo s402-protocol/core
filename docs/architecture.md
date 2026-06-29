@@ -98,6 +98,22 @@ s402 uses the same HTTP headers as x402:
 
 The presence of `s402Version` in the decoded JSON distinguishes s402 from x402. The `normalizeRequirements()` function handles auto-detection.
 
+## Transport Abstraction
+
+Payment is not tied to HTTP. The `PaymentTransport` interface (ADR-011) is a lossless mapping between the canonical `{ PaymentRequirements, PaymentPayload, SettleResponse }` and a *carrier's* out-of-band metadata slot. The protocol core (schemes, facilitator, invariants) is transport-agnostic; each carrier is a thin adapter — a projection, not a reimplementation.
+
+| Transport | Frame (`TFrame`) | Where payment rides |
+|-----------|------------------|---------------------|
+| `httpTransport` | `Headers` | `payment-required` / `x-payment` / `payment-response` headers (base64 JSON) |
+| `mcpTransport` | `_meta` record | `_meta['s402/payment']` (structured JSON — MCP's idiom, no base64) |
+| `a2aTransport` | task `metadata` | `s402.payment.*` on the A2A task lifecycle (structured JSON) |
+
+Every method threads an optional `PaymentCarrierContext` (`status` + `correlationId`). This is shaped for the *most stateful* carrier: A2A carries an explicit payment status on its task lifecycle (`input-required → completed/failed`) with a `taskId` correlation, so its decoder **reads** the status; the stateless carriers (HTTP, MCP) **derive** it from which message is present. Designing for the hardest carrier up front is why A2A was added as a thin adapter rather than an interface change.
+
+**One trust boundary, three envelopes.** All decoders route through the same canonical `validate*Shape`/`pick*Fields` (see below), so untrusted MCP or A2A input crosses the identical trust boundary as untrusted HTTP input — adding carriers multiplies the surface area but not the validation logic.
+
+**x402 interop stays opt-in.** Accepting an x402 client over any carrier needs x402→s402 *shape* normalization, so it lives in the opt-in `s402/compat/x402` layer (`fromX402PayloadHeaders` / `fromX402PayloadMeta` / `fromX402PayloadA2A`), keeping the core carriers x402-free. s402 ships an A2A implementation; x402 (as of this writing) defines A2A only as a spec.
+
 ## Validation at Trust Boundaries
 
 All decode functions validate the shape of incoming data:
