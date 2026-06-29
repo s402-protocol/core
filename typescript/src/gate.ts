@@ -63,6 +63,21 @@ export interface S402GateOptions {
     request: Request,
     error: { message: string; code?: string },
   ) => Response | Promise<Response> | undefined;
+
+  /**
+   * Cryptographically verify the payment BEFORE running the protected handler
+   * (security-first — the default). When true, an invalid payment is rejected
+   * with a 402 and the handler never executes (no compute, no side effects).
+   *
+   * Set `false` for optimistic serve-then-settle: the handler runs first and
+   * verification happens at settle time — lower latency, but the handler
+   * executes before the payment is confirmed valid, so this is ONLY safe for
+   * idempotent / side-effect-free handlers. The response body is withheld on
+   * settlement failure either way.
+   *
+   * @default true
+   */
+  verifyBeforeServe?: boolean;
 }
 
 /** Result of the low-level `.check()` escape hatch. */
@@ -104,16 +119,14 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
 /**
  * Create an s402 payment gate.
  *
- * ⚠️ **Settlement model — optimistic serve-then-settle.** The incoming payload is
- * shape-decoded (base64/JSON/scheme — NOT cryptographically verified) before the
- * protected handler runs; verification + settlement happen *after*, in
- * `server.process()`. On settlement failure the response **body is withheld**
- * (paywalled content never leaks), but the handler has **already executed**. So:
- * keep protected handlers idempotent / side-effect-free, or verify before any
- * side effect (mint, send, paid downstream call). The trade-off is intentional —
- * it avoids a verify round-trip, aligned with `skipVerify` on zero-failed-gas
- * chains like Sui — but a `verifyBeforeServe` option is a roadmap item for
- * side-effecting handlers. See ADR/THREAT_MODEL.
+ * **Settlement model — verify-before-serve (default, security-first).** The
+ * payment is cryptographically verified BEFORE the protected handler runs; an
+ * invalid payment is rejected with a 402 and the handler never executes. After
+ * the handler returns, `server.process()` re-checks expiration and settles
+ * on-chain (the response body is withheld if settlement fails). Set
+ * `verifyBeforeServe: false` for optimistic serve-then-settle — lower latency,
+ * but the handler runs before verification, so only for idempotent /
+ * side-effect-free handlers.
  *
  * @example Hono
  * ```ts
@@ -215,6 +228,32 @@ async function runCheck(
         code: 'INVALID_PAYLOAD',
       }),
     };
+  }
+
+  // Security-first (default): verify the payment cryptographically BEFORE the
+  // protected handler runs, so an invalid payment never triggers handler compute
+  // or side effects. Opt out via `verifyBeforeServe: false` for optimistic flows.
+  if (options.verifyBeforeServe !== false) {
+    try {
+      const verification = await options.server.verify(payload, requirements);
+      if (!verification.valid) {
+        return {
+          accepted: false,
+          response: await buildError(request, options, {
+            message: verification.invalidReason ?? 'Payment verification failed',
+            code: 'VERIFICATION_FAILED',
+          }),
+        };
+      }
+    } catch (e) {
+      return {
+        accepted: false,
+        response: await buildError(request, options, {
+          message: `Payment verification error: ${e instanceof Error ? e.message : String(e)}`,
+          code: 'VERIFICATION_FAILED',
+        }),
+      };
+    }
   }
 
   let settled = false;

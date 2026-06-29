@@ -509,3 +509,70 @@ describe('s402Gate — x402 wire compatibility (superset at the payment layer)',
     expect(((await res.json()) as { errorCode: string }).errorCode).toBe('INVALID_PAYLOAD');
   });
 });
+
+describe('s402Gate — verify-before-serve (security-first default)', () => {
+  let server: s402ResourceServer;
+  let requirements: s402PaymentRequirements;
+
+  beforeEach(() => {
+    server = buildServer();
+    requirements = buildRequirements(server);
+  });
+
+  function buildInvalidPayment(): string {
+    // Syntactically valid payload, but the transaction won't verify (mock checks it).
+    const bad: s402ExactPayload = {
+      s402Version: S402_VERSION,
+      scheme: 'exact',
+      payload: { transaction: 'wrong-tx', signature: '0xmock-sig' },
+    };
+    return encodePaymentPayload(bad as unknown as s402PaymentPayload);
+  }
+
+  it('DEFAULT: rejects an invalid payment WITHOUT running the protected handler', async () => {
+    const handler = vi.fn(async () => Response.json({ data: 'must not run' }));
+    const gate = s402Gate({ server, requirements });
+
+    const res = await gate(handler)(
+      new Request('http://test/api/paid', {
+        headers: { [S402_HEADERS.PAYMENT]: buildInvalidPayment() },
+      }),
+    );
+
+    expect(res.status).toBe(402);
+    expect(handler).not.toHaveBeenCalled(); // ← the security property: no compute, no side effects
+    const body = (await res.json()) as { errorCode: string; error: string };
+    expect(body.errorCode).toBe('VERIFICATION_FAILED');
+    expect(body.error).toMatch(/transaction mismatch/i);
+  });
+
+  it('DEFAULT: runs the handler only after the payment verifies', async () => {
+    const handler = vi.fn(async () => Response.json({ data: 'paid' }));
+    const gate = s402Gate({ server, requirements });
+
+    const res = await gate(handler)(
+      new Request('http://test/api/paid', {
+        headers: { [S402_HEADERS.PAYMENT]: buildValidPayment(requirements) },
+      }),
+    );
+
+    expect(res.status).toBe(200);
+    expect(handler).toHaveBeenCalledOnce();
+  });
+
+  it('verifyBeforeServe:false (optimistic opt-out): handler RUNS before verify; body withheld on failure', async () => {
+    const handler = vi.fn(async () => Response.json({ data: 'ran optimistically' }));
+    const gate = s402Gate({ server, requirements, verifyBeforeServe: false });
+
+    const res = await gate(handler)(
+      new Request('http://test/api/paid', {
+        headers: { [S402_HEADERS.PAYMENT]: buildInvalidPayment() },
+      }),
+    );
+
+    expect(handler).toHaveBeenCalledOnce(); // optimistic: handler ran before verification
+    expect(res.status).toBe(402); // settlement failed → error surfaced
+    const body = (await res.json()) as { data?: string };
+    expect(body.data).toBeUndefined(); // paywalled content still withheld
+  });
+});
