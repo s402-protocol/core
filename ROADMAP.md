@@ -4,6 +4,14 @@
 > It is forward-looking; nothing here is a commitment to ship on a specific date.
 > The authoritative source for shipped behavior is `INVARIANTS.md` and the ADRs under `docs/adr/`.
 
+> **Reality note (2026-07-02):** the version numbers below have drifted from what actually shipped.
+> The *actual* v0.7.0 (2026-04-22) shipped **L402 read-path interop** (`s402/compat-l402`, DAN-344),
+> and the *actual* v0.8.0 (2026-06-28) shipped the **transport abstraction** (ADR-011: one seam,
+> three carriers — HTTP / MCP / A2A, with opt-in x402 inbound bridges). See `typescript/CHANGELOG.md`.
+> The items listed under "v0.7.0 — federation + session rotation" below did NOT ship under that
+> number and **remain open** (unscheduled); the "v0.6.x" sections' status should likewise be checked
+> against the CHANGELOG rather than trusted from this file.
+
 ---
 
 ## Principles that shape this roadmap

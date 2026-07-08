@@ -1,9 +1,11 @@
 # ADR-003: `upto` Scheme — Usage-Based Payments with Settlement Overrides
 
-**Status:** Proposed
+**Status:** Accepted (implemented — see note)
 **Date:** 2026-04-12
 **Supersedes:** (none)
 **Linear:** DAN-284
+
+> **Status note (2026-07-02):** the `upto` scheme designed here SHIPPED in `s402` v0.5.0 (2026-04-12) — including `estimatedAmount` and the client-chosen `settlementCeiling` (see `typescript/CHANGELOG.md` §0.5.0, DAN-284). The "Proposed" status was never updated after implementation. ADR body below is preserved as written.
 
 ## Context
 

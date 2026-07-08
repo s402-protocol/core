@@ -8,11 +8,11 @@
 
 ```
 s402-protocol/core
-├── spec/vectors/          — 132 conformance test vectors (THE protocol spec, language-agnostic)
+├── spec/vectors/          — 167 conformance test vectors (THE protocol spec, language-agnostic) <!-- corrected 2026-07-02: was 132; count verified on disk + v0.8.0 changelog -->
 ├── docs/                  — VitePress docs site (s402-protocol.org) + wire format specification
 ├── typescript/            — TypeScript reference implementation (npm: s402)
 │   ├── src/               — 11 source files, zero runtime deps
-│   ├── test/              — 736 tests (adversarial, fuzz, MC/DC, conformance)
+│   ├── test/              — 1,098 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-07-02: was 736; per v0.8.0 CHANGELOG -->
 │   └── examples/          — Runnable joke-api demo
 ├── python/                — Python implementation (pip: s402)
 │   ├── src/s402/          — 5 source files, zero runtime deps
@@ -55,18 +55,18 @@ typescript/src/
 # TypeScript (run from typescript/)
 cd typescript
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (736 across 16 suites, incl. 132-vector conformance)
+pnpm run test       # Run tests (1,098 across 28 files, incl. 167-vector conformance)
 pnpm run typecheck  # tsc --noEmit
 
 # Python (run from python/)
 cd python
 pip install -e ".[dev]"
-pytest              # Run 132 conformance tests
+pytest              # Run conformance tests (154 vectors — the 12 codec files; settlement-verification + transport-carriers vectors are TS-only for now)
 ```
 
 ## Conformance test suite
 
-`spec/vectors/` contains 132 machine-readable JSON test vectors across 12 files. These are the **product** — both the TypeScript and Python implementations read from this single directory. Cross-language implementors (Go, Rust) use these same vectors to verify s402 conformance.
+`spec/vectors/` contains 167 machine-readable JSON test vectors across 14 files. <!-- corrected 2026-07-02: was "132 across 12" --> These are the **product** — both the TypeScript and Python implementations read from this single directory. Cross-language implementors (Go, Rust) use these same vectors to verify s402 conformance.
 
 - **Generator**: `npx tsx test/conformance/generate-vectors.ts` — regenerate after any encode/decode changes
 - **TS Runner**: `typescript/test/conformance/conformance.test.ts`

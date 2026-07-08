@@ -15,7 +15,7 @@ The audit also surfaced that SweeFi already has the correctly-layered implementa
 - `sweefi/contracts/sources/` contains Move modules for all five schemes (`payment.move`, `stream.move`, `escrow.move`, `prepaid.move`, `seal_policy.move`) plus supporting modules (mandate, identity, math, admin). 426 Move test functions across 10 modules.
 - `sweefi/packages/sui/src/s402/` has client/facilitator/server TypeScript adapters for all five schemes (exact, stream, escrow, prepaid, unlock). 669 tests in `@sweefi/sui`.
 - `sweefi/packages/mcp/` is `@sweefi/mcp` v0.1.4 with 35 tools and 222 tests. Beta-grade, published to npm, consumed by real users.
-- Testnet v11 is deployed at `0xb83e50365ba460aaa02e240902a40890bec88cd35bd2fc09afb6c79ec8ea9ac5` with three schemes demo'd live (exact/stream/escrow).
+- Testnet v11 is deployed at `0xb83e50365ba460aaa02e240902a40890bec88cd35bd2fc09afb6c79ec8ea9ac5` with three schemes demo'd live (exact/stream/escrow). *(Note 2026-07-02: that package is now ORPHANED — a pre-migration snapshot; the current testnet package is `0x5c158886776cdb4a12c7933717ba45f6ec7165586613820016d7fafbae48fdfa`, fresh 2026-06-16 deploy. Historical context above preserved as written.)*
 - Grand total: **1,775 tests** (1,349 TypeScript + 426 Move).
 - SweeFi already consumes `s402` from npm as a versioned dependency (`"s402": "^0.2.0"`).
 
