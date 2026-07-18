@@ -11,7 +11,7 @@ s402-protocol/core
 ├── spec/vectors/          — 167 conformance test vectors (THE protocol spec, language-agnostic) <!-- corrected 2026-07-02: was 132; count verified on disk + v0.8.0 changelog -->
 ├── docs/                  — VitePress docs site (s402-protocol.org) + wire format specification
 ├── typescript/            — TypeScript reference implementation (npm: s402)
-│   ├── src/               — 11 source files, zero runtime deps
+│   ├── src/               — 19 source files (incl. 3 compat), zero runtime deps <!-- corrected 2026-07-19: was 11, then 16; count verified on disk -->
 │   ├── test/              — 1,098 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-07-02: was 736; per v0.8.0 CHANGELOG -->
 │   └── examples/          — Runnable joke-api demo
 ├── python/                — Python implementation (pip: s402)
@@ -130,19 +130,20 @@ pnpm run docs:preview   # Preview production build (localhost:4173)
 
 ## Design Decisions
 
-### The Five Irreducible Payment Primitives
+### The Six Irreducible Payment Primitives
 
-s402 defines exactly five payment schemes. Each has a **unique on-chain lifecycle** that cannot be reduced to any other:
+s402 defines exactly six payment schemes. Each has a **unique on-chain lifecycle** that cannot be reduced to any other:
 
 | Scheme | On-chain object | Lifecycle | Why irreducible |
 |--------|----------------|-----------|-----------------|
 | `exact` | None (atomic transfer) | pay → done | Base case. No persistent state. |
+| `upto` | `UptoDeposit` proxy | deposit(max) → settle(actual ≤ cap), remainder returned (or expire → reclaim) | Variable-amount metering. Settlement amount decided at settle time, cap-enforced on-chain. |
 | `prepaid` | `PrepaidBalance` shared object | deposit → claim → claim → withdraw | Deposit-then-claim pattern. Provider-initiated claims invert the flow. |
 | `stream` | `Stream` shared object | open → tick → tick → close | Time-based. On-chain clock drives payments autonomously. |
 | `escrow` | `Escrow` shared object | lock → condition → release/refund | Conditional. Money locked until delivery confirmed or deadline passes. |
 | `unlock` | Encryption receipt + encrypted blob | pay → receipt → decrypt (two-stage) | Entangled with encryption key servers. Decryption is atomic with payment. |
 
-**Why not six?** Auction (agent-to-agent bidding) was considered. Auction decomposes into two phases: price **discovery** (coordination problem) and **settlement** (one of the five existing schemes). The settlement of an auction is just `exact` (or `prepaid`, or `stream`) at the discovered price. Discovery is not a payment primitive — it's a coordination service.
+**Why not seven?** Auction (agent-to-agent bidding) was considered. Auction decomposes into two phases: price **discovery** (coordination problem) and **settlement** (one of the six existing schemes). The settlement of an auction is just `exact` (or `prepaid`, or `stream`) at the discovered price. Discovery is not a payment primitive — it's a coordination service.
 
 **Why not four?** Every scheme was tested for reducibility. Escrow cannot be expressed as "exact now + refund later" (the atomic lock is the point). Unlock cannot be expressed as escrow (encryption key server integration is entangled with payment). Stream cannot be expressed as repeated exact (on-chain clock autonomy is the point).
 
@@ -208,7 +209,7 @@ s402 has **8 formally proven invariants** in `INVARIANTS.md`. Read these before 
 |----|----------|------|------------------|
 | S1 | Stale payment rejection | Safety | Expired payments never settle (triple-layer defense) |
 | S2 | Trust boundary integrity | Safety | Untrusted HTTP input cannot corrupt internal state |
-| S3 | Five irreducible schemes | Structural | No scheme can be decomposed into others |
+| S3 | Six irreducible schemes | Structural | No scheme can be decomposed into others |
 | S4 | Error recoverability | Liveness | Agents can always determine retry vs. abandon |
 | S5 | Concurrent payment dedup | Safety | Identical payloads produce at most one settlement |
 | S6 | x402 compatibility roundtrip | Structural | s402 → x402 → s402 preserves all x402 fields |
@@ -251,7 +252,7 @@ s402 has **8 formally proven invariants** in `INVARIANTS.md`. Read these before 
 **Before implementing a new scheme, adapter, Move module, or subsystem in this repo, grep sibling projects under `../../projects/` for the name.** Parallel drift across repos is one of the most expensive failure modes in an AI-driven workflow — two repos evolve along independent tracks, each internally coherent, and the cost of reconciliation later is vastly higher than the cost of a 30-second check up front.
 
 **Sibling repos to check first:**
-- `../../projects/sweefi-project/sweefi/contracts/sources/` — Move modules for all five schemes
+- `../../projects/sweefi-project/sweefi/contracts/sources/` — Move modules for the on-chain schemes
 - `../../projects/sweefi-project/sweefi/packages/sui/src/s402/` — Sui adapter client/facilitator/server classes
 - `../../projects/sweefi-project/sweefi/packages/mcp/` — the canonical Sui MCP server (`@sweefi/mcp`)
 - `../../projects/sweefi-project/sweefi/STATUS.md` — deployment state, testnet package ID, test counts

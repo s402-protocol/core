@@ -3,9 +3,9 @@
 [![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
 
-**Chain-agnostic HTTP 402 protocol.** Five payment schemes for AI agent commerce. Wire-compatible with x402. Zero runtime dependencies. Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
+**Chain-agnostic HTTP 402 protocol.** Six payment schemes for AI agent commerce. Wire-compatible with x402. Zero runtime dependencies. Includes an optional compat layer (`s402/compat`) for normalizing x402 input.
 
-s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for five payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)). The reference implementation on Sui uses Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
+s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for six payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)). The reference implementation on Sui uses Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
 
 ```bash
 npm install s402
@@ -36,7 +36,7 @@ HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a pay
 |---|---|---|
 | **Settlement** | Two-step: verify then settle (temporal gap) | Atomic: verify + settle in one PTB |
 | **Finality** | 12+ second blocks (EVM L1) | ~400ms (Sui) |
-| **Payment models** | Exact (one-shot) only | Five schemes: Exact, Prepaid, Escrow, Unlock, Stream |
+| **Payment models** | Exact (one-shot) only | Six schemes: Exact, Prepaid, Escrow, Unlock, Stream, Upto |
 | **Micro-payments** | ~$1.60 gas per 1K calls on Base (broken) | $0.014 gas per 1K calls (prepaid) |
 | **Coin handling** | approve + transferFrom | Native `coinWithBalance` + `splitCoins` |
 | **Agent auth** | None | AP2 mandate delegation |
@@ -285,7 +285,7 @@ import type {
 } from 's402';
 ```
 
-The reference Sui implementation of all five schemes is available in [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui).
+The reference Sui implementation of the schemes is available in [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui).
 
 ## Wire Format
 
@@ -359,7 +359,7 @@ ls node_modules/s402/test/conformance/vectors/
 ls test/conformance/vectors/
 ```
 
-See [`test/conformance/README.md`](./test/conformance/README.md) for the vector format, encoding scheme, and implementation guide.
+See [`test/conformance/README.md`](./typescript/test/conformance/README.md) for the vector format, encoding scheme, and implementation guide.
 
 ## Related
 

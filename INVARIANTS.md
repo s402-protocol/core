@@ -120,9 +120,9 @@ URL validation + amount validation + address validation.  ∎
 
 ---
 
-## S3. Five Irreducible Payment Schemes (Structural)
+## S3. Six Irreducible Payment Schemes (Structural)
 
-**Statement**: The five payment schemes (exact, prepaid, stream, escrow, unlock) are irreducible — none can be decomposed into a combination of the others.
+**Statement**: The six payment schemes (exact, upto, prepaid, stream, escrow, unlock) are irreducible — none can be decomposed into a combination of the others.
 
 **Proof (by unique on-chain object lifecycle)**:
 
@@ -132,6 +132,16 @@ be simulated by combining other schemes:
 
 exact:   No persistent object. Single atomic transfer.
          Cannot be composed FROM others (it IS the atomic base case).
+
+upto:    UptoDeposit object with cap-bounded variable settlement.
+         Requires: deposit(max) → settle(actual ≤ ceiling ≤ max), remainder
+         returned to payer (or deadline → expire/reclaim).
+         Cannot be exact (settlement amount unknown at authorization;
+         needs a deposit object and a refund path).
+         Cannot be prepaid (ONE cap-bounded settlement, not repeated
+         provider claims against a persistent balance).
+         Cannot be escrow (no delivery condition or arbiter — the
+         variable is the amount, not the release).
 
 prepaid: Shared PrepaidBalance object with claim/dispute lifecycle.
          Requires: deposit → claim → claim → ... → withdraw
@@ -379,7 +389,7 @@ this at ~2^128 work — infeasible by any current or projected compute.  ∎
 | unlock TX2  | **No — facilitator constructs** | Attestation-based (TBD)     | OPEN QUESTION (blocks full S8 coverage for the unlock scheme — see the Allium spec's `open_question UnlockTX2` block) |
 | prepaid     | Yes (deposit TX) | Local digest comparison | IMPLEMENTED in `sweefi/packages/sui/src/s402/prepaid/client.ts` via shared `verifySuiSettlement` helper. The deposit TX is client-signed — S8 applies. Receipt-chain verification for the claim phase is a separate concern. |
 
-⚠️ **Implementation distinction (important).** The `exact` scheme is architecturally unique: it uses Sui framework primitives (`splitCoins`, `transferObjects`) and therefore requires no custom Move module. The other four schemes are shared-object state machines that require custom Move contracts (`stream.move`, `escrow.move`, `unlock_receipt`, `prepaid.move`). All five TypeScript scheme classes in `sweefi/packages/sui/src/s402/*/client.ts` now implement `verifySettlement` via a shared `verifySuiSettlement()` helper in `sweefi/packages/sui/src/s402/verify.ts`. The `createS402Client` fetch wrapper calls this automatically after every successful settlement. See SweeFi ADR-010 for the design decision.
+⚠️ **Implementation distinction (important).** The `exact` scheme is architecturally unique: it uses Sui framework primitives (`splitCoins`, `transferObjects`) and therefore requires no custom Move module. The stateful schemes are shared-object state machines that require custom Move contracts (`stream.move`, `escrow.move`, `unlock_receipt`, `prepaid.move`; `upto` uses an `UptoDeposit` proxy). The TypeScript scheme classes in `sweefi/packages/sui/src/s402/*/client.ts` implement `verifySettlement` via a shared `verifySuiSettlement()` helper in `sweefi/packages/sui/src/s402/verify.ts`. The `createS402Client` fetch wrapper calls this automatically after every successful settlement. See SweeFi ADR-010 for the design decision.
 
 ⚠️ **Known gap: unlock-TX2.** `unlock-TX2` is constructed by the facilitator after TX1 settles (see `s402UnlockPayload` comments in types.ts:270-288). S8 as stated does NOT cover this transaction. This is the single narrow case where the April 2026 council's original S13 "causal binding" proposal would bite, and it needs a separate invariant in v0.3. Filed as a follow-up against ADR-001.
 
