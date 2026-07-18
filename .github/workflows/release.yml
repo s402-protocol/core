@@ -1,9 +1,14 @@
 name: Release
 
+# Tag conventions (split 2026-07-18 after the v0.8.0 release failure):
+#   v*     → npm (TypeScript package)
+#   py-v*  → PyPI (Python package) — decoupled until the Python port reaches
+#            version parity (v0.8.0 tag hit "pyproject.toml is 0.1.0" and failed).
 on:
   push:
     tags:
       - 'v*'
+      - 'py-v*'
 
 permissions:
   contents: read
@@ -12,6 +17,7 @@ permissions:
 jobs:
   publish-npm:
     name: Publish to npm
+    if: ${{ !startsWith(github.ref_name, 'py-v') }}
     runs-on: ubuntu-latest
     environment: release
     defaults:
@@ -47,12 +53,28 @@ jobs:
             exit 1
           fi
 
+      # Idempotency guard: the interactive 2FA ritual publishes manually; on
+      # 2026-07-18 that beat this job by 5 seconds and the duplicate publish
+      # failed the workflow. If the version is already live, succeed quietly.
+      - name: Skip if already published
+        id: pubcheck
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if npm view "s402@${PKG_VERSION}" version >/dev/null 2>&1; then
+            echo "already=true" >> "$GITHUB_OUTPUT"
+            echo "s402@${PKG_VERSION} already on the registry — skipping publish."
+          else
+            echo "already=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - run: pnpm publish --no-git-checks
+        if: steps.pubcheck.outputs.already == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
   publish-pypi:
     name: Publish to PyPI
+    if: ${{ startsWith(github.ref_name, 'py-v') }}
     runs-on: ubuntu-latest
     environment: release
     defaults:
@@ -71,7 +93,7 @@ jobs:
       # Verify the tag version matches pyproject.toml
       - name: Verify version match
         run: |
-          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          TAG_VERSION="${GITHUB_REF_NAME#py-v}"
           PKG_VERSION=$(python -c "
           import tomllib
           with open('pyproject.toml', 'rb') as f:

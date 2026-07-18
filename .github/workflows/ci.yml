@@ -67,8 +67,11 @@ jobs:
       - name: Grep for chain-specific patterns in s402 src/
         run: |
           VIOLATIONS=0
-          # Strip comments: // line comments, /* block openers, and JSDoc * continuation lines
-          STRIP_COMMENTS='grep -v "^\s*//" | grep -v "^\s*\*" | grep -v "^\s*/\*"'
+          # Strip comments: // line comments, /* block openers, and JSDoc * continuation lines.
+          # NOTE: grep -rn output is "file:line:content", so the patterns must anchor
+          # AFTER the file:line: prefix — the previous ^-anchored patterns could never
+          # match and the stripper was dead code (caught 2026-07-18, v0.8.0 CI failure).
+          STRIP_COMMENTS='grep -v ":[0-9]*:\s*//" | grep -v ":[0-9]*:\s*\*" | grep -v ":[0-9]*:\s*/\*"'
 
           # Sui SDK imports
           if grep -rn '@mysten/sui' typescript/src/ --include='*.ts' | eval "$STRIP_COMMENTS"; then

@@ -645,7 +645,7 @@ export interface ToMppChargeInput {
   method: string;
   /** Charge amount in smallest unit, as a canonical non-negative integer string. */
   amount: string;
-  /** Currency or asset identifier (e.g., 'USD', '0x...USDC contract', '0x2::sui::SUI'). */
+  /** Currency or asset identifier (e.g., 'USD', '0x...USDC contract', or a chain-native coin type tag). */
   currency: string;
   /** REQUIRED for blockchain methods (tempo, evm, solana, lightning, stellar). OPTIONAL for processor methods (stripe, card) which route internally. */
   recipient?: string;

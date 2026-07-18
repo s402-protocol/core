@@ -25,8 +25,8 @@
  * instead of forcing an interface break when it lands.
  *
  * **S7 (chain-agnostic boundary).** This module contains zero chain-specific code:
- * no `@mysten/sui` / Solana / EVM imports, no address or u64 validation. Carrier
- * mapping only. Sui settlement lives in `@sweefi/*`.
+ * no chain-SDK imports (Sui/Solana/EVM), no address or u64 validation. Carrier
+ * mapping only. Chain settlement lives in `@sweefi/*`.
  */
 
 import type {

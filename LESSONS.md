@@ -27,3 +27,27 @@ a lint/test) so the next agent never repeats it. Read after `AGENTS.md` +
 **Fix:** `Object.prototype.hasOwnProperty.call(map, key)` guards before indexing (both sites), plus regression tests in `test/security-hardening.test.ts` that feed `constructor`/`__proto__`/`toString`/`valueOf`/`hasOwnProperty` to every such lookup.
 
 **For future agents:** never index a plain object with an untrusted key at a trust boundary — use `Object.prototype.hasOwnProperty.call(map, key)`, a `Map`, or `Object.create(null)`. Treat `Record<string, T>` indexing as `T | undefined` regardless of what TS says, and when you add a lookup keyed by decoded/network input, add a prototype-key test (`constructor`, `__proto__`) alongside the happy path.
+
+---
+
+## [2026-07-18] — A linter that filters transformed output can be dead code that never filters anything
+
+**Mistake:** CI's S7 boundary check "stripped comments" with `grep -v "^\s*//"` (and `^\s*\*`, `^\s*/\*`) — but its input was `grep -rn` output, where every line starts with `file:line:`, so the `^`-anchored patterns could never match anything. The stripper was dead code since birth; the check's *real* behavior was "zero textual mentions in src/". The first-ever mentions (a JSDoc line **about** the no-imports rule in `transport.ts`, and an example coin type in `compat/mpp.ts`) failed CI on main at v0.8.0.
+
+**Why it happened:** the filter was written against a mental model of raw source lines, but the pipeline feeds prefixed grep output — and until v0.8.0 there were zero mentions of any kind in `src/`, so the broken and intended semantics agreed. A green check that has never fired on a positive validates nothing.
+
+**Fix:** patterns re-anchored after the `:line:` prefix in `ci.yml`; both doc mentions reworded anyway (defense in depth — the strict reading was fine prose too).
+
+**For future agents:** when you write a filter over tool output, test it against a KNOWN-POSITIVE — one line that must be stripped and one that must survive — before trusting green. A linter that has never caught anything is unverified, not passing.
+
+---
+
+## [2026-07-18] — npm E404 on a publish PUT means auth failure, not "package missing"
+
+**Mistake:** the Release npm job died with `404 Not Found - PUT https://registry.npmjs.org/s402 — 's402@0.8.0' is not in this registry`, which reads like a registry or package-name problem. The actual cause: the `NPM_TOKEN` repository secret is expired/revoked — npm deliberately answers unauthorized publish PUTs with 404 (not 401/403) to avoid leaking package existence. The same dead token had already shown up as a local 401 on `npm whoami` (2026-07-07).
+
+**Why it happened:** npm's obfuscated status code, plus a long-lived secret nothing monitors — tokens rot silently, and the workflow only exercises this one at release time, the worst possible moment to find out.
+
+**Fix:** idempotency guard added to the npm job (the manual interactive-2FA ritual and the tag workflow can no longer race — v0.8.0's manual publish beat CI by 5 seconds); PyPI split onto `py-v*` tags (v0.8.0 tag failed against pyproject 0.1.0). Durable fix queued in READY-QUEUE: npm **Trusted Publisher** (OIDC) for `s402`, same pattern as `pinia-colada-plugin-normalizer` — no token, no rot, provenance attested.
+
+**For future agents:** on npm publish failures, treat E404-on-PUT as *authentication* first. And treat any long-lived registry token in CI as a rot liability — prefer OIDC trusted publishing; failing that, add a scheduled `npm whoami` canary so token death is discovered before release day.
