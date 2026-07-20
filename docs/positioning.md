@@ -25,7 +25,7 @@ s402's defensibility comes from three pillars that compound. Any one in isolatio
 | **Stream** | Per-second billing (inference, video) | None |
 | **Unlock** | Pay-to-decrypt via SEAL + Walrus | None |
 
-x402 ships 2 schemes. MPP ships 1 formally registered intent. L402 ships 1. s402 ships 6. Three of the six (Escrow, Stream, Unlock) have no equivalent in any competing protocol — they require on-chain primitives (object ownership, PTB atomic settlement, threshold crypto) that the competitors' trust models don't support.
+x402 ships 4 schemes (exact, upto, auth-capture, batch-settlement — the latter two added in 2026 as escrow/channel responses to the stateless-flow races Ling et al. measured in production, arXiv:2605.30998). MPP ships 1 formally registered intent. L402 ships 1. s402 ships 6. Note the direction of travel: x402's new schemes are escrow and pre-funded channels — the shapes s402 launched with — bought on EVM at the cost of capital lockup and a trusted capture authorizer. Unlock still has no equivalent in any competing protocol (threshold crypto), and s402's escrow/stream reach the same safety atomically, without pre-funding.
 
 ### Pillar 2 — Universal Read
 

@@ -91,6 +91,8 @@ The temporal gap between "client signed" and "money moved" is where race conditi
 
 On chains that support atomic programmable transactions (Sui today, possibly more later), s402's atomic settlement is strictly safer. On chains that don't, s402 falls back to the two-step model the others use.
 
+The two-step gap is not theoretical: Ling et al. (arXiv:2605.30998, ACM ATC '26) measured 6% duplicate settlement under concurrency against a production x402 facilitator on Base mainnet, and up-to-99× allowance overdraft on the `upto` scheme (no per-deduction nonce). x402's 2026 answers — `auth-capture` (on-chain escrow) and `batch-settlement` (pre-funded channels) — close the race by adding capital lockup and a trusted capture authorizer; s402 closes it with the transaction model.
+
 ## Wire Compatibility
 
 s402 is designed to absorb x402 and MPP traffic at the edge.
