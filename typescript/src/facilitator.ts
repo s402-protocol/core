@@ -17,6 +17,7 @@ import type {
 } from './types.js';
 import type { s402FacilitatorScheme } from './scheme.js';
 import { s402Error } from './errors.js';
+import { canonicalizeToString } from './canonicalization.js';
 import type { s402FacilitatorExtension, s402ExtensionErrorHandler } from './extensions.js';
 import { s402ExtensionRegistry, runExtensionHooks } from './extensions.js';
 
@@ -307,13 +308,11 @@ export class s402Facilitator {
     }
 
     // Dedup key: caller-supplied Idempotency-Key wins, else payload fingerprint.
-    //
-    // Payload fingerprint is canonical because all payloads entering process()
-    // go through decodePaymentPayload() → pickPayloadFields(), which rebuilds the object
-    // by iterating an ordered Set allowlist. The output always has keys in the same order
-    // regardless of input JSON key order. Verified empirically — two clients sending the
-    // same payment with different JSON key order produce identical dedup keys after decode.
-    const dedupeKey = options?.idempotencyKey ?? JSON.stringify(payload);
+    // Fingerprint uses canonical form (ADR-007 §idempotency) so the key is
+    // order-independent even for direct process() callers that hand-build the
+    // payload — the decodePaymentPayload() path already had stable key order,
+    // but nothing forces callers through that path.
+    const dedupeKey = options?.idempotencyKey ?? canonicalizeToString(payload);
 
     // Retry dedup: returning a cached result for a previously-completed request
     // is Stripe-standard idempotency. Without this, a retry after a successful

@@ -51,13 +51,28 @@ describe('FINDING 1: fromX402Payload validation (FIXED)', () => {
     } as any)).toThrow(s402Error);
   });
 
-  it('normalizes non-exact scheme to exact (x402 only supports exact)', () => {
-    const result = fromX402Payload({
+  it('rejects non-exact scheme loudly (x402 ships auth-capture/batch-settlement now; no silent relabel)', () => {
+    expect(() => fromX402Payload({
       x402Version: 1,
-      scheme: 'stream',
+      scheme: 'auth-capture',
       payload: { transaction: 'tx', signature: 'sig' },
-    });
-    expect(result.scheme).toBe('exact');
+    })).toThrow(s402Error);
+    expect(() => fromX402Payload({
+      x402Version: 1,
+      scheme: 'batch-settlement',
+      payload: { transaction: 'tx', signature: 'sig' },
+    })).toThrow(/no s402 mapping/);
+    // V2 nests the scheme under `accepted` — same rejection applies there
+    expect(() => fromX402Payload({
+      x402Version: 2,
+      accepted: { scheme: 'auth-capture', network: 'base' },
+      payload: { transaction: 'tx', signature: 'sig' },
+    })).toThrow(/no s402 mapping/);
+    // V2 with NO scheme anywhere = exact-by-context (real Sui-shaped traffic)
+    expect(fromX402Payload({
+      x402Version: 2,
+      payload: { transaction: 'tx', signature: 'sig' },
+    }).scheme).toBe('exact');
   });
 });
 

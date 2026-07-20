@@ -62,7 +62,9 @@ export interface x402PaymentRequiredEnvelope {
 /** Minimal x402 PaymentPayload shape */
 export interface x402PaymentPayload {
   x402Version: number;
-  scheme: string;
+  /** V1 carries the scheme at top level; V2 nests it under `accepted` or omits it. */
+  scheme?: string;
+  accepted?: { scheme?: string; network?: string };
   payload: {
     transaction: string;
     signature: string;
@@ -76,9 +78,16 @@ export interface x402PaymentPayload {
 /**
  * Convert inbound x402 requirements to s402 format.
  * Handles both V1 (`maxAmountRequired`) and V2 (`amount`) wire formats.
- * Maps x402's single scheme to s402's accepts array.
+ * Accepts only `exact` — the sole x402 scheme with an s402 equivalent wired
+ * today. Any other scheme (upstream now ships upto, auth-capture,
+ * batch-settlement) is rejected loudly rather than silently relabeled;
+ * explicit mappings are 0.9.0 scope.
  */
 export function fromX402Requirements(x402: x402PaymentRequirements, now?: number): s402PaymentRequirements {
+  if (x402.scheme !== 'exact') {
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      `x402 scheme "${x402.scheme}" has no s402 mapping; only "exact" is accepted inbound`);
+  }
   // V1 uses maxAmountRequired, V2 uses amount
   const amount = x402.amount ?? x402.maxAmountRequired;
   if (!amount) {
@@ -131,6 +140,14 @@ export function fromX402Requirements(x402: x402PaymentRequirements, now?: number
  * Validates that required fields are present and correctly typed.
  */
 export function fromX402Payload(x402: x402PaymentPayload): s402ExactPayload {
+  // V1 puts scheme at top level, V2 under `accepted`; V2 payloads may omit it
+  // entirely (the negotiated requirements carry it), which implies exact. A
+  // scheme that is PRESENT and non-exact is rejected loudly — never relabeled.
+  const scheme = x402.scheme ?? x402.accepted?.scheme;
+  if (scheme !== undefined && scheme !== 'exact') {
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      `x402 scheme "${scheme}" has no s402 mapping; only "exact" is accepted inbound`);
+  }
   if (x402.payload == null || typeof x402.payload !== 'object') {
     throw new s402Error('INVALID_PAYLOAD', 'x402 payload missing or not an object');
   }

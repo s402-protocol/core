@@ -10,9 +10,14 @@
  *
  * Media type: `application/vnd.s402.envelope+json` (vendor tree, structured suffix).
  *
- * The eight client-side MUST checks from ADR-007 §"Client verification
- * obligations" live in `verifyEnvelope()` below — they are non-negotiable,
- * and `@sweefi/sdk` wraps this so application code never sees a bypass path.
+ * Six of the eight client-side MUST checks from ADR-007 §"Client verification
+ * obligations" live in `verifyEnvelope()` below: scheme-match, spec-digest,
+ * network, algorithm acceptance, timestamp skew, and txBinding. The remaining
+ * two — resource binding (check 5) and unlock-TX2 attestation (check 8) —
+ * need request-intent and scheme-specific context this module cannot see;
+ * they are the CALLER's obligation and are not enforced anywhere in s402
+ * proper. `@sweefi/sdk` wraps this so application code never sees a bypass
+ * path for the six that live here.
  */
 
 import type { s402Scheme, s402PaymentRequirements, s402PaymentPayload } from './types.js';
