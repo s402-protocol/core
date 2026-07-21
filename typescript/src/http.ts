@@ -117,7 +117,7 @@ const S402_SUB_OBJECT_KEYS: Record<string, Set<string>> = {
   prepaid: new Set(['ratePerCall', 'maxCalls', 'minDeposit', 'withdrawalDelayMs', 'providerPubkey', 'disputeWindowMs']),
   stream: new Set(['ratePerSecond', 'budgetCap', 'minDeposit', 'streamSetupUrl']),
   escrow: new Set(['seller', 'arbiter', 'deadlineMs']),
-  unlock: new Set(['encryptionId', 'encryptedContentId', 'encryptionServiceId']),
+  unlock: new Set(['packageId', 'keyServers', 'threshold', 'contentDigest']),
 };
 
 /** Strip unknown keys from a sub-object, returning a clean copy. */
@@ -205,7 +205,7 @@ const S402_PAYLOAD_INNER_KEYS: Record<string, Set<string>> = {
   prepaid: new Set(['transaction', 'signature', 'ratePerCall', 'maxCalls']),
   stream: new Set(['transaction', 'signature']),
   escrow: new Set(['transaction', 'signature']),
-  unlock: new Set(['transaction', 'signature', 'encryptionId']),
+  unlock: new Set(['transaction', 'signature']),
 };
 
 /** Return a clean payload object with only known s402 payload fields. */
@@ -491,14 +491,29 @@ export function validateEscrowShape(value: unknown): void {
 }
 
 /**
- * Validate unlock sub-object (pay-to-decrypt encrypted content).
+ * Validate unlock sub-object (pay-to-decrypt, single-transaction).
  */
 export function validateUnlockShape(value: unknown): void {
   assertPlainObject(value, 'unlock');
   const obj = value as Record<string, unknown>;
-  assertString(obj, 'encryptionId', 'unlock');
-  assertString(obj, 'encryptedContentId', 'unlock');
-  assertString(obj, 'encryptionServiceId', 'unlock');
+  assertString(obj, 'packageId', 'unlock');
+  assertOptionalString(obj, 'contentDigest', 'unlock');
+  if (typeof obj.threshold !== 'number' || !Number.isInteger(obj.threshold) || obj.threshold < 1) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `unlock.threshold must be a positive integer, got ${typeof obj.threshold}`);
+  }
+  if (!Array.isArray(obj.keyServers) || obj.keyServers.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `unlock.keyServers must be a non-empty array, got ${typeof obj.keyServers}`);
+  }
+  for (const ks of obj.keyServers) {
+    assertPlainObject(ks, 'unlock.keyServers[]');
+    assertString(ks as Record<string, unknown>, 'objectId', 'unlock.keyServers[]');
+    if (typeof (ks as Record<string, unknown>).weight !== 'number') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `unlock.keyServers[].weight must be a number, got ${typeof (ks as Record<string, unknown>).weight}`);
+    }
+  }
 }
 
 /**
@@ -743,11 +758,9 @@ export function validatePayloadShape(obj: unknown): void {
       `payload.signature must be a string, got ${typeof inner.signature}`);
   }
 
-  // Scheme-specific inner fields
-  if (record.scheme === 'unlock' && typeof inner.encryptionId !== 'string') {
-    throw new s402Error('INVALID_PAYLOAD',
-      `unlock payload requires encryptionId (string), got ${typeof inner.encryptionId}`);
-  }
+  // Scheme-specific inner fields.
+  // unlock carries only transaction + signature (as exact) — the generic checks above
+  // suffice; the encryption identity travels in the fulfillment, not the payload.
   if (record.scheme === 'upto') {
     if (typeof inner.maxAmount !== 'string') {
       throw new s402Error('INVALID_PAYLOAD',

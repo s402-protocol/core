@@ -207,8 +207,9 @@ export interface s402RouteConfig {
     deadlineMs: string;
   };
   unlock?: {
-    encryptionId: string;
-    encryptedContentId: string;
-    encryptionServiceId: string;
+    packageId: string;
+    keyServers: { objectId: string; weight: number }[];
+    threshold: number;
+    contentDigest?: string;
   };
 }

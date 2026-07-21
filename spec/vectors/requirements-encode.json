@@ -115,13 +115,23 @@
       "amount": "1000000",
       "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
       "unlock": {
-        "encryptionId": "enc-abc-123",
-        "encryptedContentId": "blob-xyz-789",
-        "encryptionServiceId": "0xpkg1234567890"
+        "packageId": "0xpkg1234567890",
+        "keyServers": [
+          {
+            "objectId": "0xks1111",
+            "weight": 1
+          },
+          {
+            "objectId": "0xks2222",
+            "weight": 1
+          }
+        ],
+        "threshold": 2,
+        "contentDigest": "sha256-3q2-7wA_8Xk5cQ0lZ2mN6pR7sT9uV0wX1yZ2aB3cD4"
       }
     },
     "expected": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVubG9jayJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJ1bmxvY2siOnsiZW5jcnlwdGlvbklkIjoiZW5jLWFiYy0xMjMiLCJlbmNyeXB0ZWRDb250ZW50SWQiOiJibG9iLXh5ei03ODkiLCJlbmNyeXB0aW9uU2VydmljZUlkIjoiMHhwa2cxMjM0NTY3ODkwIn19"
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVubG9jayJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJ1bmxvY2siOnsicGFja2FnZUlkIjoiMHhwa2cxMjM0NTY3ODkwIiwia2V5U2VydmVycyI6W3sib2JqZWN0SWQiOiIweGtzMTExMSIsIndlaWdodCI6MX0seyJvYmplY3RJZCI6IjB4a3MyMjIyIiwid2VpZ2h0IjoxfV0sInRocmVzaG9sZCI6MiwiY29udGVudERpZ2VzdCI6InNoYTI1Ni0zcTItN3dBXzhYazVjUTBsWjJtTjZwUjdzVDl1VjB3WDF5WjJhQjNjRDQifX0="
     },
     "shouldReject": false
   },

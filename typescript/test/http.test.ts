@@ -365,10 +365,9 @@ describe('s402 HTTP encode/decode', () => {
       expect(() => decodePaymentPayload(bad)).toThrow('payload.signature must be a string');
     });
 
-    it('decodePaymentPayload rejects unlock payload without encryptionId', () => {
-      const bad = btoa(JSON.stringify({ scheme: 'unlock', payload: { transaction: 'tx', signature: 'sig' } }));
-      expect(() => decodePaymentPayload(bad)).toThrow(s402Error);
-      expect(() => decodePaymentPayload(bad)).toThrow('unlock payload requires encryptionId');
+    it('decodePaymentPayload accepts unlock payload with only transaction + signature', () => {
+      const ok = btoa(JSON.stringify({ scheme: 'unlock', payload: { transaction: 'tx', signature: 'sig' } }));
+      expect(() => decodePaymentPayload(ok)).not.toThrow();
     });
 
     it('decodePaymentPayload rejects prepaid payload without ratePerCall', () => {

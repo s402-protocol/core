@@ -21,6 +21,8 @@ export type {
   s402StreamExtra,
   s402EscrowExtra,
   s402UnlockExtra,
+  s402KeyServerRef,
+  s402UnlockFulfillment,
   // Mandate
   s402MandateRequirements,
   s402Mandate,

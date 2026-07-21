@@ -34,15 +34,14 @@
   {
     "description": "Decode unlock payload",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1bmxvY2siLCJwYXlsb2FkIjp7InRyYW5zYWN0aW9uIjoiZFc1c2IyTnJYM1I0Iiwic2lnbmF0dXJlIjoiZFc1c2IyTnJYM05wWnc9PSIsImVuY3J5cHRpb25JZCI6ImVuYy1hYmMtMTIzIn19"
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJ1bmxvY2siLCJwYXlsb2FkIjp7InRyYW5zYWN0aW9uIjoiZFc1c2IyTnJYM1I0Iiwic2lnbmF0dXJlIjoiZFc1c2IyTnJYM05wWnc9PSJ9fQ=="
     },
     "expected": {
       "s402Version": "1",
       "scheme": "unlock",
       "payload": {
         "transaction": "dW5sb2NrX3R4",
-        "signature": "dW5sb2NrX3NpZw==",
-        "encryptionId": "enc-abc-123"
+        "signature": "dW5sb2NrX3NpZw=="
       }
     },
     "shouldReject": false

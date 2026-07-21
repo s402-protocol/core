@@ -102,9 +102,13 @@ const WITH_UNLOCK: s402PaymentRequirements = {
   ...MINIMAL_EXACT,
   accepts: ['unlock'],
   unlock: {
-    encryptionId: 'enc-abc-123',
-    encryptedContentId: 'blob-xyz-789',
-    encryptionServiceId: '0xpkg1234567890',
+    packageId: '0xpkg1234567890',
+    keyServers: [
+      { objectId: '0xks1111', weight: 1 },
+      { objectId: '0xks2222', weight: 1 },
+    ],
+    threshold: 2,
+    contentDigest: 'sha256-3q2-7wA_8Xk5cQ0lZ2mN6pR7sT9uV0wX1yZ2aB3cD4',
   },
 };
 
@@ -364,13 +368,12 @@ function generatePayloadEncode(): TestVector[] {
       scheme: 'escrow',
       payload: { transaction: 'ZXNjcm93X3R4', signature: 'ZXNjcm93X3NpZw==' },
     }],
-    ['Unlock payload with encryptionId', {
+    ['Unlock payload (single-tx pay_and_mint)', {
       s402Version: '1',
       scheme: 'unlock',
       payload: {
         transaction: 'dW5sb2NrX3R4',
         signature: 'dW5sb2NrX3NpZw==',
-        encryptionId: 'enc-abc-123',
       },
     }],
     ['Payload with extra x402Version field (encoded but stripped on decode)', {
@@ -431,7 +434,6 @@ function generatePayloadDecode(): TestVector[] {
       payload: {
         transaction: 'dW5sb2NrX3R4',
         signature: 'dW5sb2NrX3NpZw==',
-        encryptionId: 'enc-abc-123',
       },
     }],
     ['Decode upto payload with settlementCeiling', {

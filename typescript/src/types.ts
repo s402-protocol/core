@@ -255,14 +255,31 @@ export interface s402EscrowExtra {
   deadlineMs: string;
 }
 
-/** Unlock-specific requirements (pay-to-decrypt encrypted content) */
+/** Reference to an on-chain registered threshold key server (Seal). */
+export interface s402KeyServerRef {
+  /** Object ID of the on-chain registered key server; the client resolves its URL from it. */
+  objectId: string;
+  /** Weight this server contributes toward the decryption threshold. */
+  weight: number;
+}
+
+/**
+ * Unlock-specific requirements (pay-to-decrypt, single-transaction).
+ *
+ * The deliverable is encrypted under a Seal identity anchored to the mint-time
+ * `UnlockReceipt` object ID; a single `pay_and_mint` transaction pays the seller and
+ * mints that receipt atomically. No escrow, arbiter, or deadline — see the `unlock` on
+ * Sui scheme spec.
+ */
 export interface s402UnlockExtra {
-  /** Encryption ID for key servers */
-  encryptionId: string;
-  /** Content identifier for the encrypted blob (e.g., Walrus blob ID, IPFS CID) */
-  encryptedContentId: string;
-  /** Identifier for the encryption service or module (e.g., Sui package ID, EVM contract address) */
-  encryptionServiceId: string;
+  /** Move package implementing `pay_and_mint` + the `seal_approve` policy; also the Seal identity namespace. */
+  packageId: string;
+  /** Key-server set the seller encrypts to (t-of-n threshold encryption). */
+  keyServers: s402KeyServerRef[];
+  /** Threshold `t` in the t-of-n encryption. */
+  threshold: number;
+  /** Optional `sha256-<base64url>` commitment to the plaintext (off-chain/reputational evidence). */
+  contentDigest?: string;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -394,22 +411,37 @@ export interface s402EscrowPayload extends s402PaymentPayloadBase {
 }
 
 /**
- * Unlock payment: escrow creation + encryption-gated decryption.
- *
- * Implementation note: The encryption key release function requires all arguments
- * to be `Argument::Input` (not results of prior commands), so the unlock flow is
- * two-stage: TX1 creates the escrow receipt, TX2 passes that receipt as
- * input to the key release for decryption. The `transaction` field here is
- * TX1 (escrow creation). TX2 is built by the facilitator after TX1 settles.
+ * Unlock payment: a single signed `pay_and_mint` transaction that pays the seller and
+ * mints the decryption entitlement (`UnlockReceipt`) atomically. The payload carries only
+ * the signed transaction — as in `exact` — because the encryption identity is anchored to
+ * the mint-time receipt object ID and travels in the fulfillment, not the payment.
  */
 export interface s402UnlockPayload extends s402PaymentPayloadBase {
   scheme: 'unlock';
   payload: {
-    /** Escrow creation transaction (TX1 of two-stage unlock flow) */
+    /** Signed `pay_and_mint` transaction. */
     transaction: string;
     signature: string;
-    /** Encryption ID for key servers */
-    encryptionId: string;
+  };
+}
+
+/**
+ * Unlock fulfillment — returned by the resource server (pre-settlement, in
+ * `PAYMENT-RESPONSE`). Tells the buyer what to inspect before broadcasting.
+ */
+export interface s402UnlockFulfillment {
+  /** Object ID the `UnlockReceipt` will have once broadcast — the Seal anchor. */
+  receiptId: string;
+  /** Hex Seal inner identity (`receiptId ‖ nonce`). Advisory — verify against the ciphertext's embedded id. */
+  encryptionId: string;
+  /** Reference to the encrypted deliverable. */
+  ciphertext: {
+    /** `walrus:<blobId>` or an https URL for the encrypted content. */
+    contentRef?: string;
+    /** Base64 inline encrypted content (mutually exclusive with `contentRef`). */
+    inline?: string;
+    /** Base64 Seal `EncryptedObject` wrapping the content key (envelope mode). */
+    encryptedKey?: string;
   };
 }
 

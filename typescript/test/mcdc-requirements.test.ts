@@ -520,26 +520,46 @@ describe('mcdc: validateEscrowShape — isolation tests', () => {
 });
 
 describe('mcdc: validateUnlockShape — isolation tests', () => {
-  const VALID_UNLOCK = { encryptionId: 'enc123', encryptedContentId: 'blob456', encryptionServiceId: '0xpkg' };
+  const VALID_UNLOCK = {
+    packageId: '0xpkg',
+    keyServers: [{ objectId: '0xks1', weight: 1 }],
+    threshold: 1,
+  };
 
   it('mcdc-hp: valid unlock passes', () => {
     expect(() => validateUnlockShape(VALID_UNLOCK)).not.toThrow();
+  });
+
+  it('mcdc-hp: valid unlock with optional contentDigest passes', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, contentDigest: 'sha256-abc' })).not.toThrow();
   });
 
   it('mcdc-mc1: rejects null unlock', () => {
     expect(() => validateUnlockShape(null)).toThrow('must be a plain object');
   });
 
-  it('mcdc-mc2: rejects non-string encryptionId', () => {
-    expect(() => validateUnlockShape({ ...VALID_UNLOCK, encryptionId: 42 })).toThrow('encryptionId must be a string');
+  it('mcdc-mc2: rejects non-string packageId', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, packageId: 42 })).toThrow('packageId must be a string');
   });
 
-  it('mcdc-mc3: rejects non-string encryptedContentId', () => {
-    expect(() => validateUnlockShape({ ...VALID_UNLOCK, encryptedContentId: null })).toThrow('encryptedContentId must be a string');
+  it('mcdc-mc3: rejects non-integer threshold', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, threshold: 0 })).toThrow('threshold must be a positive integer');
   });
 
-  it('mcdc-mc4: rejects non-string encryptionServiceId', () => {
-    expect(() => validateUnlockShape({ ...VALID_UNLOCK, encryptionServiceId: false })).toThrow('encryptionServiceId must be a string');
+  it('mcdc-mc4: rejects empty keyServers', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, keyServers: [] })).toThrow('keyServers must be a non-empty array');
+  });
+
+  it('mcdc-mc4b: rejects keyServer without string objectId', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, keyServers: [{ objectId: 1, weight: 1 }] })).toThrow('objectId must be a string');
+  });
+
+  it('mcdc-mc4c: rejects keyServer with non-numeric weight', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, keyServers: [{ objectId: '0xks1', weight: 'x' }] })).toThrow('weight must be a number');
+  });
+
+  it('mcdc-mc4d: rejects non-string contentDigest', () => {
+    expect(() => validateUnlockShape({ ...VALID_UNLOCK, contentDigest: 5 })).toThrow('contentDigest must be a string');
   });
 });
 
@@ -638,7 +658,7 @@ describe('mcdc: validateRequirementsShape — sub-object integration', () => {
   });
 
   it('mcdc-mc29: rejects invalid unlock sub-object', () => {
-    expect(() => validateRequirementsShape(valid({ unlock: { encryptionId: 42 } }))).toThrow('encryptionId must be a string');
+    expect(() => validateRequirementsShape(valid({ unlock: { packageId: 42 } }))).toThrow('packageId must be a string');
   });
 
   it('mcdc-mc30: rejects invalid prepaid sub-object', () => {
@@ -663,7 +683,7 @@ describe('mcdc: validateRequirementsShape — sub-object integration', () => {
 
   it('mcdc-mc34: accepts valid unlock sub-object within requirements', () => {
     expect(() => validateRequirementsShape(valid({
-      unlock: { encryptionId: 'enc', encryptedContentId: 'blob', encryptionServiceId: '0xpkg' },
+      unlock: { packageId: '0xpkg', keyServers: [{ objectId: '0xks1', weight: 1 }], threshold: 1 },
     }))).not.toThrow();
   });
 
@@ -810,9 +830,9 @@ describe('mcdc: validatePayloadShape — isolation tests', () => {
     expect(() => decodePaymentPayload(encodePayload({ scheme: 'exact', payload: { transaction: 'tx', signature: null } }))).toThrow('signature must be a string');
   });
 
-  // Scheme-specific: unlock requires encryptionId
-  it('mcdc-mc8: rejects unlock payload without encryptionId', () => {
-    expect(() => decodePaymentPayload(encodePayload({ scheme: 'unlock', payload: { transaction: 'tx', signature: 'sig' } }))).toThrow('encryptionId');
+  // Scheme-specific: unlock carries only transaction + signature (single-tx pay_and_mint)
+  it('mcdc-mc8: accepts unlock payload with only transaction + signature', () => {
+    expect(() => decodePaymentPayload(encodePayload({ scheme: 'unlock', payload: { transaction: 'tx', signature: 'sig' } }))).not.toThrow();
   });
 
   // Scheme-specific: prepaid requires ratePerCall
