@@ -44,6 +44,92 @@ export interface x402PaymentRequirements {
   description?: string;
   facilitatorUrl?: string;
   extensions?: Record<string, unknown>;
+  /**
+   * Scheme-private data — plus the two keys §6.1 reserves to the protocol,
+   * `paymentFlow` and `assetTransferMethod`.
+   *
+   * This field was previously absent from the inbound shape entirely, so the
+   * reserved keys were not "carried opaquely" — they were dropped on the floor,
+   * and a gate written to inspect them would have had nothing to read.
+   */
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * The three payment flows x402 §6.1 defines. Closed set — the protocol names
+ * these and only these, so an unrecognised string means upstream moved and the
+ * drift check should have caught it.
+ *
+ *   `authorization`  verify → resource → settle → respond   (the default)
+ *   `upfront`        settle → resource → respond            (omits /verify)
+ *   `escrow`         settle → resource → settle → respond   (omits /verify)
+ */
+const X402_DEFINED_PAYMENT_FLOWS = new Set(['authorization', 'upfront', 'escrow']);
+
+/**
+ * The flows s402 can honour, declared rather than inherited by silence.
+ *
+ * s402's pipeline is verify → resource → settle, which **is** `authorization`.
+ * `upfront` and `escrow` commit funds *before* the resource executes; running
+ * either through s402's ordering would serve the resource before payment is
+ * durably committed — a serve-without-finality, not a cosmetic gap.
+ *
+ * **Architecture Invariant:** this set may only grow when the pipeline actually
+ * gains the corresponding ordering. Adding a flow here without implementing its
+ * ordering removes the gate and silently reintroduces the hazard, because the
+ * requirement will then lift and be paid under the wrong sequence.
+ */
+const S402_SUPPORTED_PAYMENT_FLOWS = new Set(['authorization']);
+
+/** §6.1: omitting the key resolves to the mechanism default. */
+const X402_DEFAULT_PAYMENT_FLOW = 'authorization';
+
+/**
+ * Enforce x402 §6.1's payment-flow rules on a `PaymentRequirements.extra`.
+ *
+ * §6.1 makes `paymentFlow` and `assetTransferMethod` protocol-reserved:
+ * *"clients and servers MUST interpret them as defined here rather than as
+ * opaque scheme-private fields."*
+ *
+ * Absence is accepted as `authorization`, and that is safe rather than
+ * optimistic: §6.1 requires that *"when the resolved payment flow is not
+ * `authorization`, `accepts[].extra.paymentFlow` MUST be present"*. So for a
+ * conformant counterparty, an absent key proves the flow is `authorization`.
+ * `authorization` itself *"MAY be omitted or explicit."*
+ *
+ * `assetTransferMethod` is deliberately **not** validated. §6.1: *"Allowed
+ * `assetTransferMethod` string values are mechanism-defined; this protocol
+ * reserves the key name, not a global ATM vocabulary."* There is no set to
+ * check against, and enumerating one here would reject conformant peers using
+ * any mechanism not hard-coded — `eip3009`, `permit2`, `sequence`,
+ * `ticketSequence`, and whatever ships next. The real §6.1 obligation is to
+ * reject unsupported ATM/flow *combinations*, which needs the mechanism's
+ * declared flow-per-ATM table; compat does not have one, and inventing a
+ * vocabulary would be a bug wearing a check's clothes.
+ *
+ * @throws {s402Error} `SCHEME_NOT_SUPPORTED` if the flow is undefined by the
+ *   spec, or defined but not one s402 implements.
+ */
+function assertSupportedPaymentFlow(
+  extra: Record<string, unknown> | undefined,
+  context: string,
+): void {
+  const flow = extra?.paymentFlow;
+  if (flow === undefined) return; // mechanism default — see above
+
+  if (typeof flow !== 'string' || !X402_DEFINED_PAYMENT_FLOWS.has(flow)) {
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      `${context} declares extra.paymentFlow ${JSON.stringify(flow)}, which x402 §6.1 does not define. ` +
+      `Known flows: ${[...X402_DEFINED_PAYMENT_FLOWS].join(', ')}. ` +
+      `If upstream added a flow, s402's x402 compat layer is behind the spec.`);
+  }
+
+  if (!S402_SUPPORTED_PAYMENT_FLOWS.has(flow)) {
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      `${context} requires the "${flow}" payment flow, which settles before the resource executes. ` +
+      `s402 implements "${X402_DEFAULT_PAYMENT_FLOW}" only (verify → resource → settle), so honouring ` +
+      `this would serve the resource before payment is durably committed.`);
+  }
 }
 
 /**
@@ -88,6 +174,7 @@ export function fromX402Requirements(x402: x402PaymentRequirements, now?: number
     throw new s402Error('SCHEME_NOT_SUPPORTED',
       `x402 scheme "${x402.scheme}" has no s402 mapping; only "exact" is accepted inbound`);
   }
+  assertSupportedPaymentFlow(x402.extra, 'inbound x402 requirement');
   // V1 uses maxAmountRequired, V2 uses amount
   const amount = x402.amount ?? x402.maxAmountRequired;
   if (!amount) {
@@ -445,6 +532,10 @@ export function toX402V2Requirements(
       `toX402V2Requirements only translates s402.accepts[0] === 'exact'; got ${JSON.stringify(s402.accepts)}. ` +
       `Other s402 schemes (upto, prepaid, stream, escrow, unlock) have no direct x402 wire-format equivalent.`);
   }
+  // §6.1: "Clients MUST NOT construct a payment for a paymentFlow they do not
+  // recognize." Emitting one we cannot honour would advertise an ordering this
+  // implementation does not run.
+  assertSupportedPaymentFlow(options?.extra, 'outbound x402 V2 requirement');
   return {
     scheme: 'exact',
     network: s402.network,
