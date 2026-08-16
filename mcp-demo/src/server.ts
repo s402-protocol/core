@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { serve } from '@hono/node-server';
-import { SuiClient } from '@mysten/sui/client';
+import { SuiGrpcClient } from '@mysten/sui/grpc';
 
 import { summarizeTool, summarize } from './tools/summarize.js';
 import { s402PaymentObject, DEMO_PROVIDER_ADDRESS } from './protocols/s402.js';
@@ -11,7 +11,27 @@ const PORT = Number(process.env.PORT ?? 3000);
 const SUI_RPC = process.env.SUI_RPC_URL ?? 'https://fullnode.testnet.sui.io:443';
 const REAL_SETTLEMENT = process.env.SUI_REAL_SETTLEMENT === '1';
 
-const sui = new SuiClient({ url: SUI_RPC });
+// gRPC, not JSON-RPC: Sui deprecated JSON-RPC on public fullnodes. SUI_RPC is
+// unchanged — gRPC is served from the same host and port.
+const sui = new SuiGrpcClient({ network: 'testnet', baseUrl: SUI_RPC });
+
+// The public endpoint is load-balanced, so the verifying read can land on a node
+// that has not yet caught up to the transaction the agent just executed. Observed:
+// the first read returns NOT_FOUND and the second, ~4s later, succeeds — for a
+// transaction whose own execute call already reported success. Without this retry
+// the demo intermittently rejects payments that actually settled, and it does so
+// more often on a fast machine.
+const SETTLEMENT_READ_ATTEMPTS = 6;
+const SETTLEMENT_READ_DELAY_MS = 2_000;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const isNotFound = (err: unknown): boolean => {
+  const code = (err as { code?: unknown })?.code;
+  if (code === 'NOT_FOUND') return true;
+  const message = err instanceof Error ? err.message : String(err);
+  return /not[ %]?found/i.test(message);
+};
 
 const paymentRequired = (id: number | string) => ({
   jsonrpc: '2.0' as const,
@@ -28,21 +48,35 @@ const paymentRequired = (id: number | string) => ({
 
 async function verifyS402Settlement(txDigest: string): Promise<boolean> {
   if (!REAL_SETTLEMENT) return true;
-  try {
-    const tx = await sui.getTransactionBlock({
-      digest: txDigest,
-      options: { showEffects: true, showBalanceChanges: true }
-    });
-    if (tx.effects?.status?.status !== 'success') return false;
-    const credited = tx.balanceChanges?.some(
-      (c) => c.owner && typeof c.owner === 'object' && 'AddressOwner' in c.owner &&
-        c.owner.AddressOwner === DEMO_PROVIDER_ADDRESS &&
-        BigInt(c.amount) >= BigInt(s402PaymentObject.amount)
-    );
-    return Boolean(credited);
-  } catch {
-    return false;
+
+  for (let attempt = 1; attempt <= SETTLEMENT_READ_ATTEMPTS; attempt++) {
+    try {
+      // balanceChanges is empty unless it is requested. Omitting `include` returns
+      // the field present and undefined, which would make the credit check below
+      // fail closed on every real payment.
+      const result = await sui.core.getTransaction({
+        digest: txDigest,
+        include: { effects: true, balanceChanges: true }
+      });
+
+      if (result.$kind !== 'Transaction') return false;
+      const tx = result.Transaction;
+      if (!tx.effects.status.success) return false;
+
+      // gRPC balance changes are flat — { coinType, address, amount } — where
+      // JSON-RPC nested the recipient under owner.AddressOwner.
+      return tx.balanceChanges.some(
+        (change) =>
+          change.address === DEMO_PROVIDER_ADDRESS &&
+          BigInt(change.amount) >= BigInt(s402PaymentObject.amount)
+      );
+    } catch (err) {
+      if (!isNotFound(err) || attempt === SETTLEMENT_READ_ATTEMPTS) return false;
+      await sleep(SETTLEMENT_READ_DELAY_MS);
+    }
   }
+
+  return false;
 }
 
 const app = new Hono();
