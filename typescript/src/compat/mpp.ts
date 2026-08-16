@@ -540,6 +540,75 @@ export function decodeMppCredential(
 const BLOCKCHAIN_CHARGE_METHODS = new Set(['tempo', 'evm', 'solana', 'lightning', 'stellar']);
 
 /**
+ * Methods whose OWN spec elevates `recipient` to REQUIRED.
+ *
+ * `draft-payment-intent-charge-00` §Shared Fields lists `recipient` under
+ * OPTIONAL Fields, and notes only in passing that "Payment methods MAY elevate
+ * OPTIONAL fields to REQUIRED in their method specification (e.g. `recipient`
+ * and `expires` are REQUIRED for blockchain methods)". That parenthetical is an
+ * ILLUSTRATION OF A MECHANISM, not a blanket rule — and the mechanism it
+ * describes is per-method. Reading it as a rule over the whole blockchain set
+ * inverts the spec: it lets a prose example in the core document override the
+ * method specs that are actually normative.
+ *
+ * Requirement levels below are read from each method's own request schema
+ * (tempoxyz/mpp-specs @ f9506cd):
+ *
+ *   evm        REQUIRED   draft-evm-charge-00.md:264
+ *   tempo      REQUIRED   draft-tempo-charge-00.md:155
+ *   stellar    REQUIRED   draft-stellar-charge-00.md:258
+ *   solana     REQUIRED   draft-solana-charge-00.md
+ *   lightning  OPTIONAL   draft-lightning-charge-00.md:206 — "Lightning
+ *                         implementations typically do not use this field;
+ *                         the invoice payee is implied by the BOLT11 invoice."
+ *
+ * Lightning is the lone exception among the five, which is why the blanket rule
+ * survived: it was correct four times out of five. Any method added to
+ * {@link BLOCKCHAIN_CHARGE_METHODS} must be classified here from its own spec.
+ */
+const RECIPIENT_REQUIRED_METHODS = new Set(['tempo', 'evm', 'solana', 'stellar']);
+
+/**
+ * Resolve the s402 `payTo` for a Charge request, per method.
+ *
+ * Every branch either returns a real, payable destination or throws. There is
+ * deliberately no path that yields an empty string: requirements carrying
+ * `payTo: ""` would look structurally valid and could never be settled, which
+ * is strictly worse than a rejection at the boundary.
+ */
+function resolvePayTo(
+  method: string,
+  request: { recipient?: string; methodDetails?: Record<string, unknown> },
+): string {
+  if (typeof request.recipient === 'string' && request.recipient.length > 0) {
+    return request.recipient;
+  }
+
+  if (RECIPIENT_REQUIRED_METHODS.has(method)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `MPP "${method}" Charge request is missing "recipient" — the ${method} method spec's ` +
+      `own request schema marks it REQUIRED (mpp-specs draft-${method}-charge-00)`);
+  }
+
+  if (method === 'lightning') {
+    // draft-lightning-charge-00 §Method Details: `invoice` is REQUIRED and
+    // "This field is authoritative; all other payment parameters are derived
+    // from it." The payee is implied by the BOLT11 invoice, so the invoice IS
+    // the payment destination when `recipient` is absent.
+    const invoice = request.methodDetails?.invoice;
+    if (typeof invoice === 'string' && invoice.length > 0) return invoice;
+    throw new s402Error('INVALID_PAYLOAD',
+      'MPP "lightning" Charge request has neither "recipient" (OPTIONAL per ' +
+      'draft-lightning-charge-00) nor "methodDetails.invoice" (REQUIRED) — ' +
+      'no payment destination can be derived');
+  }
+
+  throw new s402Error('INVALID_PAYLOAD',
+    `MPP "${method}" Charge request is missing "recipient" and the method has no ` +
+    `documented fallback destination — cannot resolve payTo`);
+}
+
+/**
  * Network identifier resolution for MPP Charge requests per method.
  *
  * The core spec leaves network naming to individual method specs. This helper
@@ -571,9 +640,9 @@ function resolveNetwork(method: string, methodDetails: Record<string, unknown> |
  * requires — keep those on the MPP path.
  *
  * @throws {s402Error} `INVALID_PAYLOAD` if the method is not a known
- *   blockchain-style Charge method, if the request is missing a recipient
- *   (REQUIRED for blockchain methods per charge spec), or if the challenge
- *   has expired at `now`.
+ *   blockchain-style Charge method, if no `payTo` can be resolved for that
+ *   method (see {@link resolvePayTo} — `recipient` is REQUIRED per METHOD, not
+ *   across the whole set), or if the challenge has expired at `now`.
  */
 export function fromMppChargeChallenge(
   challenge: MppChallenge,
@@ -590,10 +659,7 @@ export function fromMppChargeChallenge(
   }
 
   const request = decodeMppChargeRequest(challenge);
-  if (typeof request.recipient !== 'string' || request.recipient.length === 0) {
-    throw new s402Error('INVALID_PAYLOAD',
-      'Blockchain Charge request missing "recipient" — required by charge-intent spec for blockchain methods');
-  }
+  const payTo = resolvePayTo(challenge.method, request);
 
   let expiresAt: number | undefined;
   if (challenge.expires) {
@@ -615,7 +681,7 @@ export function fromMppChargeChallenge(
     network: resolveNetwork(challenge.method, request.methodDetails),
     asset: request.currency,
     amount: request.amount,
-    payTo: request.recipient,
+    payTo,
     expiresAt,
     extensions: {
       mpp: {
@@ -670,12 +736,12 @@ export interface ToMppChargeInput {
 /**
  * Build an {@link MppChargeRequest} from direct input. The shape follows
  * `draft-payment-intent-charge-00` §Request Schema: `amount` + `currency` are
- * REQUIRED across every method; `recipient` is REQUIRED for blockchain
- * methods and OPTIONAL for processor methods; `methodDetails` carries
- * method-specific extension data.
+ * REQUIRED across every method; `recipient` is REQUIRED only where a METHOD
+ * spec elevates it (see {@link RECIPIENT_REQUIRED_METHODS} — Lightning does
+ * not); `methodDetails` carries method-specific extension data.
  *
- * @throws {s402Error} `INVALID_PAYLOAD` for malformed amount or for missing
- *   recipient on a known blockchain method.
+ * @throws {s402Error} `INVALID_PAYLOAD` for malformed amount, or for a missing
+ *   recipient on a method whose own spec marks it REQUIRED.
  */
 export function toMppChargeRequest(input: ToMppChargeInput): MppChargeRequest {
   if (!isValidAmount(input.amount)) {
@@ -686,9 +752,15 @@ export function toMppChargeRequest(input: ToMppChargeInput): MppChargeRequest {
     throw new s402Error('INVALID_PAYLOAD', 'MPP Charge "currency" is required and must be a string');
   }
   const method = normalizeChargeMethod(input.method);
-  if (BLOCKCHAIN_CHARGE_METHODS.has(method) && (!input.recipient || typeof input.recipient !== 'string')) {
+  // The write-path twin of the same defect (DAN-854). Keyed off the blanket
+  // blockchain set, this refused to EMIT a spec-legal Lightning charge — one
+  // carrying an authoritative BOLT11 invoice and no recipient. Same misreading,
+  // opposite direction, so it shares the one table rather than growing a second.
+  if (RECIPIENT_REQUIRED_METHODS.has(method) && (!input.recipient || typeof input.recipient !== 'string')) {
     throw new s402Error('INVALID_PAYLOAD',
-      `MPP method "${method}" is a blockchain method and requires "recipient" — processor methods (stripe, card) route internally and may omit it`);
+      `MPP method "${method}" requires "recipient" — its own method spec marks it REQUIRED ` +
+      `(mpp-specs draft-${method}-charge-00). Lightning omits it by design (the BOLT11 invoice ` +
+      `implies the payee); processor methods (stripe, card) route internally.`);
   }
 
   const request: MppChargeRequest = {
