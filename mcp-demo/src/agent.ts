@@ -1,4 +1,4 @@
-import { SuiClient, getFullnodeUrl } from '@mysten/sui/client';
+import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 import { Transaction } from '@mysten/sui/transactions';
 
@@ -7,8 +7,12 @@ import { s402PaymentObject, DEMO_PROVIDER_ADDRESS } from './protocols/s402.js';
 const SERVER_URL = process.env.SERVER_URL ?? 'http://localhost:3000';
 const REAL_SETTLEMENT = process.env.SUI_REAL_SETTLEMENT === '1';
 const MNEMONIC = process.env.SUI_TESTNET_MNEMONIC;
+const SUI_RPC = process.env.SUI_RPC_URL ?? 'https://fullnode.testnet.sui.io:443';
 
-const sui = new SuiClient({ url: getFullnodeUrl('testnet') });
+// gRPC, not JSON-RPC: Sui deprecated JSON-RPC on public fullnodes and every core
+// method now answers -32601. Note the URL is unchanged — gRPC is served from the
+// same host and port, so this is a client swap and not an endpoint move.
+const sui = new SuiGrpcClient({ network: 'testnet', baseUrl: SUI_RPC });
 
 async function rpc<T>(method: string, params: Record<string, unknown> = {}, headers: Record<string, string> = {}): Promise<T> {
   const res = await fetch(SERVER_URL, {
@@ -28,17 +32,28 @@ async function settleViaS402(): Promise<string> {
 
   const keypair = Ed25519Keypair.deriveKeypair(MNEMONIC);
   const tx = new Transaction();
+  // The gRPC client has no signAndExecuteTransaction, so the sender is no longer
+  // implied by a signer argument and must be set explicitly before the build.
+  tx.setSender(keypair.toSuiAddress());
   const [coin] = tx.splitCoins(tx.gas, [s402PaymentObject.amount]);
   tx.transferObjects([coin], DEMO_PROVIDER_ADDRESS);
 
-  const result = await sui.signAndExecuteTransaction({
-    signer: keypair,
-    transaction: tx,
-    options: { showEffects: true }
+  const bytes = await tx.build({ client: sui });
+  const { signature } = await keypair.signTransaction(bytes);
+
+  const result = await sui.core.executeTransaction({
+    transaction: bytes,
+    signatures: [signature]
   });
 
-  console.log(`  Sui testnet tx: ${result.digest}`);
-  return result.digest;
+  // TransactionResult is a union discriminated on $kind; the failure arm carries
+  // the transaction under a different key, so narrow rather than reach for .Transaction.
+  if (result.$kind !== 'Transaction') {
+    throw new Error(`Settlement did not execute: ${result.FailedTransaction.digest}`);
+  }
+
+  console.log(`  Sui testnet tx: ${result.Transaction.digest}`);
+  return result.Transaction.digest;
 }
 
 async function main() {

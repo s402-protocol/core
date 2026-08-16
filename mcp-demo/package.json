@@ -12,10 +12,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "s402": "workspace:*",
-    "hono": "^4.6.0",
     "@hono/node-server": "^1.13.0",
-    "@mysten/sui": "^1.18.0"
+    "@mysten/sui": "^2.24.0",
+    "hono": "^4.6.0",
+    "s402": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

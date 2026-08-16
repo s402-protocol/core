@@ -2,30 +2,6 @@
 
 A minimal Sui-native MCP server that advertises **three coexisting payment protocols** (x402, s402, stripe-mpp) inside a single `payment[]` envelope. Built as a reference implementation for [MCP SEP-2007](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2007).
 
-> ## 🛑 This demo cannot currently reach the network
->
-> **Sui has deprecated JSON-RPC on public fullnodes.** Every core method now returns `-32601`
-> on **both testnet and mainnet** (verified 2026-08-16):
->
-> ```
-> curl -s -X POST https://fullnode.testnet.sui.io:443 -H 'Content-Type: application/json' \
->   -d '{"jsonrpc":"2.0","id":1,"method":"sui_getChainIdentifier","params":[]}'
-> # {"error":{"code":-32601,"message":"Method not found. JSON-RPC on public fullnodes has been
-> #  deprecated. Please migrate to gRPC or GraphQL endpoints."}}
-> ```
->
-> `src/server.ts` and `src/agent.ts` both construct a `SuiClient` over that transport, so the
-> end-to-end run does not work today. The **protocol layer is unaffected** — `s402` itself has
-> no Sui dependency and never had one (ADR-002, invariant S7), so the envelope shapes, encoding
-> and conformance vectors this demo illustrates are all still correct and all still tested.
->
-> **What still works offline:** reading the `tools/list` envelope below, and the `s402` package's
-> own suite (`cd ../typescript && pnpm vitest run`).
->
-> Migration to gRPC/GraphQL is tracked separately — it is a migration, not a doc fix, and it is
-> not being attempted inside a documentation pass. **This warning is removed when that lands**;
-> a stale blocker notice is its own defect.
-
 ## The headline artifact
 
 The `tools/list` response advertises three payment options per tool:
@@ -89,9 +65,12 @@ Look at the `package.json`. Four runtime dependencies:
   "s402": "workspace:*",
   "hono": "^4.6.0",
   "@hono/node-server": "^1.13.0",
-  "@mysten/sui": "^1.18.0"
+  "@mysten/sui": "^2.24.0"
 }
 ```
+
+`@mysten/sui` is pinned to 2.x deliberately. Settlement runs over gRPC because Sui deprecated
+JSON-RPC on public fullnodes, and the 1.x gRPC client cannot execute against current fullnodes.
 
 **No `@coinbase/x402` SDK. No Stripe SDK.** The s402 wire-format library natively emits both x402 V2 PaymentRequirements (via `s402/compat/x402`'s `toX402V2Requirements()`) AND MPP-shaped charge challenges (via `s402/compat/mpp`'s `toMppChargeChallenge()`). The x402 entry matches upstream `@x402/core/types/payments.ts` HEAD: slimmer V2 shape with required `extra: {}`, no per-requirement `x402Version`, no `maxAmountRequired` alias. The Stripe MPP entry's `request` field is real base64url-encoded JCS — decode it and you get the canonical MPP Charge Request JSON. Both write paths are roundtrip-stable against the read-path inverses (`fromX402Envelope`, `decodeMppChargeRequest`). The architectural argument — *s402 is a superset by chain-feature construction* — is visible in the import list, not pitched in prose.
 
@@ -137,7 +116,9 @@ By default, the demo runs in **envelope-only** mode (no on-chain transactions). 
    pnpm --filter s402-mcp-demo dev:agent
    ```
 
-The server (which must also be run with `SUI_REAL_SETTLEMENT=1`) verifies the on-chain settlement via `SuiClient.getTransactionBlock` and checks the balance change credits the demo provider address before executing the tool.
+The server (which must also be run with `SUI_REAL_SETTLEMENT=1`) verifies the on-chain settlement via the gRPC client's `core.getTransaction` and checks the balance change credits the demo provider address before executing the tool.
+
+The verifying read retries on `NOT_FOUND`. The public endpoint is load-balanced, so the read can reach a fullnode that has not yet caught up to the transaction the agent just executed — without the retry the server would intermittently reject payments that actually settled.
 
 ## What this demo proves
 
