@@ -5,10 +5,26 @@
  * Payment Protocol (MPP). MPP uses `WWW-Authenticate: Payment` with auth-params
  * and a method/intent pair — not a flat scheme token like s402 or x402.
  *
- * Spec references (tempoxyz/mpp-specs HEAD as of 2026-05-12: e731a13):
- *   - Core:   specs/core/draft-httpauth-payment-00.md
- *   - Charge: specs/intents/draft-payment-intent-charge-00.md
- *   - EVM:    specs/methods/evm/draft-evm-charge-00.md
+ * Spec references (tempoxyz/mpp-specs). Cited per area rather than as one
+ * repo-wide baseline: the previous header declared a single commit (e731a13,
+ * 2026-05-12) for the whole module, which was wrong in both directions — the
+ * file already implemented #285 (2026-06-19, newer than the baseline) while
+ * lagging the method drafts by 22 commits. A global baseline asserts uniform
+ * conformance that a partial implementation never has.
+ *
+ *   - Core:      specs/core/draft-httpauth-payment-00.md         @ e731a13
+ *   - Charge:    specs/intents/draft-payment-intent-charge-00.md @ e731a13 (+ #285)
+ *   - EVM:       specs/methods/evm/draft-evm-charge-00.md        @ e731a13
+ *   - Solana:    specs/methods/solana/draft-solana-charge-00.md  @ f9506cd — network only
+ *   - Lightning: specs/methods/lightning/draft-lightning-charge-00.md @ f9506cd — network only
+ *   - Stellar:   specs/methods/stellar/draft-stellar-charge-00.md @ f9506cd — network only
+ *   - Tempo:     specs/methods/tempo/draft-tempo-charge-00.md     @ f9506cd — chainId only
+ *
+ * Known NOT synced (DAN-848, criteria 3–4): `hedera`, `nearintents` and `usdc`
+ * are specified blockchain charge methods that this module rejects. `usdc`
+ * nests its chain id per chain family (`methodDetails.evm.chainId`) and
+ * `nearintents` is cross-chain with a CAIP-2 `originNetwork`, so neither fits
+ * the flat translation below without a design decision.
  *
  * Scope (v0.3 DAN-339, read-path):
  *   - Parse `WWW-Authenticate: Payment` challenges
@@ -530,6 +546,23 @@ export function decodeMppCredential(
 // Translation: MPP Charge → s402 requirements
 // ══════════════════════════════════════════════════════════════
 
+/** Options for {@link fromMppChargeChallenge}. */
+export interface FromMppChargeOptions {
+  /** Injected clock for the expiry check. Defaults to `Date.now()`. */
+  now?: number;
+  /**
+   * The network this client is configured to pay on. When supplied, a challenge
+   * resolving to any other network is rejected.
+   *
+   * Method specs put the obligation on the client, not the server: Solana's
+   * charge draft says clients MUST reject challenges whose network does not
+   * match their configured cluster, and Lightning's says SHOULD. Supply this
+   * wherever the configured network is known — the check is opt-in only because
+   * the translator cannot discover it.
+   */
+  expectedNetwork?: string;
+}
+
 /**
  * Known-mappable MPP methods. The set is deliberately conservative:
  * a method is only listed here if its Charge request shape reliably carries
@@ -540,24 +573,105 @@ export function decodeMppCredential(
 const BLOCKCHAIN_CHARGE_METHODS = new Set(['tempo', 'evm', 'solana', 'lightning', 'stellar']);
 
 /**
+ * Specified blockchain Charge methods this translator does not map. They are
+ * named so the rejection can say why: each has a published method draft and a
+ * real payTo, so calling them "processor-based" — as the single catch-all
+ * message used to — sends the reader looking for a problem that is not there.
+ *
+ *   - hedera:      EIP-155 chainId (295 mainnet / 296 testnet); would fit, unbuilt.
+ *   - usdc:        nests chain id per family (`methodDetails.evm.chainId`).
+ *   - nearintents: cross-chain — a CAIP-2 `originNetwork` plus a distinct
+ *                  destination asset, so a single `network` field is ambiguous.
+ */
+const UNMAPPED_BLOCKCHAIN_CHARGE_METHODS = new Set(['hedera', 'usdc', 'nearintents']);
+
+/**
+ * Methods that name their network with an enumerated string under
+ * `methodDetails.network`, rather than a numeric chain id.
+ *
+ * Solana and Lightning are the same shape: an OPTIONAL `network` field, a
+ * closed enumeration, a spec'd default of `"mainnet"`, and a clause obliging
+ * clients to reject a challenge whose network differs from the one they are
+ * configured for (MUST for Solana, SHOULD for Lightning).
+ *
+ *   - solana:    draft-solana-charge-00 §Method Details
+ *   - lightning: draft-lightning-charge-00 §Method Details
+ *
+ * **Architecture Invariant:** every member of {@link BLOCKCHAIN_CHARGE_METHODS}
+ * must have a resolution arm in {@link resolveNetwork}. The resolver has no
+ * fallback — a method added to the mappable set without one throws on every
+ * challenge. This is deliberate: the previous fallback returned
+ * `` `${method}:unknown` ``, which made two different networks compare equal
+ * and silently disarmed the reject-on-mismatch clause above.
+ */
+const ENUMERATED_NETWORK_METHODS: Record<string, ReadonlySet<string>> = {
+  solana: new Set(['mainnet', 'devnet', 'localnet']),
+  lightning: new Set(['mainnet', 'regtest', 'signet']),
+};
+
+/** Spec'd default when a Tempo Charge omits `chainId` (draft-tempo-charge-00 §Request Schema). */
+const TEMPO_DEFAULT_CHAIN_ID = 42431;
+
+/** Both spec'd network enumerations default to this when the field is absent. */
+const DEFAULT_ENUMERATED_NETWORK = 'mainnet';
+
+/** Normalize a numeric-or-decimal-string chain id, or `undefined` if malformed. */
+function parseChainId(value: unknown): string | undefined {
+  if (typeof value === 'number' && Number.isInteger(value) && value >= 0) return String(value);
+  if (typeof value === 'string' && /^[0-9]+$/.test(value)) return value;
+  return undefined;
+}
+
+/**
  * Network identifier resolution for MPP Charge requests per method.
  *
- * The core spec leaves network naming to individual method specs. This helper
- * encodes the conventions from the published drafts — `evm:{chainId}` and
- * `tempo:{chainId}` follow EIP-155-style identifiers; Solana/Lightning/Stellar
- * fall back to a method-qualified default since their chain is implicit.
+ * The core spec leaves network naming to individual method specs, and they do
+ * not agree on a field: EVM and Tempo carry a numeric `chainId`, Solana and
+ * Lightning an enumerated `network` string, Stellar a CAIP-2 identifier already
+ * in its final form. This resolver reads whichever field the owning method spec
+ * names, and throws when it cannot — it never invents a placeholder.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` when the method's network field is
+ *   absent where REQUIRED, or present but outside the spec's enumeration.
  */
 function resolveNetwork(method: string, methodDetails: Record<string, unknown> | undefined): string {
-  const chainId = methodDetails?.chainId;
-  if (typeof chainId === 'number' && Number.isInteger(chainId) && chainId >= 0) {
-    if (method === 'evm') return `eip155:${chainId}`;
-    if (method === 'tempo') return `tempo:${chainId}`;
+  const enumerated = ENUMERATED_NETWORK_METHODS[method];
+  if (enumerated) {
+    const network = methodDetails?.network ?? DEFAULT_ENUMERATED_NETWORK;
+    if (typeof network === 'string' && enumerated.has(network)) return `${method}:${network}`;
+    throw new s402Error('INVALID_PAYLOAD',
+      `MPP ${method} Charge "methodDetails.network" must be one of ` +
+      `${[...enumerated].map((n) => `"${n}"`).join(', ')} — got ${JSON.stringify(network)}`);
   }
-  if (typeof chainId === 'string' && /^[0-9]+$/.test(chainId)) {
-    if (method === 'evm') return `eip155:${chainId}`;
-    if (method === 'tempo') return `tempo:${chainId}`;
+
+  if (method === 'stellar') {
+    // REQUIRED for stellar, and already a CAIP-2 identifier (`stellar:pubnet`,
+    // `stellar:testnet`) — the resolver's job is to validate and pass through,
+    // not to re-derive. The reference is left open rather than enumerated: the
+    // CAIP-2 Stellar namespace, not this module, decides what is valid.
+    const network = methodDetails?.network;
+    if (typeof network === 'string' && /^stellar:[-a-zA-Z0-9]{1,32}$/.test(network)) return network;
+    throw new s402Error('INVALID_PAYLOAD',
+      `MPP stellar Charge requires a CAIP-2 "methodDetails.network" ` +
+      `(e.g. "stellar:pubnet") — got ${JSON.stringify(network)}`);
   }
-  return `${method}:unknown`;
+
+  if (method === 'evm' || method === 'tempo') {
+    const raw = method === 'tempo'
+      ? methodDetails?.chainId ?? TEMPO_DEFAULT_CHAIN_ID  // OPTIONAL, spec'd default
+      : methodDetails?.chainId;                            // REQUIRED for evm
+    const chainId = parseChainId(raw);
+    if (chainId === undefined) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `MPP ${method} Charge "methodDetails.chainId" must be a non-negative integer ` +
+        `— got ${JSON.stringify(raw)}`);
+    }
+    return method === 'evm' ? `eip155:${chainId}` : `tempo:${chainId}`;
+  }
+
+  // Unreachable for members of BLOCKCHAIN_CHARGE_METHODS — see the invariant above.
+  throw new s402Error('INVALID_PAYLOAD',
+    `MPP method "${method}" has no network resolution rule`);
 }
 
 /**
@@ -572,21 +686,29 @@ function resolveNetwork(method: string, methodDetails: Record<string, unknown> |
  *
  * @throws {s402Error} `INVALID_PAYLOAD` if the method is not a known
  *   blockchain-style Charge method, if the request is missing a recipient
- *   (REQUIRED for blockchain methods per charge spec), or if the challenge
- *   has expired at `now`.
+ *   (REQUIRED for blockchain methods per charge spec), if the challenge
+ *   has expired at `now`, if its network cannot be resolved, or if that
+ *   network differs from `options.expectedNetwork`.
  */
 export function fromMppChargeChallenge(
   challenge: MppChallenge,
-  now?: number,
+  optionsOrNow?: number | FromMppChargeOptions,
 ): s402PaymentRequirements {
+  const options: FromMppChargeOptions =
+    typeof optionsOrNow === 'number' ? { now: optionsOrNow } : optionsOrNow ?? {};
+  const now = options.now;
   if (challenge.intent !== 'charge') {
     throw new s402Error('INVALID_PAYLOAD',
       `fromMppChargeChallenge requires intent="charge", got "${challenge.intent}"`);
   }
   if (!BLOCKCHAIN_CHARGE_METHODS.has(challenge.method)) {
     throw new s402Error('INVALID_PAYLOAD',
-      `MPP method "${challenge.method}" is not mappable to s402 requirements — ` +
-      `processor-based methods (stripe, card) have no payTo/asset exposed in the Charge request`);
+      UNMAPPED_BLOCKCHAIN_CHARGE_METHODS.has(challenge.method)
+        ? `MPP method "${challenge.method}" is a blockchain Charge method that this ` +
+          `translator does not yet map — its Charge request does not fit the flat ` +
+          `network/asset/payTo shape (see DAN-848)`
+        : `MPP method "${challenge.method}" is not mappable to s402 requirements — ` +
+          `processor-based methods (stripe, card) have no payTo/asset exposed in the Charge request`);
   }
 
   const request = decodeMppChargeRequest(challenge);
@@ -609,10 +731,20 @@ export function fromMppChargeChallenge(
     }
   }
 
+  const network = resolveNetwork(challenge.method, request.methodDetails);
+  if (options.expectedNetwork !== undefined && network !== options.expectedNetwork) {
+    // Solana's spec makes this a MUST and Lightning's a SHOULD. Enforcing it at
+    // the lift means a caller that supplies its configured network cannot
+    // forget the comparison downstream.
+    throw new s402Error('INVALID_PAYLOAD',
+      `MPP challenge is for network "${network}" but this client is configured ` +
+      `for "${options.expectedNetwork}"`);
+  }
+
   return {
     s402Version: S402_VERSION,
     accepts: ['exact'],
-    network: resolveNetwork(challenge.method, request.methodDetails),
+    network,
     asset: request.currency,
     amount: request.amount,
     payTo: request.recipient,
