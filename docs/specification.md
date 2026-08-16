@@ -218,9 +218,16 @@ Required when `accepts` includes `"unlock"`.
 
 | Field | Type | Required | Constraints | Description |
 |-------|------|----------|-------------|-------------|
-| `encryptionId` | string | Yes | — | Encryption key identifier for key servers. |
-| `encryptedContentId` | string | Yes | — | Identifier for the encrypted content (e.g., Walrus blob ID, IPFS CID). |
-| `encryptionServiceId` | string | Yes | — | Identifier for the encryption service or module (e.g., Sui package ID, EVM contract address). |
+| `packageId` | string | Yes | — | Move package implementing `pay_and_mint` and the `seal_approve` policy; also the Seal identity namespace. |
+| `keyServers` | array | Yes | Non-empty | Key-server set the seller encrypted to. Each entry is an object with `objectId` (string, on-chain registered key server) and `weight` (number). |
+| `threshold` | number | Yes | Integer >= 1 | Threshold `t` in the t-of-n threshold encryption. |
+| `contentDigest` | string | No | `sha256-<base64url>` | Commitment to the plaintext, for off-chain/reputational evidence. |
+
+> **No identity field appears in requirements, and this is structural rather than an
+> omission.** The Seal identity is `receiptId || nonce`, where `receiptId` is the object ID
+> of the `UnlockReceipt` minted by `pay_and_mint`. That receipt does not exist when the
+> server writes the 402 — it is created by the *buyer's* transaction, in response to this
+> very response. The identity therefore travels in the unlock **fulfillment**, not here.
 
 ### 4.10 Prepaid Sub-Object
 
@@ -297,9 +304,8 @@ The Payment Payload is sent by the client in the `x-payment` header (or request 
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `payload.transaction` | string | Yes | Base64-encoded escrow creation transaction (TX1 of two-stage flow). |
+| `payload.transaction` | string | Yes | Base64-encoded signed `pay_and_mint` transaction. Single-transaction scheme — there is no TX1/TX2 split. |
 | `payload.signature` | string | Yes | Base64-encoded signature. |
-| `payload.encryptionId` | string | Yes | Encryption key identifier. Must match requirements. |
 
 **Prepaid** (`scheme: "prepaid"`):
 
@@ -429,7 +435,7 @@ Sub-object known keys:
 - **settlementOverrides**: `actualAmount`
 - **stream**: `ratePerSecond`, `budgetCap`, `minDeposit`, `streamSetupUrl`
 - **escrow**: `seller`, `arbiter`, `deadlineMs`
-- **unlock**: `encryptionId`, `encryptedContentId`, `encryptionServiceId`
+- **unlock**: `packageId`, `keyServers`, `threshold`, `contentDigest`
 - **prepaid**: `ratePerCall`, `maxCalls`, `minDeposit`, `withdrawalDelayMs`, `providerPubkey`, `disputeWindowMs`
 
 ### 10.2 Known Payload Keys
@@ -440,7 +446,7 @@ Inner payload keys per scheme:
 
 - **exact, stream, escrow**: `transaction`, `signature`
 - **upto**: `transaction`, `signature`, `maxAmount`, `settlementCeiling`
-- **unlock**: `transaction`, `signature`, `encryptionId`
+- **unlock**: `transaction`, `signature`
 - **prepaid**: `transaction`, `signature`, `ratePerCall`, `maxCalls`
 
 ### 10.3 Known Settlement Response Keys
