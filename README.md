@@ -46,6 +46,48 @@ HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a pay
 
 **s402 is Sui-native by design.** These advantages come from Sui's object model, PTBs, and sub-second finality. They can't be replicated on EVM — and they don't need to be. x402 already handles EVM well. s402 handles Sui better.
 
+## Who This Is For
+
+**Use s402 if** you are charging for an HTTP endpoint that AI agents call, and either you settle
+on Sui, or you need a payment model x402 does not have — metered draw-down, streaming with rate
+enforcement, escrow with an arbiter, or pay-to-decrypt. Also use it if you are implementing the
+protocol in another language: the wire format is specified independently of this codebase and
+ships with conformance vectors to check yourself against.
+
+**Do not use s402 if** you are EVM-only and `exact` covers you — x402 is the better fit and we
+say so. Also skip it if you want a payments *product*: s402 is a wire format and a set of types
+with zero runtime dependencies. It does not move money, custody funds, or run a facilitator for
+you. Fiat and card rails are out of scope and will stay that way.
+
+## What Would Prove This Should Stop
+
+s402's bet is narrow enough to be wrong in public. Any of the following would falsify it, and we
+would rather retire the project than defend it past its evidence:
+
+1. **x402 absorbs the superset.** This README claims x402's two-scheme governance envelope
+   cannot take on prepaid, stream, escrow and unlock without re-ratification. If x402 ratifies
+   equivalents, the reason to run a second protocol is gone — the correct response is to fold
+   the schemes upstream and delete this repo, not to compete.
+
+2. **The prepaid economics do not survive contact with production.** The case for micropayments
+   rests on batching 1,000 payments into 2 on-chain transactions. If real deployments do not land
+   near the claimed ~$0.014 per 1,000 calls — because of contention on shared objects, gas-price
+   regimes, or settlement patterns we have not modelled — then the central advantage over
+   per-call settlement is arithmetic that only works on paper.
+
+3. **No independent implementation ever passes the vectors.** s402 claims to be a protocol, not a
+   library. A protocol with exactly one implementation is a library wearing a specification. If
+   the conformance vectors go unclaimed by any second-language implementation, the honest
+   description is "the wire format of the s402 npm package," and the spec should be demoted to
+   internal documentation.
+
+4. **Agent commerce settles somewhere other than HTTP 402.** If agent-to-service payment
+   converges on mandate-passing over a non-402 channel, then the status code this protocol is
+   built around is the wrong integration point, and being excellent at it does not matter.
+
+Points 1 and 3 are the ones to watch: both are observable from outside this repo, and neither
+depends on our own judgement of our own work.
+
 ## Which Scheme Should I Use?
 
 | Your situation | Scheme | Gas per 1K calls | Latency |
@@ -349,15 +391,20 @@ const requirements: s402PaymentRequirements = {
 
 ## Conformance Testing
 
-s402 ships 133 machine-readable JSON test vectors for cross-language conformance. If you're implementing s402 in Go, Python, Rust, or any other language, use these vectors to verify your implementation matches the spec.
+s402 ships machine-readable JSON test vectors for cross-language conformance — 167 vectors across 14 files. If you're implementing s402 in Go, Python, Rust, or any other language, use these vectors to verify your implementation matches the spec.
 
 ```bash
-# Vectors are in the npm package
+# From the npm package
 ls node_modules/s402/test/conformance/vectors/
 
-# Or clone the repo
-ls test/conformance/vectors/
+# Or from a clone of this repo
+ls spec/vectors/
 ```
+
+The two paths hold the same files. `spec/vectors/` is the canonical, version-controlled
+location; `scripts/prepare-publish.sh` copies it into `test/conformance/vectors/` at publish
+time so it lands inside the npm tarball. **In a fresh clone only `spec/vectors/` exists** —
+`test/conformance/vectors/` is generated and git-ignored.
 
 See [`test/conformance/README.md`](./typescript/test/conformance/README.md) for the vector format, encoding scheme, and implementation guide.
 
