@@ -2,6 +2,30 @@
 
 A minimal Sui-native MCP server that advertises **three coexisting payment protocols** (x402, s402, stripe-mpp) inside a single `payment[]` envelope. Built as a reference implementation for [MCP SEP-2007](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/2007).
 
+> ## 🛑 This demo cannot currently reach the network
+>
+> **Sui has deprecated JSON-RPC on public fullnodes.** Every core method now returns `-32601`
+> on **both testnet and mainnet** (verified 2026-08-16):
+>
+> ```
+> curl -s -X POST https://fullnode.testnet.sui.io:443 -H 'Content-Type: application/json' \
+>   -d '{"jsonrpc":"2.0","id":1,"method":"sui_getChainIdentifier","params":[]}'
+> # {"error":{"code":-32601,"message":"Method not found. JSON-RPC on public fullnodes has been
+> #  deprecated. Please migrate to gRPC or GraphQL endpoints."}}
+> ```
+>
+> `src/server.ts` and `src/agent.ts` both construct a `SuiClient` over that transport, so the
+> end-to-end run does not work today. The **protocol layer is unaffected** — `s402` itself has
+> no Sui dependency and never had one (ADR-002, invariant S7), so the envelope shapes, encoding
+> and conformance vectors this demo illustrates are all still correct and all still tested.
+>
+> **What still works offline:** reading the `tools/list` envelope below, and the `s402` package's
+> own suite (`cd ../typescript && pnpm vitest run`).
+>
+> Migration to gRPC/GraphQL is tracked separately — it is a migration, not a doc fix, and it is
+> not being attempted inside a documentation pass. **This warning is removed when that lands**;
+> a stale blocker notice is its own defect.
+
 ## The headline artifact
 
 The `tools/list` response advertises three payment options per tool:

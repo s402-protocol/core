@@ -233,6 +233,16 @@ This is the complete s402 protocol flow. In production, step 3 uses the Sui SDK 
 
 ## Making It Real
 
+> 🛑 **The snippet below will not connect today.** Sui has deprecated JSON-RPC on public
+> fullnodes — `https://fullnode.{testnet,mainnet}.sui.io` returns `-32601` for every core method
+> (verified 2026-08-16). A `SuiClient` pointed at a public fullnode is dead on arrival, so treat
+> this section as illustrating the *shape* of the integration, not as runnable today. Reaching a
+> live network requires the gRPC or GraphQL transport; migration is tracked separately.
+>
+> Everything **above** this section is unaffected: the s402 protocol layer has no Sui dependency
+> (ADR-002, invariant S7), so the encoding, validation and error handling you just worked through
+> all still run offline.
+
 To connect this to Sui, replace the mock payment in `client.ts` with real Sui SDK code:
 
 ```typescript
