@@ -1,6 +1,7 @@
 # ADR-008: Safety Invariants S9–S14
 
 **Status:** Draft (v2 — post /vet wave review; S14 added, S11 hardened)
+**Implementation:** in-progress — **S11** and **S14** are built (`src/envelope.ts:77`, `:430`, `:443`; S14's constant-time comparison has its own test at `test/envelope.test.ts:429`). **S9, S10, S12 and S13** have no enforcement site found. Determined 2026-08-16 (DAN-855) by searching for the mechanisms, not only the labels — but treat the negatives as *no witness found*, not *proven absent*.
 **Date:** 2026-04-19
 **Related:** INVARIANTS.md (S1–S8), ADR-004 (Extensions), ADR-007 (Settlement Envelope), ADR-009 (Open Gaps)
 

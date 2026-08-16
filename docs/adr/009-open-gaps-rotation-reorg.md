@@ -1,6 +1,7 @@
 # ADR-009: Open Gaps — Facilitator Key Rotation, Chain Reorg Tolerance, Scheme Acceptance Process
 
 **Status:** Placeholder — tracked gaps, not yet resolved
+**Implementation:** not-started
 **Date:** 2026-04-19
 **Related:** ADR-006, ADR-007, ADR-008, INVARIANTS S8, S11
 
