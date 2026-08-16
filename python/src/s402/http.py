@@ -64,7 +64,7 @@ _SUB_OBJECT_KEYS: dict[str, list[str]] = {
     "settlementOverrides": ["actualAmount"],
     "stream": ["ratePerSecond", "budgetCap", "minDeposit", "streamSetupUrl"],
     "escrow": ["seller", "arbiter", "deadlineMs"],
-    "unlock": ["encryptionId", "encryptedContentId", "encryptionServiceId"],
+    "unlock": ["packageId", "keyServers", "threshold", "contentDigest"],
     "prepaid": ["ratePerCall", "maxCalls", "minDeposit", "withdrawalDelayMs", "providerPubkey", "disputeWindowMs"],
 }
 
@@ -75,7 +75,7 @@ _PAYLOAD_INNER_KEYS: dict[str, list[str]] = {
     "upto": ["transaction", "signature", "maxAmount", "settlementCeiling"],
     "stream": ["transaction", "signature"],
     "escrow": ["transaction", "signature"],
-    "unlock": ["transaction", "signature", "encryptionId"],
+    "unlock": ["transaction", "signature"],
     "prepaid": ["transaction", "signature", "ratePerCall", "maxCalls"],
 }
 
@@ -194,11 +194,29 @@ def validate_escrow_shape(value: Any) -> None:
 
 
 def validate_unlock_shape(value: Any) -> None:
+    """Validate the unlock sub-object (pay-to-decrypt, single-transaction).
+
+    The Seal identity is `receiptId || nonce`, where `receiptId` is the object ID
+    of the `UnlockReceipt` minted by `pay_and_mint`. That receipt does not exist
+    when the 402 is written, so no identity field belongs here — it travels in the
+    fulfillment (see `s402UnlockFulfillment` in the TypeScript types).
+    """
     if not isinstance(value, dict):
         raise S402Error("INVALID_PAYLOAD", f"unlock must be a plain object, got {type(value).__name__}")
-    _assert_string(value, "encryptionId", "unlock")
-    _assert_string(value, "encryptedContentId", "unlock")
-    _assert_string(value, "encryptionServiceId", "unlock")
+    _assert_string(value, "packageId", "unlock")
+    _assert_optional_string(value, "contentDigest", "unlock")
+    threshold = value.get("threshold")
+    if not isinstance(threshold, int) or isinstance(threshold, bool) or threshold < 1:
+        raise S402Error("INVALID_PAYLOAD", f"unlock.threshold must be a positive integer, got {type(threshold).__name__}")
+    key_servers = value.get("keyServers")
+    if not isinstance(key_servers, list) or len(key_servers) == 0:
+        raise S402Error("INVALID_PAYLOAD", f"unlock.keyServers must be a non-empty array, got {type(key_servers).__name__}")
+    for ks in key_servers:
+        if not isinstance(ks, dict):
+            raise S402Error("INVALID_PAYLOAD", f"unlock.keyServers[] must be a plain object, got {type(ks).__name__}")
+        _assert_string(ks, "objectId", "unlock.keyServers[]")
+        if not isinstance(ks.get("weight"), int) or isinstance(ks.get("weight"), bool):
+            raise S402Error("INVALID_PAYLOAD", f"unlock.keyServers[].weight must be a number, got {type(ks.get('weight')).__name__}")
 
 
 def validate_upto_shape(value: Any) -> None:
@@ -411,8 +429,6 @@ def _validate_payload_shape(obj: Any) -> None:
             max_amt = int(inner["maxAmount"])
             if ceiling > max_amt:
                 raise S402Error("INVALID_PAYLOAD", f"upto payload settlementCeiling ({inner['settlementCeiling']}) must be <= maxAmount ({inner['maxAmount']})")
-    if obj["scheme"] == "unlock" and not isinstance(inner.get("encryptionId"), str):
-        raise S402Error("INVALID_PAYLOAD", f"unlock payload requires encryptionId (string), got {type(inner.get('encryptionId')).__name__}")
     if obj["scheme"] == "prepaid":
         if not isinstance(inner.get("ratePerCall"), str):
             raise S402Error("INVALID_PAYLOAD", f"prepaid payload requires ratePerCall (string), got {type(inner.get('ratePerCall')).__name__}")
