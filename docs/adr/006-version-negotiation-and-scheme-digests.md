@@ -1,6 +1,7 @@
 # ADR-006: Version Negotiation and Scheme Content-Hashing
 
 **Status:** Draft
+**Implementation:** not-started
 **Date:** 2026-04-19
 **Supersedes:** implicit version string in `s402Version` field
 **Related:** ADR-001 (Protocol Boundaries), ADR-002 (Protocol-Pure), ADR-004 (Extensions), ADR-005 (Interop-Superset), INVARIANTS S3
@@ -95,7 +96,18 @@ advertised   = "sha256-" || base64url_no_pad(digest)
 
 **Target is the prose spec, not derived artifacts.** The markdown spec at `docs/schemes/<scheme>.md` is normative — it is the human-readable law of the scheme. JSON Schema files and BCS type definitions are derivative; their content-hashes are advertised separately in `spec/scheme-digests.json` under a `derived` key but do not drive version negotiation.
 
-**Implementation:** `scripts/compute-scheme-digests.mjs` runs in CI and writes `spec/scheme-digests.json`. Any PR that modifies `docs/schemes/**/*.md` without updating the digests file fails CI.
+**Implementation plan — NOT BUILT (verified 2026-08-16, DAN-855).** The intent is that
+`scripts/compute-scheme-digests.mjs` runs in CI and writes `spec/scheme-digests.json`, so any PR
+modifying `docs/schemes/**/*.md` without updating the digests file fails CI.
+
+⚠️ **None of that exists.** Neither file appears in any commit on any branch (`git log --all --
+'**/compute-scheme-digests.mjs' '**/scheme-digests.json'` returns nothing), and CI's five jobs
+contain no such gate. This paragraph previously asserted the mechanism in the present tense, which
+made an unbuilt plan read as a shipped guarantee — in the one field the ADR convention reserves for
+answering exactly that question. The header now carries `Implementation: not-started`.
+
+`docs/schemes/` itself is real (`escrow.md`, `exact.md`, `prepaid.md`), so the thing this would
+guard exists; only the guard is missing.
 
 ### Amendment chain
 

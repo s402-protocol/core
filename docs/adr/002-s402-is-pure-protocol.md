@@ -1,6 +1,7 @@
 # ADR-002: s402 is a Pure Protocol Repo — mcp-server Moves to SweeFi
 
 **Status:** Accepted
+**Implementation:** shipped
 **Date:** 2026-04-11
 **Supersedes:** (none — refines the boundary that ADR-001 § Decision 1 named but did not enforce at the repo level)
 

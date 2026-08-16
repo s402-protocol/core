@@ -1,6 +1,7 @@
 # ADR-011: Transport Abstraction — Payment Rides Any Carrier
 
 **Status:** Accepted (2026-06-28; revised after blind-spot review; Chunks 1a-i, 1a-ii, 1a-iii, and 2 landed + verified — HTTP + MCP + A2A all behind one seam, 1075 tests green)
+**Implementation:** shipped
 **Date:** 2026-06-28
 **Supersedes:** (none)
 **Related:** ADR-005 (interop/superset), ADR-002 (s402 is pure protocol), S7 (chain-agnostic boundary)

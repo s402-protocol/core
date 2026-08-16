@@ -23,8 +23,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `spec/vectors/` — the canonical, version-controlled location — and explains how the two paths
   relate, so the npm path stays correct for package consumers.
 
+- **An architecture decision record claimed a CI check that has never existed.** ADR-006 stated,
+  in the present tense, that `scripts/compute-scheme-digests.mjs` "runs in CI and writes
+  `spec/scheme-digests.json`", failing any PR that changed a scheme doc without updating digests.
+  Neither file appears in any commit on any branch, and CI has no such job. It was the only ADR
+  carrying an `Implementation:` field, so the project's single answer to "was this built?" was
+  false. The paragraph is now marked as an unbuilt plan and the record reads
+  `Implementation: not-started`.
+
 ### Added
 
+- **Every ADR now records whether it was actually built.** All twelve carry an `Implementation:`
+  field (`shipped` · `in-progress` · `not-started` · `upheld`), each determined against the code
+  rather than the prose. `Status: Accepted` only ever meant *decided* — so a decision that shipped
+  and one that was ratified and quietly never built were indistinguishable on the page. The
+  conceived-to-shipped ratio is now countable: **7 of 12 shipped.** Two findings fell straight out
+  of the exercise: ADR-004's extensions framework ships as the `s402/extensions` subpath while its
+  `Status` still reads *Proposed*, and ADR-010's S16 turns out to be half-built — version binding
+  is enforced in the envelope, its scheme-digest half blocked on ADR-006.
 - **A regression test that fails when a documented vector count drifts from reality**
   (`test/spec-doc-counts.test.ts`). It counts `spec/vectors/` and compares against every
   `"<N> vectors across <M> files"` claim in `README.md` and `docs/specification.md`, and it

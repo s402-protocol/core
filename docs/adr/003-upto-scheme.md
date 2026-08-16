@@ -1,6 +1,7 @@
 # ADR-003: `upto` Scheme — Usage-Based Payments with Settlement Overrides
 
 **Status:** Accepted (implemented — see note)
+**Implementation:** shipped
 **Date:** 2026-04-12
 **Supersedes:** (none)
 **Linear:** DAN-284

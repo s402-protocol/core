@@ -1,6 +1,7 @@
 # ADR-005: Interop When Possible, Superset When Wise
 
 **Status:** Accepted
+**Implementation:** upheld
 **Date:** 2026-04-14
 **Supersedes:** (none — formalizes informal positioning against x402 and MPP)
 **Linear:** DAN-313

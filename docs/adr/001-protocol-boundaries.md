@@ -1,6 +1,7 @@
 # ADR-001: Protocol Boundaries — Facilitator Trust, Receipt Cardinality, Scheme Cap, and Extension Hygiene
 
 **Status:** Accepted
+**Implementation:** shipped
 **Date:** 2026-04-11
 **Supersedes:** (none — first ADR)
 

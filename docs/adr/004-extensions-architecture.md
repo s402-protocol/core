@@ -1,6 +1,8 @@
 # ADR-004: Extensions Architecture — Typed, Lifecycle-Aware Plugin System
 
 **Status:** Proposed
+**Implementation:** shipped — `src/extensions.ts` (10KB), exported as the `s402/extensions` subpath in `package.json`.
+⚠️ **`Status: Proposed` above is stale and is left as-is deliberately** (found 2026-08-16, DAN-855): this was built without the ADR ever being moved to Accepted. Flipping a governance field is a decision, not a cleanup, so it is surfaced here rather than changed unilaterally. It is also the exact gap the `Implementation:` field exists to expose — under `Status` alone, "proposed and never built" and "proposed and shipped" were the same page.
 **Date:** 2026-04-12
 **Supersedes:** (none — implements the framework that ADR-001 Decision 4 described as hygiene rules)
 **Linear:** DAN-285

@@ -1,6 +1,7 @@
 # ADR-007: Settlement Response Envelope
 
 **Status:** Draft (v2 — post /vet wave review)
+**Implementation:** shipped
 **Date:** 2026-04-19
 **Related:** ADR-001 (Protocol Boundaries), ADR-006 (Version Negotiation), ADR-008 (Safety Invariants S9-S13), ADR-009 (Open Gaps), INVARIANTS S7, S8
 **Supersedes:** `s402SettleResponse` (legacy flat shape in `typescript/src/scheme.ts`)

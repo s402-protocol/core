@@ -1,6 +1,7 @@
 # ADR-010: Safety Invariants S15–S16 — Session Binding and Version Binding
 
 **Status:** Draft
+**Implementation:** in-progress — **S16 is half-built**: the protocol version *is* bound into the signed envelope rather than only into transport headers (`src/envelope.ts:54`, `:173`, `:219`, and required at `:268`). Its *scheme-digest* half is blocked on ADR-006, which is `not-started`. **S15** (binding long-running scheme state to the mandate/capability object rather than the signer's key) has no enforcement site in this repo — consistent with ADR-002, since mandates live upstack. Determined 2026-08-16 (DAN-855) by searching for the mechanisms rather than the labels; a label-only search finds where someone wrote "S16", not where it is enforced.
 **Date:** 2026-04-21
 **Related:** INVARIANTS.md (S1–S8), ADR-006 (Version Negotiation), ADR-007 (Settlement Envelope), ADR-008 (Safety Invariants S9–S14), ADR-009 (Open Gaps)
 
