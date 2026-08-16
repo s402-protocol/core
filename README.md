@@ -59,35 +59,6 @@ say so. Also skip it if you want a payments *product*: s402 is a wire format and
 with zero runtime dependencies. It does not move money, custody funds, or run a facilitator for
 you. Fiat and card rails are out of scope and will stay that way.
 
-## What Would Prove This Should Stop
-
-s402's bet is narrow enough to be wrong in public. Any of the following would falsify it, and we
-would rather retire the project than defend it past its evidence:
-
-1. **x402 absorbs the superset.** This README claims x402's two-scheme governance envelope
-   cannot take on prepaid, stream, escrow and unlock without re-ratification. If x402 ratifies
-   equivalents, the reason to run a second protocol is gone — the correct response is to fold
-   the schemes upstream and delete this repo, not to compete.
-
-2. **The prepaid economics do not survive contact with production.** The case for micropayments
-   rests on batching 1,000 payments into 2 on-chain transactions. If real deployments do not land
-   near the claimed ~$0.014 per 1,000 calls — because of contention on shared objects, gas-price
-   regimes, or settlement patterns we have not modelled — then the central advantage over
-   per-call settlement is arithmetic that only works on paper.
-
-3. **No independent implementation ever passes the vectors.** s402 claims to be a protocol, not a
-   library. A protocol with exactly one implementation is a library wearing a specification. If
-   the conformance vectors go unclaimed by any second-language implementation, the honest
-   description is "the wire format of the s402 npm package," and the spec should be demoted to
-   internal documentation.
-
-4. **Agent commerce settles somewhere other than HTTP 402.** If agent-to-service payment
-   converges on mandate-passing over a non-402 channel, then the status code this protocol is
-   built around is the wrong integration point, and being excellent at it does not matter.
-
-Points 1 and 3 are the ones to watch: both are observable from outside this repo, and neither
-depends on our own judgement of our own work.
-
 ## Which Scheme Should I Use?
 
 | Your situation | Scheme | Gas per 1K calls | Latency |
