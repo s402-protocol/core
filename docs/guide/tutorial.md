@@ -233,30 +233,31 @@ This is the complete s402 protocol flow. In production, step 3 uses the Sui SDK 
 
 ## Making It Real
 
-> 🛑 **The snippet below will not connect today.** Sui has deprecated JSON-RPC on public
-> fullnodes — `https://fullnode.{testnet,mainnet}.sui.io` returns `-32601` for every core method
-> (verified 2026-08-16). A `SuiClient` pointed at a public fullnode is dead on arrival, so treat
-> this section as illustrating the *shape* of the integration, not as runnable today. Reaching a
-> live network requires the gRPC or GraphQL transport; migration is tracked separately.
->
-> Everything **above** this section is unaffected: the s402 protocol layer has no Sui dependency
-> (ADR-002, invariant S7), so the encoding, validation and error handling you just worked through
-> all still run offline.
+To connect this to Sui, replace the mock payment in `client.ts` with real Sui SDK code.
 
-To connect this to Sui, replace the mock payment in `client.ts` with real Sui SDK code:
+Use the **gRPC** client, not `SuiClient`: Sui has deprecated JSON-RPC on public fullnodes, and
+every core method there now answers `-32601`. The URL is unchanged — gRPC is served from the same
+host and port — so this is a client swap, not an endpoint move. It needs `@mysten/sui` **2.x**;
+the 1.x gRPC client cannot execute against current fullnodes.
 
 ```typescript
-import { SuiClient } from '@mysten/sui/client';
+import { SuiGrpcClient } from '@mysten/sui/grpc';
 import { Transaction } from '@mysten/sui/transactions';
 import { Ed25519Keypair } from '@mysten/sui/keypairs/ed25519';
 
-// Build a real payment
+const keypair = new Ed25519Keypair(); // or load from keystore
+const suiClient = new SuiGrpcClient({
+  network: 'testnet',
+  baseUrl: 'https://fullnode.testnet.sui.io:443',
+});
+
+// Build a real payment. The sender must be set explicitly — there is no
+// signAndExecuteTransaction on the gRPC client to infer it from a signer.
 const tx = new Transaction();
+tx.setSender(keypair.toSuiAddress());
 const [coin] = tx.splitCoins(tx.gas, [requirements.amount]);
 tx.transferObjects([coin], requirements.payTo);
 
-const keypair = new Ed25519Keypair(); // or load from keystore
-const suiClient = new SuiClient({ url: 'https://fullnode.testnet.sui.io' });
 const txBytes = await tx.build({ client: suiClient });
 const { bytes, signature } = await keypair.signTransaction(txBytes);
 
