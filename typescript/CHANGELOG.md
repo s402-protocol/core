@@ -47,10 +47,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   refuses to pass vacuously: if the wording changes so no claim is found, the test fails rather
   than silently verifying nothing. Counts written into prose are derived values maintained by
   hand, and three independent wrong numbers in one repo is what that looks like after a while.
-- **The README now says who s402 is for, who it is not for, and what would prove it should
-  stop.** The last of those is a falsification section naming four observable conditions that
-  would retire the project — chiefly x402 absorbing the superset schemes, and no independent
-  implementation ever passing the conformance vectors.
+- **The README now says who s402 is for and who it is not for.** Deciding whether s402 fits
+  was previously left to the reader to infer from feature tables; it now says plainly that
+  EVM-only users wanting `exact` should use x402, and that s402 is a wire format rather than a
+  payments product.
 
 ## [0.8.0] - 2026-06-28
 
