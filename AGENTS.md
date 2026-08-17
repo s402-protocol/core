@@ -266,7 +266,7 @@ grep -r "yourFeatureName" ../../projects/sweefi-project/sweefi/packages/
 
 **Why this rule exists:** In April 2026, an AI session was about to implement `stream.move`, `escrow.move`, `prepaid.move`, and an unlock scheme adapter from scratch inside `s402/mcp-server/` — all of which already existed in `sweefi/contracts/sources/` and `sweefi/packages/sui/src/s402/`, tested with 1,775 passing tests and deployed to Sui testnet v11 with live demo transactions. The only reason the duplication was caught was a human asking "isn't this the wrong level for an MCP server?" A single `ls` of the sweefi folder 30 seconds earlier would have prevented a lengthy detour. See ADR-002 for the full incident writeup.
 
-**Corollary rule:** If you find that sibling code already implements what you were about to build, STOP. Do not rebuild. Either (a) improve the sibling implementation in place if the gap is there, or (b) consume the sibling package as a dependency, or (c) escalate to Danny with the discovery. Duplicating existing work is worse than building nothing — it creates divergent implementations that have to be reconciled at higher cost later.
+**Corollary rule:** If you find that sibling code already implements what you were about to build, STOP. Do not rebuild. Either (a) improve the sibling implementation in place if the gap is there, or (b) consume the sibling package as a dependency, or (c) open an issue describing the overlap. Duplicating existing work is worse than building nothing — it creates divergent implementations that have to be reconciled at higher cost later.
 
 ### Error Design: Machines First
 

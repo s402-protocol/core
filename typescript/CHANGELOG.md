@@ -109,7 +109,7 @@ Pre-publish adversarial review (2026-06-28) hardened three trust-boundary issues
   - **Signet prefix support**: recognizes both the canonical current-BOLT-11 prefix (`lntbs`, core-lightning + recent LND) and the legacy prefix (`lnsb`, older LND emissions). Both canonicalize to `lightning:signet` in the parsed output.
 - **~20 unit tests** at `test/compat-l402.test.ts` covering all four multiplier classes, all four network prefixes, LSAT/L402 alias handling, amountless invoices, malformed HRPs, and end-to-end header-to-requirements flows.
 - **Positioning document** at `docs/positioning.md` — canonical three-pillar USP: expressiveness (6 schemes), universal read (every 402 dialect), on-chain enforcement (Move invariants). Single source of truth for landing page, pitch, and grant copy.
-- **Universal 402 Absorption** project tracker on Linear ([project link](https://linear.app/dannydevs/project/universal-402-absorption-f6e181082db4)) with child issues DAN-344 (L402), DAN-345 (MPP Session), DAN-346 (MPP write path), DAN-347 (Google AP2), DAN-348 (IETF reference impl), DAN-349 (ERC-7824 watch).
+- **Universal 402 Absorption** project tracker with child issues DAN-344 (L402), DAN-345 (MPP Session), DAN-346 (MPP write path), DAN-347 (Google AP2), DAN-348 (IETF reference impl), DAN-349 (ERC-7824 watch).
 
 ### Scope (intentionally deferred)
 
