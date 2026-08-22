@@ -2,3 +2,4 @@ packages:
   - 'typescript'
   - 'server-ts'
   - 'mcp-demo'
+  - 'demo-api'

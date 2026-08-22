@@ -2,8 +2,9 @@
   "private": true,
   "name": "s402-protocol",
   "type": "module",
-  "description": "s402 protocol monorepo — spec, TypeScript, Python",
+  "description": "s402 protocol monorepo \u2014 spec, TypeScript, Python",
   "scripts": {
+    "demo": "pnpm --filter s402 demo",
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
     "docs:preview": "vitepress preview docs"
