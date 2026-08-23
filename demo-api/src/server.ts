@@ -295,7 +295,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   if (url === '/api/catalog') {
     json(res, 200, {
       protocol: 's402',
-      version: '0.3',
+      version: S402_VERSION,
       network: NETWORK,
       endpoints: routes.map((r) => ({
         path: r.path,
