@@ -19,7 +19,7 @@ Three protocols are converging on HTTP 402 as the payments layer for AI agents. 
 | **Settlement model** | Two-step (verify → settle) | Pull / Push / Zero-amount | Atomic PTB (verify + settle in one TX on Sui) |
 | **Per-TX cost** | Base: ~$1.60–13 / 1K calls · Solana: ~$0.25 / 1K | Tempo: sub-cent per on-chain TX; Session vouchers settle off-chain at near-zero effective cost | Sui Exact: ~$7 / 1K · **Sui Prepaid: ~$0.014 / 1K** |
 | **Supported methods** | Base, Solana, ACH, cards | 7 formally specified (April 17, 2026): card, evm (unified — covers all EVM chains via `chainId`), lightning, solana, stellar, stripe, tempo | Sui native; compat for x402 + (planned) MPP payment-in |
-| **Content negotiation** | No | `Accept-Payment` header with q-values (April 17, 2026) — modeled on `Accept-Language` | Parity planned ([DAN-341](https://linear.app/dannydevs/issue/DAN-341)) — s402 clients will speak and emit `Accept-Payment` |
+| **Content negotiation** | No | `Accept-Payment` header with q-values (April 17, 2026) — modeled on `Accept-Language` | Parity planned — s402 clients will speak and emit `Accept-Payment` |
 | **Design partners** | Google, Cloudflare, Visa (x402 Foundation) | Visa, Mastercard, Deutsche Bank, Standard Chartered, Revolut, Nubank, Shopify, OpenAI, Anthropic, Ramp, DoorDash. Cloudflare as implementation provider. 100+ services in directory. | Open — distribution is the gap |
 | **Trust model** | Facilitator | Tempo validators + Stripe for fiat rails | Permissionless (Sui) or facilitator (optional) |
 | **Wire compat** | Native | IETF draft HTTP semantics (`WWW-Authenticate: Payment`) | x402 V1 wire-compat; x402 V2 + MPP via compat layer |

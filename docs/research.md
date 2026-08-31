@@ -93,7 +93,7 @@ The full [THREAT_MODEL](/THREAT_MODEL) covers seven adversary classes. Quick ref
 - **Wire format**: frozen for v0.5, additive-only for v0.6
 - **Scheme semantics**: Exact, Upto, Prepaid, Escrow, Stream frozen; Unlock finalizing for v0.5
 - **Canonicalization**: frozen — see [`spec/canonicalization.md`](https://github.com/s402-protocol/core/blob/main/spec/canonicalization.md)
-- **IETF Internet-Draft**: `draft-ahn-httpauth-s402-00` in preparation ([DAN-342](https://linear.app/dannydevs/issue/DAN-342))
+- **IETF Internet-Draft**: `draft-ahn-httpauth-s402-00` in preparation
 
 ## Audit Status
 

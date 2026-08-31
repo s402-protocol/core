@@ -135,7 +135,7 @@ These are items the project believes are worth doing but are blocked on prerequi
 
 ## How to propose a change
 
-1. **Bug or tightening**: open an issue at `github.com/Danny-Devs/s402`. Include a repro or a failing conformance vector.
+1. **Bug or tightening**: [file an issue](https://github.com/s402-protocol/core/issues). Include a repro or a failing conformance vector.
 2. **New invariant**: open an ADR PR following the pattern of ADR-008 and ADR-010 — delta analysis first (what's already covered), then the proof, then enforcement.
 3. **New scheme**: open a Discussion for a 30-day community window (ADR-009 G3), then an ADR with an S3 irreducibility proof.
 4. **Non-Sui chain adapter**: start with the adapter repo; s402 protocol changes should be rare and will be driven by ADR-012.

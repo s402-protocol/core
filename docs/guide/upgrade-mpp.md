@@ -9,7 +9,7 @@ Already running MPP (Stripe's Machine Payment Protocol on Tempo)? s402 is design
 This guide is for teams evaluating s402 alongside MPP, or already running MPP and considering s402 for the patterns MPP doesn't cover.
 
 ::: info Availability
-MPP compat **read path** (challenge parsing + Charge-to-s402 translation) ships with v0.3 — the code is in the `s402/compat/mpp` entry point. Write-path emission (s402 → MPP challenges) and the Session-to-Prepaid shim are on the v0.4 roadmap ([DAN-339](https://linear.app/dannydevs/issue/DAN-339)). Today you can consume MPP Charge 402 responses natively; emitting MPP challenges still requires routing to an MPP-native server.
+MPP compat **read path** (challenge parsing + Charge-to-s402 translation) ships with v0.3 — the code is in the `s402/compat/mpp` entry point. Write-path emission (s402 → MPP challenges) and the Session-to-Prepaid shim are on the v0.4 roadmap. Today you can consume MPP Charge 402 responses natively; emitting MPP challenges still requires routing to an MPP-native server.
 :::
 
 ## TL;DR
@@ -154,11 +154,11 @@ Not natively — MPP uses HTTP header receipts only. The compat layer will emit 
 
 ### What about MPP's `Accept-Payment` header?
 
-s402 will parse and emit it. See [DAN-341](https://linear.app/dannydevs/issue/DAN-341) for the tracking issue.
+s402 will parse and emit it. Tracked on the [roadmap](../../ROADMAP.md).
 
 ### What about MPP Session (EIP-712 cumulative vouchers)?
 
-That maps to s402 Prepaid. The compat module needs a translation shim (cumulative amount ↔ per-call receipts). Scoped in [DAN-339](https://linear.app/dannydevs/issue/DAN-339).
+That maps to s402 Prepaid. The compat module needs a translation shim (cumulative amount ↔ per-call receipts). Scoped for a future release.
 
 ### What about `authorize` and `subscription` intents?
 
