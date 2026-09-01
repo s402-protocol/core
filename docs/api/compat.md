@@ -106,6 +106,59 @@ function fromX402Envelope(
 ): s402PaymentRequirements;
 ```
 
+## Reading an x402 server's settlement result
+
+### `fromX402SettleResponseHeaders(headers)` · `fromX402SettleResponse(response)`
+
+Classify what an x402 server said about settlement. **Read this section before writing any
+retry.**
+
+```typescript
+function fromX402SettleResponseHeaders(headers: Headers): x402SettlementOutcome | null;
+function fromX402SettleResponse(response: x402SettleResponse): x402SettlementOutcome;
+
+type x402SettlementOutcome =
+  | { state: 'settled'; retryable: false; transaction: string; /* ... */ }
+  | { state: 'pending';  retryable: false; transaction: string; reason: 'settlement_pending' }
+  | { state: 'failed';   retryable: true;  transaction: string; reason?: string };
+```
+
+x402 V2 has three settlement outcomes, not two. `settlement_pending` means **the transaction
+was broadcast and the wait for its confirmation failed** — the payment may well have landed.
+On the wire it arrives as `success: false`, which is the trap: a client that reads the boolean
+and retries builds a second payment for a transaction that already went through.
+
+`settled` and `pending` are both `retryable: false`, and that is the same answer for different
+reasons — one has been paid, the other may have been. Reconcile the `transaction` hash on chain
+before doing anything else.
+
+Reads `PAYMENT-RESPONSE` (V2) then `X-PAYMENT-RESPONSE` (V1), case-insensitively. Returns
+`null` when neither is present, so you can fall back to the native s402 decode path.
+
+::: warning s402's own settle response has two states, not three
+This helper classifies what an **x402 server** sent you. s402's own `payment-response` body is
+still `{ success: boolean, ... }`, and there is deliberately no function mapping a `pending`
+outcome back into it — that mapping would have to collapse `pending` onto `success: false`,
+which is the bug this type exists to prevent. See ADR-013.
+:::
+
+## Reading the `exact` payment flow
+
+### `x402PaymentFlowOf(requirement)`
+
+```typescript
+function x402PaymentFlowOf(req: { extra?: Record<string, unknown> }): 'authorization' | 'upfront';
+```
+
+`exact` runs under one of two resource-server orderings. `authorization` (verify → resource →
+settle) is the default and what an absent `extra.paymentFlow` means. `upfront` (settle →
+resource → respond) is for resources needing on-chain finality before execution; `/verify` is
+not invoked and `/settle` both validates and commits.
+
+The payload you build is byte-identical either way. What changes is what a retry means: under
+`upfront`, a second 402 does **not** imply you have not been charged. An unrecognized flow
+throws rather than defaulting, because the guess a client wants least is the optimistic one.
+
 ## s402 → x402
 
 ### `toX402Requirements(s402)`

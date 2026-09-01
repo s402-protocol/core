@@ -77,6 +77,41 @@ async function handle(req: Request): Promise<Response> {
 
 Result: MPP clients pay via MPP (card, Lightning, Tempo EVM). s402 clients pay via s402 (Sui Exact, Prepaid, etc.). Neither client stack changes.
 
+## Where the credential goes — the `header` parameter
+
+An MPP challenge may carry `header="Payment-Authorization"` (mpp-specs #328, 2026-08-25),
+which tells the client to put the credential in `Payment-Authorization` instead of
+`Authorization`. Resources use it to keep `Authorization` free for ordinary authentication.
+
+Three obligations come with it, and two are `MUST NOT`s:
+
+- Send the credential in the field the challenge selected. One arriving anywhere else
+  **MUST NOT** satisfy the challenge.
+- Echo the value unchanged in the credential's `challenge` object — and **MUST NOT** add
+  the field when the challenge omitted it.
+- If you cannot honour the selection, send **no credential at all** for that challenge.
+
+`s402/compat/mpp` hands you a struct rather than sending anything, so ask it which field the
+challenge chose:
+
+```typescript
+import { parseWwwAuthenticatePayment, mppCredentialHeaderName } from 's402/compat/mpp';
+
+const challenge = parseWwwAuthenticatePayment(res.headers.get('WWW-Authenticate'));
+if (challenge) {
+  const field = mppCredentialHeaderName(challenge);  // 'Authorization' | 'Payment-Authorization'
+  request.headers.set(field, `Payment ${credential}`);
+}
+```
+
+A challenge naming any other field throws: the spec says to treat it as unrecognized and
+answer nothing, and a value you cannot use is worth failing on rather than passing along.
+
+**If you emit challenges with `header`,** it is also the eighth slot of the HMAC challenge
+binding — appended only when the parameter is present. s402 takes a pre-computed `digest` and
+never sees your secret, so it cannot check this for you. Set both or neither, or you will
+reject your own valid credentials.
+
 ## Migrating off MPP (if you want to)
 
 Some teams want to consolidate on a single protocol. s402's compat layer makes that mechanical — the read path ships with v0.3, letting an s402 client consume an MPP Charge 402 response using native s402 types:

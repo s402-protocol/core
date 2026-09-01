@@ -9,6 +9,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **An MPP challenge could select a different HTTP field for the credential, and s402 threw the
+  parameter away.** mpp-specs #328 (`ccab885`, 2026-08-25) lets a Payment challenge carry
+  `header="Payment-Authorization"` so a resource can keep `Authorization` for ordinary
+  authentication. `parseAuthParams` preserved the parameter; the struct returned by
+  `parseWwwAuthenticatePayment` dropped it. The consequence was not a parse error — s402 would
+  have handed back a credential destined for `Authorization` on a challenge that selected
+  `Payment-Authorization`, and the spec is explicit that a credential arriving in any other field
+  "MUST NOT satisfy the challenge." A client that cannot honour the selection is told, in the same
+  sentence, that it MUST NOT send a credential at all. The parameter now survives intake, an
+  unrecognized value is refused outright rather than passed along for someone to answer, and
+  `mppCredentialHeaderName()` names the field the challenge chose. Emitting it is supported too,
+  with the eighth HMAC binding slot it implies documented at the point of use.
+
+- **A compatibility claim in `compat/x402.ts` had outlived its target.** The module said s402's
+  outbound `payment-response` matched x402 V2's `PAYMENT-RESPONSE` case-insensitively, "so no emit
+  change is needed to be read by x402 clients." The header *name* still matches. The claim was
+  about the whole response, and x402 V2 has since added a third settlement state, so matching the
+  name says nothing about matching what is inside it. The comment now says what is true and points
+  at the open decision instead of implying there is not one.
+
 - **The documented size of the conformance suite was wrong everywhere it appeared.** The repo
   stated it three different ways — `README.md` said 133 vectors, `docs/specification.md` said
   161 in two places — while `spec/vectors/` holds **167 vectors across 14 files**. All three now
@@ -32,6 +52,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `Implementation: not-started`.
 
 ### Added
+
+- **`settlement_pending` is understood on intake, and it is never read as a failure.** x402 #3083
+  specified a non-terminal settle outcome — the transaction was broadcast, the wait for its
+  confirmation failed — and upstream now ships it in the reference resource server. Reading it as
+  a failure is the retry that pays twice, which is why upstream's own server re-settles the *same*
+  broadcast rather than building a new payload. `fromX402SettleResponse()` and
+  `fromX402SettleResponseHeaders()` classify an x402 settle result as `settled | pending | failed`
+  and mark both `settled` and `pending` as not retryable — the same answer for different reasons:
+  one has been paid, the other may have been. `pending` survives even when the transaction hash is
+  missing, which x402 forbids; a server violating its own spec leaves us unable to *name* the
+  transaction, which is not the same as it not existing.
+
+- **The `exact` scheme's payment flow is readable.** x402 #3240 / #3267 gave `exact` an `upfront`
+  flow (settle → resource → respond) signalled by `accepts[].extra.paymentFlow`. `exact` is the
+  only scheme s402 accepts inbound, so the scheme the entire interop claim rests on acquired a
+  second mode — and the intake type had no `extra` field at all, so the mode was not merely unread
+  but unreadable. `extra` is now on the intake type and `x402PaymentFlowOf()` reports the flow,
+  with an absent value meaning `authorization` because that is what the spec says absence means. An
+  unrecognized flow throws rather than defaulting: the guess a client wants least is the one that
+  says "you have not been charged." Emission is unchanged and was already correct.
+
+- **ADR-013 records where compatibility stops.** Understanding what x402 says on intake and saying
+  it on s402's own wire are different decisions, and the second belongs to ADR-007. The record
+  states the boundary as an absence — nothing in `compat/` may collapse a pending onto
+  `success: false` — and notes that ADR-007 already defines `s402EnvelopePending` while `gate.ts`
+  still emits the legacy flat shape, so the emission question is half-answered rather than
+  unexamined. `s402SettleResponse` is untouched.
+
+- **21 new tests** across `test/compat-mpp.test.ts` (8, alternate credential header) and
+  `test/compat-x402-settlement.test.ts` (13, settlement classification and payment flow). Every one
+  was watched failing before the code that makes it pass was written.
 
 - **Every ADR now records whether it was actually built.** All twelve carry an `Implementation:`
   field (`shipped` · `in-progress` · `not-started` · `upheld`), each determined against the code
