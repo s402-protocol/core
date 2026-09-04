@@ -7,8 +7,127 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **An unmodified x402 client can now pay an `s402Gate`, and there is a test that proves it against
+  the real upstream packages.** `test/interop-x402-client.test.ts` runs `@x402/fetch`'s
+  `wrapFetchWithPayment` over an `x402Client` (2.25.0, the version published from x402 @
+  `2cc7e9a6`) against the gate in-process and asserts paid content, one handler run, and a receipt
+  upstream's own decoder reads. Three pieces made it pass:
+  - `s402Gate({ x402: { resource } })` emits the 402 as an x402 V2 `PaymentRequired` envelope
+    (header and body). Opt-in, because s402's native 402 and x402's use the same `accepts` key
+    with different types on the same header — no one document satisfies both decoders.
+  - The gate reads x402 V2's `PAYMENT-SIGNATURE` and V1's `X-PAYMENT` unconditionally, through
+    `fromX402PayloadHeaders`, and remembers which dialect the payment arrived in (`dialect` on the
+    `.check()` result).
+  - An x402-dialect payment gets an x402-shaped receipt: `toX402SettleResponse` maps `txDigest` →
+    `transaction`, adds `network`, and keeps s402's fields alongside. Native payments get exactly
+    what they got before.
+- **`X402_UPSTREAM_PIN`** in `s402/compat/x402` names the x402 repo, sha, date and npm version this
+  layer was audited against. "Compatible with x402" now carries a date. Note the repo: development
+  moved to `x402-foundation/x402`; `coinbase/x402` is frozen at `dd927a26`.
+- `x402PayloadDialect`, `toX402SettleResponse`, `encodeX402SettleResponse`, `encodeX402V2Envelope`
+  exported from `s402/compat/x402`; `@x402/core` and `@x402/fetch` added as pinned
+  devDependencies (test-only; zero runtime dependencies unchanged).
+- **One demo you can run in sixty seconds, with no wallet, no keys and no network** — `pnpm demo`.
+  It encodes a 402 into a single HTTP header, decodes it from the client side, absorbs an x402 V1
+  payment body through the compat layer, and runs the 167 published conformance vectors against
+  the code in your clone. Source: `typescript/examples/quickstart.mjs`.
+  The demo reports **how many malformed headers were refused *and how many leaked through***,
+  because a suite that only ever watches things pass cannot distinguish a working validator from
+  one that returns `true` unconditionally. That counter was itself verified by poisoning a vector
+  and confirming the run turns red and exits non-zero.
+- **A README that says what is true today, and how to check it.** Two new sections: *What Is True
+  Today* (shipped / published / partial / not-runnable, per component) and *Receipts* (a command
+  for every claim the README makes about itself).
+- **`demo-api/` is reachable again.** It was absent from `pnpm-workspace.yaml`, had no README, and
+  depended on a published `s402@^0.6.0` while this repo ships `0.9.0` — so it was neither wired to
+  the workspace nor documented anywhere. It is now a workspace package on `workspace:*`, it
+  typechecks against the current source, and it has a README with the verified route (`/api/joke`,
+  not `/api/data`), the decoded 402 body, and an explicit statement that its facilitator is a mock
+  that settles nothing.
+- **`settlement_pending` is understood on intake, and it is never read as a failure.** x402 #3083
+  specified a non-terminal settle outcome — the transaction was broadcast, the wait for its
+  confirmation failed — and upstream now ships it in the reference resource server. Reading it as
+  a failure is the retry that pays twice, which is why upstream's own server re-settles the *same*
+  broadcast rather than building a new payload. `fromX402SettleResponse()` and
+  `fromX402SettleResponseHeaders()` classify an x402 settle result as `settled | pending | failed`
+  and mark both `settled` and `pending` as not retryable — the same answer for different reasons:
+  one has been paid, the other may have been. `pending` survives even when the transaction hash is
+  missing, which x402 forbids; a server violating its own spec leaves us unable to *name* the
+  transaction, which is not the same as it not existing.
+
+- **The `exact` scheme's payment flow is readable.** x402 #3240 / #3267 gave `exact` an `upfront`
+  flow (settle → resource → respond) signalled by `accepts[].extra.paymentFlow`. `exact` is the
+  only scheme s402 accepts inbound, so the scheme the entire interop claim rests on acquired a
+  second mode — and the intake type had no `extra` field at all, so the mode was not merely unread
+  but unreadable. `extra` is now on the intake type and `x402PaymentFlowOf()` reports the flow,
+  with an absent value meaning `authorization` because that is what the spec says absence means. An
+  unrecognized flow throws rather than defaulting: the guess a client wants least is the one that
+  says "you have not been charged." Emission is unchanged and was already correct.
+
+- **ADR-013 records where compatibility stops.** Understanding what x402 says on intake and saying
+  it on s402's own wire are different decisions, and the second belongs to ADR-007. The record
+  states the boundary as an absence — nothing in `compat/` may collapse a pending onto
+  `success: false` — and notes that ADR-007 already defines `s402EnvelopePending` while `gate.ts`
+  still emits the legacy flat shape, so the emission question is half-answered rather than
+  unexamined. `s402SettleResponse` is untouched.
+
+- **21 new tests** across `test/compat-mpp.test.ts` (8, alternate credential header) and
+  `test/compat-x402-settlement.test.ts` (13, settlement classification and payment flow). Every one
+  was watched failing before the code that makes it pass was written.
+
+- **Every ADR now records whether it was actually built.** All twelve carry an `Implementation:`
+  field (`shipped` · `in-progress` · `not-started` · `upheld`), each determined against the code
+  rather than the prose. `Status: Accepted` only ever meant *decided* — so a decision that shipped
+  and one that was ratified and quietly never built were indistinguishable on the page. The
+  conceived-to-shipped ratio is now countable: **7 of 12 shipped.** Two findings fell straight out
+  of the exercise: ADR-004's extensions framework ships as the `s402/extensions` subpath while its
+  `Status` still reads *Proposed*, and ADR-010's S16 turns out to be half-built — version binding
+  is enforced in the envelope, its scheme-digest half blocked on ADR-006.
+- **A regression test that fails when a documented vector count drifts from reality**
+  (`test/spec-doc-counts.test.ts`). It counts `spec/vectors/` and compares against every
+  `"<N> vectors across <M> files"` claim in `README.md` and `docs/specification.md`, and it
+  refuses to pass vacuously: if the wording changes so no claim is found, the test fails rather
+  than silently verifying nothing. Counts written into prose are derived values maintained by
+  hand, and three independent wrong numbers in one repo is what that looks like after a while.
+- **The README now says who s402 is for and who it is not for.** Deciding whether s402 fits
+  was previously left to the reader to infer from feature tables; it now says plainly that
+  EVM-only users wanting `exact` should use x402, and that s402 is a wire format rather than a
+  payments product.
+
 ### Fixed
 
+- **The README's headline compatibility sentence was false on the first leg of the round trip.**
+  "An x402 client can talk to an s402 server with zero modifications" had stood since April with
+  no test. Run against the unmodified upstream client it failed immediately: the client could not
+  read s402's 402 (`No client registered for x402 version: undefined`), and had it been handed the
+  requirements some other way, its V2 payment under `PAYMENT-SIGNATURE` would have been answered
+  with another 402. The gate's own comment said x402 clients were "accepted out of the box" — true
+  of V1's header and payload shape, false of V2's, and V2 is what the upstream client sends. The
+  sentence now says what the test proves: zero client changes, one server option. The migration
+  guide's header table also claimed x402 V1 uses `payment-required` / `payment-response`; V1 uses
+  a JSON body and `X-PAYMENT-RESPONSE` (`specs/transports-v1/http.md`). Corrected.
+
+- **An MPP challenge could select a different HTTP field for the credential, and s402 threw the
+  parameter away.** mpp-specs #328 (`ccab885`, 2026-08-25) lets a Payment challenge carry
+  `header="Payment-Authorization"` so a resource can keep `Authorization` for ordinary
+  authentication. `parseAuthParams` preserved the parameter; the struct returned by
+  `parseWwwAuthenticatePayment` dropped it. The consequence was not a parse error — s402 would
+  have handed back a credential destined for `Authorization` on a challenge that selected
+  `Payment-Authorization`, and the spec is explicit that a credential arriving in any other field
+  "MUST NOT satisfy the challenge." A client that cannot honour the selection is told, in the same
+  sentence, that it MUST NOT send a credential at all. The parameter now survives intake, an
+  unrecognized value is refused outright rather than passed along for someone to answer, and
+  `mppCredentialHeaderName()` names the field the challenge chose. Emitting it is supported too,
+  with the eighth HMAC binding slot it implies documented at the point of use.
+
+- **A compatibility claim in `compat/x402.ts` had outlived its target.** The module said s402's
+  outbound `payment-response` matched x402 V2's `PAYMENT-RESPONSE` case-insensitively, "so no emit
+  change is needed to be read by x402 clients." The header *name* still matches. The claim was
+  about the whole response, and x402 V2 has since added a third settlement state, so matching the
+  name says nothing about matching what is inside it. The comment now says what is true and points
+  at the open decision instead of implying there is not one.
 - **Every `s402/compat` import in the README failed at module resolution.** The README told you
   to `import { normalizeRequirements, … } from 's402/compat'` in four places — the opening
   paragraph, the compat example, the sub-path export table, and Design Principle 2. That subpath
@@ -30,26 +149,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   **x402 on Solana (~$0.25 per 1K calls) is cheaper than s402 Exact on Sui (~$7.00) for one-shot
   calls.** The table now marks the numbers as modelled, links the method, and states where a
   competitor wins.
-
-### Added
-
-- **One demo you can run in sixty seconds, with no wallet, no keys and no network** — `pnpm demo`.
-  It encodes a 402 into a single HTTP header, decodes it from the client side, absorbs an x402 V1
-  payment body through the compat layer, and runs the 167 published conformance vectors against
-  the code in your clone. Source: `typescript/examples/quickstart.mjs`.
-  The demo reports **how many malformed headers were refused *and how many leaked through***,
-  because a suite that only ever watches things pass cannot distinguish a working validator from
-  one that returns `true` unconditionally. That counter was itself verified by poisoning a vector
-  and confirming the run turns red and exits non-zero.
-- **A README that says what is true today, and how to check it.** Two new sections: *What Is True
-  Today* (shipped / published / partial / not-runnable, per component) and *Receipts* (a command
-  for every claim the README makes about itself).
-- **`demo-api/` is reachable again.** It was absent from `pnpm-workspace.yaml`, had no README, and
-  depended on a published `s402@^0.6.0` while this repo ships `0.9.0` — so it was neither wired to
-  the workspace nor documented anywhere. It is now a workspace package on `workspace:*`, it
-  typechecks against the current source, and it has a README with the verified route (`/api/joke`,
-  not `/api/data`), the decoded 402 body, and an explicit statement that its facilitator is a mock
-  that settles nothing.
 
 - **The documented size of the conformance suite was wrong everywhere it appeared.** The repo
   stated it three different ways — `README.md` said 133 vectors, `docs/specification.md` said
@@ -73,26 +172,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   false. The paragraph is now marked as an unbuilt plan and the record reads
   `Implementation: not-started`.
 
-### Added
+- **A native s402 receipt read through the x402 bridge came back with its transaction digest
+  erased.** `PAYMENT-RESPONSE` is x402 V2's settle header *and* s402's own
+  (`S402_HEADERS.PAYMENT_RESPONSE`), so `fromX402SettleResponseHeaders()` — documented to return
+  `null` for a native receipt so callers fall back to the native decoder — could never do so: it
+  matched on the name and consumed everything. A native `{ success: true, txDigest, receiptId }`
+  came back as `state: 'settled', transaction: ''`, telling the caller no transaction hash existed
+  when one did. The body now decides the dialect, the way `x402PayloadDialect` already did on the
+  payload side: s402's own receipt fields return `null`, x402's are classified, and
+  `X-PAYMENT-RESPONSE` needs no check because only x402 sends it.
 
-- **Every ADR now records whether it was actually built.** All twelve carry an `Implementation:`
-  field (`shipped` · `in-progress` · `not-started` · `upheld`), each determined against the code
-  rather than the prose. `Status: Accepted` only ever meant *decided* — so a decision that shipped
-  and one that was ratified and quietly never built were indistinguishable on the page. The
-  conceived-to-shipped ratio is now countable: **7 of 12 shipped.** Two findings fell straight out
-  of the exercise: ADR-004's extensions framework ships as the `s402/extensions` subpath while its
-  `Status` still reads *Proposed*, and ADR-010's S16 turns out to be half-built — version binding
-  is enforced in the envelope, its scheme-digest half blocked on ADR-006.
-- **A regression test that fails when a documented vector count drifts from reality**
-  (`test/spec-doc-counts.test.ts`). It counts `spec/vectors/` and compares against every
-  `"<N> vectors across <M> files"` claim in `README.md` and `docs/specification.md`, and it
-  refuses to pass vacuously: if the wording changes so no claim is found, the test fails rather
-  than silently verifying nothing. Counts written into prose are derived values maintained by
-  hand, and three independent wrong numbers in one repo is what that looks like after a while.
-- **The README now says who s402 is for and who it is not for.** Deciding whether s402 fits
-  was previously left to the reader to infer from feature tables; it now says plainly that
-  EVM-only users wanting `exact` should use x402, and that s402 is a wire format rather than a
-  payments product.
+- **A failed settlement holding a broadcast transaction hash invited a second payment.**
+  `fromX402SettleResponse()` marked every non-pending failure `retryable: true`, but upstream
+  `@x402/core` forwards `transaction` on any `errorReason` — so a caller trusting the flag would
+  build a fresh payload while holding the hash of a transaction that may already have landed. That
+  is the same double-pay this classifier was written to prevent, arriving under an ordinary error
+  instead of `settlement_pending`. A `failed` outcome is now retryable only when its `transaction`
+  is empty; a hash in hand is a reconciliation, never a retry.
+
+- **A payment carrying both protocol markers was answered in the wrong dialect.**
+  `x402PayloadDialect()` classified an `X-PAYMENT` payload as x402 on the presence of
+  `x402Version` alone, while `isX402()`, the note atop `http.ts`, and three existing tests all say
+  a payload carrying both `x402Version` and `s402Version` is native s402 — s402 is the superset.
+  A native client that included the x402 marker would have had its receipt translated into x402's
+  shape, losing `txDigest` and the s402 receipt fields it was waiting for. The dialect check now
+  requires `s402Version` to be absent, matching every other detector in the module.
+
+- **An empty `payment-signature` header broke payment for clients that sent none.** Both the
+  dialect check and `fromX402PayloadHeaders()` tested the header for presence rather than
+  truthiness, so `payment-signature: ""` counted as an x402 payment — and because that header is
+  read first, it also hid a perfectly valid `X-PAYMENT` sitting behind it. A request with an empty
+  header and a real native payload was rejected with an `INVALID_PAYLOAD` 402 carrying no
+  requirements (`JSON.parse('')` on the empty value), leaving the client nothing to retry against.
+  Both sites now use a truthiness check, matching x402's own server (`getHeader('payment-signature')
+  || getHeader('x-payment')`).
 
 ## [0.8.0] - 2026-06-28
 

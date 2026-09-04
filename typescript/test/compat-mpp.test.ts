@@ -15,6 +15,7 @@ import {
   fromMppChargeChallenge,
   toMppChargeRequest,
   toMppChargeChallenge,
+  mppCredentialHeaderName,
   type MppChallenge,
 } from '../src/compat/mpp.js';
 import { s402Error } from '../src/errors.js';
@@ -563,5 +564,130 @@ const challenge = toMppChargeChallenge({
     const decoded = decodeMppChargeRequest(parsed!);
     expect(decoded.amount).toBe('500');
     expect(decoded.recipient).toBe('0x' + 'a'.repeat(40));
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// Alternate credential header (mpp-specs #328, ccab885, 2026-08-25)
+//
+// A Payment challenge MAY carry `header="Payment-Authorization"` to select a
+// different HTTP field for the credential, so a resource can keep
+// `Authorization` for ordinary auth. The obligations the spec attaches are
+// unusually sharp, and two of them are MUST NOTs aimed at the client:
+//
+//   "Clients MUST echo it unchanged in the credential's `challenge` object."
+//   "Clients that do not support Payment-Authorization MUST NOT send a
+//    Payment credential for that challenge."
+//   "Clients MUST treat any other `header` value as an unrecognized challenge
+//    and MUST NOT send a Payment credential for it."
+//   "When the original challenge omitted `header`, clients MUST NOT include a
+//    `header` field in the credential's `challenge` object."
+//
+//   — specs/core/draft-httpauth-payment-00.md §Challenge parameters, §Credentials
+// ══════════════════════════════════════════════════════════════
+
+describe('alternate credential header — mpp-specs #328', () => {
+  const withHeader = (extra: string) =>
+    'Payment id="x7Tg2pLqR9mKvNwY3hBcZa", ' +
+    'realm="api.example.com", ' +
+    'method="tempo", ' +
+    'intent="charge", ' +
+    `request="${TEMPO_REQUEST_B64}"` +
+    extra;
+
+  it('preserves header="Payment-Authorization" through the struct boundary', () => {
+    const ch = parseWwwAuthenticatePayment(withHeader(', header="Payment-Authorization"'));
+    expect(ch?.header).toBe('Payment-Authorization');
+  });
+
+  it('leaves header undefined when the challenge omits it', () => {
+    const ch = parseWwwAuthenticatePayment(withHeader(''));
+    expect(ch?.header).toBeUndefined();
+  });
+
+  it('refuses a challenge naming any other field — MUST NOT send a credential', () => {
+    expect(() => parseWwwAuthenticatePayment(withHeader(', header="X-Pay"')))
+      .toThrow(/Payment-Authorization/);
+  });
+
+  it('names the field a challenge selected', () => {
+    expect(mppCredentialHeaderName({
+      id: 'a', realm: 'r', method: 'tempo', intent: 'charge', request: TEMPO_REQUEST_B64,
+    })).toBe('Authorization');
+    expect(mppCredentialHeaderName({
+      id: 'a', realm: 'r', method: 'tempo', intent: 'charge', request: TEMPO_REQUEST_B64,
+      header: 'Payment-Authorization',
+    })).toBe('Payment-Authorization');
+  });
+
+  it('echoes header out of a credential that carries it', () => {
+    const cred = {
+      challenge: {
+        id: 'x7Tg2pLqR9mKvNwY3hBcZa',
+        realm: 'api.example.com',
+        method: 'tempo',
+        intent: 'charge',
+        request: TEMPO_REQUEST_B64,
+        header: 'Payment-Authorization',
+      },
+      payload: { proof: '0xabc123' },
+    };
+    const decoded = decodeMppCredential(`Payment ${base64url(JSON.stringify(cred))}`);
+    expect(decoded.challenge.header).toBe('Payment-Authorization');
+  });
+
+  it('does not invent header on a credential that omits it', () => {
+    const cred = {
+      challenge: {
+        id: 'x7Tg2pLqR9mKvNwY3hBcZa',
+        realm: 'api.example.com',
+        method: 'tempo',
+        intent: 'charge',
+        request: TEMPO_REQUEST_B64,
+      },
+      payload: { proof: '0xabc123' },
+    };
+    const decoded = decodeMppCredential(`Payment ${base64url(JSON.stringify(cred))}`);
+    expect('header' in decoded.challenge).toBe(false);
+  });
+
+  it('rejects a credential echoing a header value the spec forbids', () => {
+    const cred = {
+      challenge: {
+        id: 'x7Tg2pLqR9mKvNwY3hBcZa',
+        realm: 'api.example.com',
+        method: 'tempo',
+        intent: 'charge',
+        request: TEMPO_REQUEST_B64,
+        header: 'X-Pay',
+      },
+      payload: { proof: '0xabc123' },
+    };
+    expect(() => decodeMppCredential(`Payment ${base64url(JSON.stringify(cred))}`))
+      .toThrow(/Payment-Authorization/);
+  });
+
+  it('emits header on the write path when asked, and omits it otherwise', () => {
+    const plain = toMppChargeChallenge({
+      method: 'tempo', amount: '1000', currency: 'USD', recipient: '0xabc',
+    });
+    expect('header' in plain).toBe(false);
+
+    const alt = toMppChargeChallenge({
+      method: 'tempo', amount: '1000', currency: 'USD', recipient: '0xabc',
+      header: 'Payment-Authorization',
+    });
+    expect(alt.header).toBe('Payment-Authorization');
+  });
+
+  it('roundtrips a header-selecting challenge back out of the parser', () => {
+    const emitted = toMppChargeChallenge({
+      method: 'tempo', amount: '1000', currency: 'USD', recipient: '0xabc',
+      id: 'fixed-id', realm: 'api.example.com', header: 'Payment-Authorization',
+    });
+    const header =
+      `Payment id="${emitted.id}", realm="${emitted.realm}", method="${emitted.method}", ` +
+      `intent="${emitted.intent}", request="${emitted.request}", header="${emitted.header}"`;
+    expect(parseWwwAuthenticatePayment(header)?.header).toBe('Payment-Authorization');
   });
 });

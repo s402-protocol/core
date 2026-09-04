@@ -9,10 +9,32 @@
  * s402-only fields (mandate, stream, escrow, unlock extensions) are stripped.
  */
 
-import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload } from '../types.js';
+import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload, s402SettleResponse } from '../types.js';
 import { S402_VERSION } from '../types.js';
 import { s402Error } from '../errors.js';
 import { isValidAmount, validateRequirementsShape, pickRequirementsFields } from '../http.js';
+
+// ══════════════════════════════════════════════════════════════
+// Upstream pin — the x402 HEAD this layer was last audited against
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * The exact upstream x402 commit this compat layer was audited and tested
+ * against. "Compatible with x402" means nothing without a date on it; this is
+ * the date. Bump it only after re-running `bin/check-x402-mpp-drift.sh` and
+ * the interop tests (`test/interop-x402-client.test.ts`) against the new HEAD.
+ *
+ * x402 development lives in the `x402-foundation/x402` repo (Linux Foundation)
+ * since 2026-04; `coinbase/x402` is frozen at `dd927a26` and must not be used
+ * as the reference.
+ */
+export const X402_UPSTREAM_PIN = {
+  repo: 'x402-foundation/x402',
+  sha: '2cc7e9a6880c08433b692666032862bcbea51187',
+  date: '2026-09-04',
+  /** Version of `@x402/core` / `@x402/fetch` published from that HEAD; the interop tests run against it. */
+  npmVersion: '2.25.0',
+} as const;
 
 // ══════════════════════════════════════════════════════════════
 // x402 types (minimal — just what we need for conversion)
@@ -44,6 +66,57 @@ export interface x402PaymentRequirements {
   description?: string;
   facilitatorUrl?: string;
   extensions?: Record<string, unknown>;
+  /**
+   * V2 scheme-specific metadata. Present on every upstream V2 requirement
+   * (upstream types it as REQUIRED), absent in V1.
+   *
+   * This field was missing from s402's intake type entirely until 2026-08-31,
+   * which mattered the moment `exact` grew a second payment flow: `paymentFlow`
+   * lives here, so its absence from the type made the flow unreadable rather
+   * than merely unread. See {@link x402PaymentFlowOf}.
+   */
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * The resource-server orderings `exact` may run under (x402 #3240, #3267,
+ * 2026-08-25/26, `specs/schemes/exact/scheme_exact.md`).
+ *
+ *   authorization — verify → resource → settle. The default, and what an
+ *                   absent `extra.paymentFlow` means.
+ *   upfront       — settle → resource → respond, for resources needing on-chain
+ *                   finality before execution. `/verify` is not invoked;
+ *                   `/settle` both validates and commits.
+ *
+ * Payload creation and settlement mechanics are identical between them, so the
+ * payload s402 builds is byte-identical either way. What differs is what a
+ * CLIENT may conclude from a retry: under `upfront` the charge may already have
+ * happened, so "402 again" does not mean "not yet charged."
+ */
+export type x402PaymentFlow = 'authorization' | 'upfront';
+
+/**
+ * Read the payment flow an x402 requirement declares.
+ *
+ * Absent means `authorization` — that is the spec's own reading ("When the
+ * resolved flow is not `authorization`, `accepts[].extra.paymentFlow` MUST be
+ * `upfront`"), not a convenience default here.
+ *
+ * A value that is neither throws. Defaulting an unrecognized flow to
+ * `authorization` would be a guess about resource-server ordering, and the
+ * guess a client wants least is the one that says "you have not been charged."
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` on an unrecognized `paymentFlow`.
+ */
+export function x402PaymentFlowOf(
+  req: Pick<x402PaymentRequirements, 'extra'>,
+): x402PaymentFlow {
+  const raw = req.extra?.paymentFlow;
+  if (raw === undefined || raw === null) return 'authorization';
+  if (raw === 'authorization' || raw === 'upfront') return raw;
+  throw new s402Error('INVALID_PAYLOAD',
+    `x402 extra.paymentFlow "${String(raw)}" is not a flow this build knows; ` +
+    `expected "authorization" or "upfront"`);
 }
 
 /**
@@ -98,6 +171,12 @@ export function fromX402Requirements(x402: x402PaymentRequirements, now?: number
     throw new s402Error('INVALID_PAYLOAD',
       `Invalid amount "${amount}": must be a non-negative integer string`);
   }
+  // Reject an unrecognized payment flow at the trust boundary. The flow itself
+  // does not change the payload s402 builds, so this is not a translation
+  // step — it is a refusal to accept a requirement whose resource-server
+  // ordering we cannot name. Same posture as the scheme check above: rejected
+  // loudly rather than silently relabeled.
+  x402PaymentFlowOf(x402);
   // M-1: Validate facilitatorUrl to prevent SSRF via dangerous URL schemes (file://, etc.)
   if (x402.facilitatorUrl !== undefined) {
     try {
@@ -191,6 +270,87 @@ function decodeBase64Json(b64: string): unknown {
   return JSON.parse(new TextDecoder().decode(bytes));
 }
 
+/** Unicode-safe JSON → standard base64, the encoding x402's header decoders accept. */
+function encodeBase64Json(value: unknown): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+}
+
+/**
+ * Which dialect did the client address us in?
+ *
+ * `'x402'` when the payment arrived under x402 V2's `PAYMENT-SIGNATURE`, or under
+ * `X-PAYMENT` carrying an `x402Version` (x402 V1 — s402 shares that header name
+ * and its own payloads never carry `x402Version`). `null` when no payment header
+ * is present or the payload is s402-native.
+ *
+ * A server that knows the dialect it was addressed in can answer in it — the
+ * `PAYMENT-RESPONSE` an x402 client decodes wants `transaction` and `network`,
+ * where s402's own carries `txDigest`. Answering in the caller's dialect is not
+ * a wire change for s402 clients, who never send these markers.
+ */
+export function x402PayloadDialect(headers: Headers): 'x402' | null {
+  // Truthiness, not presence: an empty `PAYMENT-SIGNATURE` is not a payment.
+  // x402's own resource server reads `getHeader('payment-signature') || ...`,
+  // so a stray empty header falls through to the next candidate there too.
+  // Presence alone would let `payment-signature: ""` shadow a real `X-PAYMENT`.
+  if (headers.get('payment-signature')) return 'x402';
+  const legacy = headers.get('x-payment');
+  if (!legacy || legacy.length > MAX_X402_HEADER_BYTES) return null;
+  try {
+    const decoded = decodeBase64Json(legacy);
+    if (decoded == null || typeof decoded !== 'object') return null;
+    // Both markers → s402, because s402 is the superset. Same rule as `isX402()`
+    // below and the note at the top of `http.ts`; classifying on `x402Version`
+    // alone would have this function disagree with every other detector here.
+    return 'x402Version' in (decoded as object) && !('s402Version' in (decoded as object)) ? 'x402' : null;
+  } catch {
+    return null; // malformed → let the native decoder produce the error
+  }
+}
+
+/**
+ * Translate an s402 settlement result into the x402 `SettleResponse` shape an
+ * x402 client's `PAYMENT-RESPONSE` decoder reads.
+ *
+ * Field map: `txDigest` → `transaction` (x402 requires the field; empty string
+ * when nothing was broadcast) · `errorCode` → `errorReason` · `error` →
+ * `errorMessage` · `actualAmount` → `amount`. `network` is required by x402
+ * and s402's settle response does not carry it, so the caller supplies it from
+ * the requirements the payment was verified against.
+ *
+ * s402-specific fields (`receiptId`, `finalityMs`, scheme object ids) are kept
+ * alongside: x402 decoders ignore unknown keys, and losing them would make an
+ * x402-dialect receipt strictly poorer than a native one for no reason.
+ *
+ * Direction note: this is s402 → x402 (emission in the caller's dialect). The
+ * reverse, `toS402SettleResponse`, deliberately does not exist — see ADR-013.
+ */
+export function toX402SettleResponse(s402: s402SettleResponse, network: string): x402SettleResponse {
+  const { success, txDigest, errorCode, error, actualAmount, ...rest } = s402;
+  const out: x402SettleResponse = {
+    ...rest,
+    success,
+    transaction: txDigest ?? '',
+    network,
+  };
+  if (txDigest !== undefined) out.txDigest = txDigest;
+  if (errorCode !== undefined) out.errorReason = errorCode;
+  if (error !== undefined) out.errorMessage = error;
+  if (actualAmount !== undefined) { out.amount = actualAmount; out.actualAmount = actualAmount; }
+  return out;
+}
+
+/** Encode an x402 `SettleResponse` for the `PAYMENT-RESPONSE` header. */
+export function encodeX402SettleResponse(response: x402SettleResponse): string {
+  return encodeBase64Json(response);
+}
+
+/** Encode an x402 V2 `PaymentRequired` envelope for the `PAYMENT-REQUIRED` header. */
+export function encodeX402V2Envelope(envelope: x402V2PaymentRequired): string {
+  return encodeBase64Json(envelope);
+}
+
 /**
  * Server-intake bridge: extract an **x402** payment payload from a request's
  * headers and normalize it to an **s402** payload.
@@ -198,9 +358,21 @@ function decodeBase64Json(b64: string): unknown {
  * This is the inbound half of "s402 servers transparently accept x402 clients"
  * (ADR-005). It lives in the OPT-IN `s402/compat/x402` layer — NOT the core —
  * so the s402 protocol core stays x402-free (AGENTS.md: "x402 compat is opt-in;
- * core has no x402 dependency"). The companion fact: s402's *outbound* settlement
- * header (`payment-response`) already matches x402 V2's `PAYMENT-RESPONSE`
- * case-insensitively, so no emit change is needed to be read by x402 clients.
+ * core has no x402 dependency").
+ *
+ * ⚠️ CORRECTED 2026-08-31. This comment used to end with a companion claim:
+ * that s402's outbound `payment-response` matches x402 V2's `PAYMENT-RESPONSE`
+ * case-insensitively, "so no emit change is needed to be read by x402 clients."
+ * The header NAME still matches. The claim was about the whole response and it
+ * outlived its target: x402 V2 added `settlement_pending` (#3083) and now ships
+ * it in the reference resource server, so the response x402 clients read has a
+ * third state — settled, failed, and broadcast-but-unconfirmed — while s402's
+ * `payment-response` body carries a boolean. Matching the header name says
+ * nothing about matching the states inside it.
+ *
+ * What s402 does about that today is INTAKE only — see
+ * {@link fromX402SettleResponse}. Whether s402's own settle envelope should
+ * emit a non-terminal state is an ADR-007 question and is deliberately open.
  *
  * Reads the x402 payload header — `PAYMENT-SIGNATURE` (x402 V2) or `X-PAYMENT`
  * (x402 V1) — base64-decodes the JSON, and runs {@link fromX402Payload}. The
@@ -228,8 +400,12 @@ function decodeBase64Json(b64: string): unknown {
 export function fromX402PayloadHeaders(headers: Headers): s402PaymentPayload | null {
   let raw: string | null = null;
   for (const name of X402_PAYLOAD_HEADERS) {
+    // Truthiness, not presence — matching x402's own server, which reads
+    // `getHeader('payment-signature') || getHeader('x-payment')`. An empty
+    // header is not a payment: taking it would both throw on `JSON.parse('')`
+    // and stop us from reading the real payload in the next header.
     const value = headers.get(name);
-    if (value != null) { raw = value; break; }
+    if (value) { raw = value; break; }
   }
   if (raw == null) return null;
   if (raw.length > MAX_X402_HEADER_BYTES) {
@@ -278,6 +454,240 @@ export function fromX402PayloadMeta(meta: Record<string, unknown>): s402PaymentP
     throw new s402Error('INVALID_PAYLOAD', 'x402 _meta payment payload must be a JSON object');
   }
   return fromX402Payload(raw as x402PaymentPayload);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Inbound settlement result (client intake — reading an x402 server's answer)
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * x402's non-terminal settle outcome (x402 #3083, `6dba93ed`; reference
+ * implementation `230e6a9a..94f9951a` in `x402ResourceServer.ts` as
+ * `SETTLEMENT_PENDING_REASON`, mirrored by Go's `x402.ErrSettlementPending`).
+ *
+ * It means: the transaction was broadcast, and the wait for its confirmation
+ * failed. Not that the payment failed.
+ */
+export const X402_SETTLEMENT_PENDING = 'settlement_pending' as const;
+
+/**
+ * x402 V2 `SettleResponse` as carried in `PAYMENT-RESPONSE` (base64 JSON).
+ * Only the fields s402 reads are typed; upstream also carries `extensions`,
+ * `extensionResponses` and `extra`, which pass through untouched.
+ */
+export interface x402SettleResponse {
+  success: boolean;
+  errorReason?: string;
+  errorMessage?: string;
+  payer?: string;
+  /** Broadcast transaction hash. Empty string when nothing was broadcast. */
+  transaction?: string;
+  network?: string;
+  /** Actual amount settled, for schemes where it can differ from the maximum. */
+  amount?: string;
+  [key: string]: unknown;
+}
+
+/** Common fields on every classified outcome. */
+interface x402SettlementBase {
+  transaction: string;
+  network?: string;
+  payer?: string;
+  /**
+   * Whether re-submitting a NEW payment is safe. `false` for `settled`,
+   * `pending`, and any `failed` that still carries a `transaction` hash — three
+   * different reasons for one answer: it has been paid, it may have been, or
+   * something was broadcast that nobody has reconciled yet.
+   */
+  retryable: boolean;
+  /** The response as received, so callers lose nothing this type does not name. */
+  raw: x402SettleResponse;
+}
+
+export interface x402SettlementSettled extends x402SettlementBase {
+  state: 'settled';
+  retryable: false;
+  amount?: string;
+}
+
+export interface x402SettlementPending extends x402SettlementBase {
+  state: 'pending';
+  retryable: false;
+  reason: typeof X402_SETTLEMENT_PENDING;
+  message?: string;
+}
+
+export interface x402SettlementFailed extends x402SettlementBase {
+  state: 'failed';
+  /**
+   * `true` only when nothing was broadcast (`transaction` is empty).
+   *
+   * Upstream `@x402/core` forwards `transaction` on any `errorReason`, so a
+   * failure can arrive holding a real broadcast hash. Building a fresh payload
+   * on that is the double-pay this module exists to prevent: reconcile the hash
+   * on chain first. Not a literal `true` for exactly this reason.
+   */
+  retryable: boolean;
+  reason?: string;
+  message?: string;
+}
+
+/**
+ * A settle outcome with the pending case pulled out of the boolean.
+ *
+ * 🛑 THERE IS DELIBERATELY NO `toS402SettleResponse` COUNTERPART. Mapping this
+ * back into `s402SettleResponse` would have to collapse `pending` onto
+ * `success: false`, which is exactly the double-pay this type exists to
+ * prevent. s402's own settle envelope stays as it is; see
+ * docs/adr/013-x402-intake-compatibility.md for why that boundary is where it
+ * is and what would move it.
+ */
+export type x402SettlementOutcome =
+  | x402SettlementSettled
+  | x402SettlementPending
+  | x402SettlementFailed;
+
+/**
+ * Classify an x402 settle response into settled / pending / failed.
+ *
+ * The one thing this function exists to prevent: reading
+ * `errorReason: "settlement_pending"` as a failure. Upstream's own resource
+ * server does a single automatic re-settle on it (`settleWithPendingRetry`) —
+ * a re-settle of the SAME broadcast, never a fresh payment — precisely because
+ * the money may already have moved. A caller that sees `success: false` and
+ * builds a new payload pays twice.
+ *
+ * ⚠️ `pending` is returned even when `transaction` is empty, which x402 V2
+ * forbids ("MUST be non-empty when errorReason is settlement_pending"). A
+ * server violating that leaves us unable to name the transaction; it does not
+ * make the transaction not exist. Downgrading a malformed pending to `failed`
+ * would trade a spec violation for a double charge.
+ *
+ * The same reasoning governs `failed`: upstream forwards `transaction` on any
+ * `errorReason`, so `retryable` is `true` only when that hash is empty. A
+ * failure holding a broadcast hash is a reconciliation, not a retry.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` if the response is not an object with a
+ *   boolean `success`.
+ */
+export function fromX402SettleResponse(response: x402SettleResponse): x402SettlementOutcome {
+  if (response == null || typeof response !== 'object' || Array.isArray(response)) {
+    throw new s402Error('INVALID_PAYLOAD', 'x402 settle response must be a JSON object');
+  }
+  if (typeof response.success !== 'boolean') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `x402 settle response "success" must be a boolean, got ${typeof response.success}`);
+  }
+  const transaction = typeof response.transaction === 'string' ? response.transaction : '';
+  const network = typeof response.network === 'string' ? response.network : undefined;
+  const payer = typeof response.payer === 'string' ? response.payer : undefined;
+  const message = typeof response.errorMessage === 'string' ? response.errorMessage : undefined;
+
+  if (response.success) {
+    return {
+      state: 'settled', retryable: false, transaction, network, payer,
+      amount: typeof response.amount === 'string' ? response.amount : undefined,
+      raw: response,
+    };
+  }
+  if (response.errorReason === X402_SETTLEMENT_PENDING) {
+    return {
+      state: 'pending', retryable: false, transaction, network, payer,
+      reason: X402_SETTLEMENT_PENDING, message, raw: response,
+    };
+  }
+  return {
+    // A hash in hand means something was broadcast. Retrying builds a SECOND
+    // payment for a transaction that may already have landed — the same trap as
+    // `settlement_pending`, arriving under an ordinary errorReason.
+    state: 'failed', retryable: transaction === '', transaction, network, payer,
+    reason: typeof response.errorReason === 'string' ? response.errorReason : undefined,
+    message, raw: response,
+  };
+}
+
+/**
+ * x402 settle-response header names, in preference order. V2 uses
+ * `PAYMENT-RESPONSE`; V1 used `X-PAYMENT-RESPONSE` (deprecated upstream but
+ * still emitted by older servers). Read case-insensitively, same as the
+ * payload headers above.
+ */
+const X402_SETTLE_HEADERS = ['payment-response', 'x-payment-response'] as const;
+
+/**
+ * The one settle header whose name s402 also uses natively
+ * (`S402_HEADERS.PAYMENT_RESPONSE` in `types.ts` is byte-identical). Reading it
+ * is therefore a dialect question, not a lookup.
+ */
+const AMBIGUOUS_SETTLE_HEADER = 'payment-response';
+
+/**
+ * Fields only a NATIVE s402 settle response carries. `txDigest` is the one that
+ * matters — s402 names the hash `txDigest` where x402 names it `transaction` —
+ * and the rest are s402's scheme-specific receipt fields.
+ */
+const S402_SETTLE_MARKERS = [
+  'txDigest', 'receiptId', 'finalityMs', 'actualAmount',
+  'depositId', 'balanceId', 'streamId', 'escrowId', 'errorCode', 'error',
+] as const;
+
+/** Fields only an x402 settle response carries. */
+const X402_SETTLE_MARKERS = ['transaction', 'network', 'errorReason', 'errorMessage', 'payer'] as const;
+
+/**
+ * Is this settle body written in x402's dialect? The body-side twin of
+ * {@link x402PayloadDialect}, and it follows the same rule: a native marker
+ * wins over an x402 one, because s402 is the superset. `false` covers both the
+ * native case and a body too bare to tell — on s402's own header name, the
+ * native decoder is the safe default for both.
+ */
+function settleBodyIsX402(body: object): boolean {
+  if (S402_SETTLE_MARKERS.some((k) => k in body)) return false;
+  return X402_SETTLE_MARKERS.some((k) => k in body);
+}
+
+/**
+ * Client-intake bridge: read an x402 server's settle result off the response
+ * headers and classify it.
+ *
+ * Returns `null` when no x402 settle result is there — no header at all, or a
+ * `PAYMENT-RESPONSE` that turns out to be a native s402 receipt — so a caller
+ * can fall back to the native `payment-response` decode path.
+ *
+ * ⚠️ `PAYMENT-RESPONSE` is s402's own settle header name as well as x402 V2's,
+ * so the name cannot answer the question and the body has to. A native receipt
+ * `{ success, txDigest, receiptId }` read as x402 would come back as
+ * `state: 'settled', transaction: ''` — the digest and the receipt id silently
+ * dropped, and the caller told a hash does not exist when it does.
+ * `X-PAYMENT-RESPONSE` is x402-only and needs no such check.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` if an x402 header IS present but
+ *   oversized, not base64-JSON, or not a valid settle response.
+ */
+export function fromX402SettleResponseHeaders(headers: Headers): x402SettlementOutcome | null {
+  let raw: string | null = null;
+  let ambiguous = false;
+  for (const name of X402_SETTLE_HEADERS) {
+    const value = headers.get(name);
+    if (value) { raw = value; ambiguous = name === AMBIGUOUS_SETTLE_HEADER; break; }
+  }
+  if (raw == null) return null;
+  if (raw.length > MAX_X402_HEADER_BYTES) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `x402 settle response header exceeds maximum size (${raw.length} > ${MAX_X402_HEADER_BYTES})`);
+  }
+  let decoded: unknown;
+  try {
+    decoded = decodeBase64Json(raw);
+  } catch (e) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Failed to decode x402 settle response header: ${e instanceof Error ? e.message : 'invalid base64 or JSON'}`);
+  }
+  if (decoded == null || typeof decoded !== 'object' || Array.isArray(decoded)) {
+    throw new s402Error('INVALID_PAYLOAD', 'x402 settle response must be a JSON object');
+  }
+  if (ambiguous && !settleBodyIsX402(decoded)) return null;
+  return fromX402SettleResponse(decoded as x402SettleResponse);
 }
 
 /** x402's A2A payload metadata key (`x402.payment.payload` on the task/message metadata). */

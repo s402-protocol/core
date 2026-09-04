@@ -3,7 +3,7 @@
 [![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
 
-**Chain-agnostic HTTP 402 protocol.** Six payment schemes for AI agent commerce. Wire-compatible with x402. Zero runtime dependencies. Includes an optional compat layer (`s402/compat/x402`) for normalizing x402 input.
+**Chain-agnostic HTTP 402 protocol.** Six payment schemes for AI agent commerce. Wire-compatible with x402 — audited and tested against x402 @ `2cc7e9a6` (`x402-foundation/x402`, 2026-09-04; `@x402/core` 2.25.0). Zero runtime dependencies. Includes an optional compat layer (`s402/compat/x402`) for normalizing x402 input.
 
 s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for six payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)).
 
@@ -174,7 +174,7 @@ Client                    Server                  Facilitator
   |<-- 200 + data -----------|                         |
 ```
 
-This is the x402-compatible baseline. An x402 client can talk to an s402 server using this scheme with zero modifications.
+This is the x402-compatible baseline. An **unmodified x402 client** (`@x402/fetch`, `x402Client`) gets paid content from an `s402Gate` with **zero client changes and one server option**, `x402: { resource }` — the gate then emits x402's 402 envelope, accepts x402's `PAYMENT-SIGNATURE`, and answers with a receipt x402's decoder reads. Proven in `typescript/test/interop-x402-client.test.ts` against the real upstream packages. Payment *intake* needs no option at all: an x402 payload is accepted by every gate. See [ADR-015](./docs/adr/015-x402-dialect-at-the-gate.md) for why the 402 half is opt-in.
 
 ### Prepaid (v0.1)
 
@@ -294,6 +294,23 @@ const requirements = normalizeRequirements(rawJsonObject);
 // Convert s402 -> x402 V1 for legacy clients
 const x402Reqs = toX402Requirements(requirements);
 ```
+
+Serving **x402 clients** from an s402 route is a gate option, not a compat call:
+
+```typescript
+import { s402Gate } from 's402';
+
+const gate = s402Gate({
+  server,
+  requirements,
+  // Emit the 402 as an x402 V2 PaymentRequired envelope so an unmodified
+  // @x402/fetch client can read it. Intake of x402 payments is always on.
+  x402: { resource: { url: 'https://api.example.com/paid', mimeType: 'application/json' } },
+});
+```
+
+The compat layer records the upstream commit it was audited against as `X402_UPSTREAM_PIN`
+(`s402/compat/x402`). If that sha is old, the claim is old.
 
 ### Error handling
 

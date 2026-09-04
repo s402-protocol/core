@@ -21,6 +21,15 @@
  *   - Emit MppChallenge objects with JCS-canonicalized + base64url-encoded
  *     `request` parameter ready for `WWW-Authenticate: Payment` header
  *
+ * Scope (2026-08-31, mpp-specs #328 `ccab885`):
+ *   - The `header` challenge parameter, which selects `Payment-Authorization`
+ *     instead of `Authorization` for the credential. s402 hands callers a
+ *     struct rather than sending anything, so its whole obligation is to
+ *     preserve the parameter, refuse an unrecognized value, and name the
+ *     selected field — see {@link mppCredentialHeaderName}. A caller that
+ *     still assumes `Authorization` will put the credential in a field the
+ *     server is required to ignore.
+ *
  * Not in scope here:
  *   - Session intent (cumulative voucher model; needs Prepaid translation shim)
  *   - HMAC-SHA256 challenge binding computation (server-side, needs secret).
@@ -46,10 +55,30 @@ import { canonicalizeToString } from '../canonicalization.js';
 // ══════════════════════════════════════════════════════════════
 
 /**
+ * The default HTTP field carrying a Payment credential, per core spec
+ * §Credentials. A challenge that omits the `header` auth-param selects this.
+ */
+export const MPP_CREDENTIAL_HEADER_DEFAULT = 'Authorization' as const;
+
+/**
+ * The only alternate field a Payment challenge may select (mpp-specs #328,
+ * 2026-08-25). The spec allows exactly this one value — "this specification
+ * does not allow any other field name, to avoid collision with other HTTP
+ * fields" — and requires clients to treat any other value as an unrecognized
+ * challenge they MUST NOT answer.
+ */
+export const MPP_CREDENTIAL_HEADER_ALTERNATE = 'Payment-Authorization' as const;
+
+/** The HTTP field a Payment credential may travel in. */
+export type MppCredentialHeader =
+  | typeof MPP_CREDENTIAL_HEADER_DEFAULT
+  | typeof MPP_CREDENTIAL_HEADER_ALTERNATE;
+
+/**
  * Parsed `WWW-Authenticate: Payment` challenge parameters.
  *
  * Required params per core spec §5.1.1: id, realm, method, intent, request.
- * Optional params per §5.1.2: digest, expires, description, opaque.
+ * Optional params per §5.1.2: digest, expires, description, opaque, header.
  * `request` is a base64url-nopad JCS-encoded JSON object — decoded separately
  * by intent-specific parsers (see {@link decodeMppChargeRequest}).
  */
@@ -63,6 +92,34 @@ export interface MppChallenge {
   expires?: string;
   description?: string;
   opaque?: string;
+  /**
+   * Selects `Payment-Authorization` for the credential instead of the default
+   * `Authorization`, so the resource can keep `Authorization` for ordinary
+   * authentication (mpp-specs #328). Absent means `Authorization`.
+   *
+   * ⚠️ Two obligations ride on this field, and both are the client's:
+   * the value MUST be echoed unchanged into the credential's `challenge`
+   * object, and the credential MUST be sent in the field this selects — a
+   * credential arriving anywhere else "MUST NOT satisfy the challenge."
+   *
+   * ⚠️ It is also the 8th HMAC binding slot. A server that emits `header` and
+   * computes a seven-slot digest will reject its own valid credentials. See
+   * {@link toMppChargeChallenge}.
+   */
+  header?: typeof MPP_CREDENTIAL_HEADER_ALTERNATE;
+}
+
+/**
+ * Name the HTTP field a challenge selected for its credential.
+ *
+ * This exists because s402 never sends the credential itself — it hands the
+ * caller a struct. Before mpp-specs #328 the field name was a constant and
+ * needed no accessor; now it is challenge-selected, and a caller that keeps
+ * assuming `Authorization` will put the credential somewhere the server is
+ * required to ignore.
+ */
+export function mppCredentialHeaderName(challenge: MppChallenge): MppCredentialHeader {
+  return challenge.header ?? MPP_CREDENTIAL_HEADER_DEFAULT;
 }
 
 /**
@@ -100,6 +157,13 @@ export interface MppCredential {
     expires?: string;
     description?: string;
     opaque?: string;
+    /**
+     * Present iff the original challenge carried `header`. Clients MUST echo
+     * it unchanged and MUST NOT add it when the challenge omitted it — an
+     * invented field changes the binding input and gets a valid credential
+     * rejected.
+     */
+    header?: typeof MPP_CREDENTIAL_HEADER_ALTERNATE;
   };
   source?: string;
   payload: Record<string, unknown>;
@@ -170,6 +234,25 @@ export function parseWwwAuthenticatePayment(
       `Payment challenge missing required auth-params: ${missing.join(', ')}`);
   }
 
+  // 🔑 THE WHITELIST IS THE TRUST BOUNDARY, AND IT IS ALSO WHERE A NEW SPEC
+  // PARAMETER GOES MISSING. `parseAuthParams` preserves everything it reads;
+  // this return statement is what decides which of it survives. `header`
+  // (mpp-specs #328) was dropped here for six days, and the consequence was
+  // not a parse failure — s402 would have emitted a credential in
+  // `Authorization` for a challenge that selected `Payment-Authorization`,
+  // which is a MUST NOT, not a mismatch.
+  //
+  // Any other value is an unrecognized challenge the client MUST NOT answer.
+  // Throwing is the only response that makes answering it impossible:
+  // returning the challenge with the bad value intact leaves a caller free to
+  // build a credential from it, and returning null would claim there was no
+  // Payment challenge at all.
+  if (params.header !== undefined && params.header !== MPP_CREDENTIAL_HEADER_ALTERNATE) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Payment challenge selects credential field "${params.header}"; the spec allows only ` +
+      `"${MPP_CREDENTIAL_HEADER_ALTERNATE}". Treat this challenge as unrecognized and send no credential.`);
+  }
+
   return {
     id: params.id!,
     realm: params.realm!,
@@ -180,6 +263,7 @@ export function parseWwwAuthenticatePayment(
     expires: params.expires,
     description: params.description,
     opaque: params.opaque,
+    header: params.header as typeof MPP_CREDENTIAL_HEADER_ALTERNATE | undefined,
   };
 }
 
@@ -522,6 +606,20 @@ export function decodeMppCredential(
   if (typeof ch.expires === 'string') credential.challenge.expires = ch.expires;
   if (typeof ch.description === 'string') credential.challenge.description = ch.description;
   if (typeof ch.opaque === 'string') credential.challenge.opaque = ch.opaque;
+  // Echo `header` when the credential carries it, and NEVER synthesize it when
+  // it does not: "When the original challenge omitted `header`, clients MUST
+  // NOT include a `header` field in the credential's `challenge` object."
+  // Both directions matter to a server recomputing the binding, because the
+  // 8th HMAC slot is appended only when the parameter is present — an invented
+  // field and a dropped one are the same failure with opposite signs.
+  if (ch.header !== undefined) {
+    if (ch.header !== MPP_CREDENTIAL_HEADER_ALTERNATE) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `Credential challenge echoes credential field "${String(ch.header)}"; the spec allows only ` +
+        `"${MPP_CREDENTIAL_HEADER_ALTERNATE}"`);
+    }
+    credential.challenge.header = MPP_CREDENTIAL_HEADER_ALTERNATE;
+  }
   if (typeof obj.source === 'string') credential.source = obj.source;
   return credential;
 }
@@ -665,6 +763,19 @@ export interface ToMppChargeInput {
   opaque?: string;
   /** HMAC digest of challenge fields for stateless challenge-binding. Optional. Per mpp-specs §Challenge-Binding Secret Management (PR #233), callers that compute digests MUST keep the secret server-side only. */
   digest?: string;
+  /**
+   * Select `Payment-Authorization` for the credential instead of the default
+   * `Authorization` (mpp-specs #328). Emit this when the resource needs
+   * `Authorization` for ordinary authentication.
+   *
+   * ⚠️ EMITTING THIS CHANGES YOUR BINDING INPUT. §Challenge Binding appends an
+   * eighth HMAC slot carrying this value, and only when the parameter is
+   * present. s402 accepts a pre-computed `digest` and never sees your secret,
+   * so it cannot check this for you: a server that sets `header` here and
+   * computes a seven-slot digest will reject credentials that are perfectly
+   * valid. Set both or neither.
+   */
+  header?: typeof MPP_CREDENTIAL_HEADER_ALTERNATE;
 }
 
 /**
@@ -750,6 +861,14 @@ export function toMppChargeChallenge(input: ToMppChargeInput): MppChallenge {
   if (input.expires) challenge.expires = input.expires;
   if (input.description) challenge.description = input.description;
   if (input.opaque) challenge.opaque = input.opaque;
+  if (input.header !== undefined) {
+    if (input.header !== MPP_CREDENTIAL_HEADER_ALTERNATE) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `MPP challenge "header" must be "${MPP_CREDENTIAL_HEADER_ALTERNATE}"; ` +
+        `servers MUST NOT emit any other value`);
+    }
+    challenge.header = MPP_CREDENTIAL_HEADER_ALTERNATE;
+  }
   return challenge;
 }
 

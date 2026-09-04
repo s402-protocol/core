@@ -1,7 +1,13 @@
 # ADR-007: Settlement Response Envelope
 
 **Status:** Draft (v2 — post /vet wave review)
-**Implementation:** shipped
+**Implementation:** in-progress
+> ⚠️ **Corrected 2026-08-31.** This read `shipped` from 2026-04-19 until tonight, and it was
+> measuring the wrong thing. The **types** shipped — `s402Envelope` and its four variants are
+> defined in `typescript/src/envelope.ts`, tested in `test/envelope.test.ts`, and re-exported
+> from `index.ts`. The **wire never did.** No code path in `src/` builds or emits an envelope;
+> `gate.ts:186` still writes the legacy flat `s402SettleResponse`. The `Supersedes:` line below
+> therefore describes an intent, not a state. See ADR-014 for the scope of actually landing it.
 **Date:** 2026-04-19
 **Related:** ADR-001 (Protocol Boundaries), ADR-006 (Version Negotiation), ADR-008 (Safety Invariants S9-S13), ADR-009 (Open Gaps), INVARIANTS S7, S8
 **Supersedes:** `s402SettleResponse` (legacy flat shape in `typescript/src/scheme.ts`)
