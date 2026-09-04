@@ -123,6 +123,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   false. The paragraph is now marked as an unbuilt plan and the record reads
   `Implementation: not-started`.
 
+- **A native s402 receipt read through the x402 bridge came back with its transaction digest
+  erased.** `PAYMENT-RESPONSE` is x402 V2's settle header *and* s402's own
+  (`S402_HEADERS.PAYMENT_RESPONSE`), so `fromX402SettleResponseHeaders()` — documented to return
+  `null` for a native receipt so callers fall back to the native decoder — could never do so: it
+  matched on the name and consumed everything. A native `{ success: true, txDigest, receiptId }`
+  came back as `state: 'settled', transaction: ''`, telling the caller no transaction hash existed
+  when one did. The body now decides the dialect, the way `x402PayloadDialect` already did on the
+  payload side: s402's own receipt fields return `null`, x402's are classified, and
+  `X-PAYMENT-RESPONSE` needs no check because only x402 sends it.
+
+- **A failed settlement holding a broadcast transaction hash invited a second payment.**
+  `fromX402SettleResponse()` marked every non-pending failure `retryable: true`, but upstream
+  `@x402/core` forwards `transaction` on any `errorReason` — so a caller trusting the flag would
+  build a fresh payload while holding the hash of a transaction that may already have landed. That
+  is the same double-pay this classifier was written to prevent, arriving under an ordinary error
+  instead of `settlement_pending`. A `failed` outcome is now retryable only when its `transaction`
+  is empty; a hash in hand is a reconciliation, never a retry.
+
+- **A payment carrying both protocol markers was answered in the wrong dialect.**
+  `x402PayloadDialect()` classified an `X-PAYMENT` payload as x402 on the presence of
+  `x402Version` alone, while `isX402()`, the note atop `http.ts`, and three existing tests all say
+  a payload carrying both `x402Version` and `s402Version` is native s402 — s402 is the superset.
+  A native client that included the x402 marker would have had its receipt translated into x402's
+  shape, losing `txDigest` and the s402 receipt fields it was waiting for. The dialect check now
+  requires `s402Version` to be absent, matching every other detector in the module.
+
+- **An empty `payment-signature` header broke payment for clients that sent none.** Both the
+  dialect check and `fromX402PayloadHeaders()` tested the header for presence rather than
+  truthiness, so `payment-signature: ""` counted as an x402 payment — and because that header is
+  read first, it also hid a perfectly valid `X-PAYMENT` sitting behind it. A request with an empty
+  header and a real native payload was rejected with an `INVALID_PAYLOAD` 402 carrying no
+  requirements (`JSON.parse('')` on the empty value), leaving the client nothing to retry against.
+  Both sites now use a truthiness check, matching x402's own server (`getHeader('payment-signature')
+  || getHeader('x-payment')`).
+
 ### Added
 
 - **`settlement_pending` is understood on intake, and it is never read as a failure.** x402 #3083

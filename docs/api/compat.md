@@ -122,7 +122,7 @@ function fromX402SettleResponse(response: x402SettleResponse): x402SettlementOut
 type x402SettlementOutcome =
   | { state: 'settled'; retryable: false; transaction: string; /* ... */ }
   | { state: 'pending';  retryable: false; transaction: string; reason: 'settlement_pending' }
-  | { state: 'failed';   retryable: true;  transaction: string; reason?: string };
+  | { state: 'failed';   retryable: boolean; transaction: string; reason?: string };
 ```
 
 x402 V2 has three settlement outcomes, not two. `settlement_pending` means **the transaction
@@ -134,8 +134,23 @@ and retries builds a second payment for a transaction that already went through.
 reasons — one has been paid, the other may have been. Reconcile the `transaction` hash on chain
 before doing anything else.
 
-Reads `PAYMENT-RESPONSE` (V2) then `X-PAYMENT-RESPONSE` (V1), case-insensitively. Returns
-`null` when neither is present, so you can fall back to the native s402 decode path.
+**A `failed` outcome is only `retryable` when its `transaction` is empty.** Upstream `@x402/core`
+forwards the broadcast hash on any `errorReason`, so a failure can arrive holding a real hash —
+and building a fresh payload on that pays twice, exactly as retrying a `pending` would. A hash in
+hand is a reconciliation, never a retry.
+
+Reads `PAYMENT-RESPONSE` (V2) then `X-PAYMENT-RESPONSE` (V1), case-insensitively. Returns `null`
+when there is no x402 settle result to classify, so you can fall back to the native s402 decode
+path.
+
+::: warning `PAYMENT-RESPONSE` is also s402's own header name
+The header name is byte-identical to `S402_HEADERS.PAYMENT_RESPONSE`, so it cannot say which
+dialect answered — the body does. A body carrying s402's own receipt fields (`txDigest`,
+`receiptId`, `errorCode`, …) returns `null` and belongs to the native decoder; one carrying
+x402's (`transaction`, `network`, `errorReason`, …) is classified. A body too bare to tell also
+returns `null`, since the header is s402's own. `X-PAYMENT-RESPONSE` is x402-only and is always
+classified.
+:::
 
 ::: warning s402's own settle response has two states, not three
 This helper classifies what an **x402 server** sent you. s402's own `payment-response` body is
@@ -214,7 +229,9 @@ s402's own fields are kept alongside; x402 decoders ignore unknown keys. The rev
 
 ### `x402PayloadDialect(headers)`
 
-`'x402'` when a request's payment arrived under `PAYMENT-SIGNATURE` (x402 V2) or under `X-PAYMENT` carrying an `x402Version` (x402 V1); `null` for a native s402 payment or no payment. The gate uses this to answer the receipt in the dialect it was addressed in.
+`'x402'` when a request's payment arrived under a non-empty `PAYMENT-SIGNATURE` (x402 V2), or under `X-PAYMENT` carrying an `x402Version` and no `s402Version` (x402 V1); `null` for a native s402 payment or no payment. The gate uses this to answer the receipt in the dialect it was addressed in.
+
+A payload carrying **both** version markers is s402, because s402 is the superset — the same rule `isX402()` applies. And an empty `PAYMENT-SIGNATURE` is not a payment: it is skipped, so it can neither be mistaken for an x402 request nor shadow a real `X-PAYMENT` sitting behind it.
 
 ## Serving x402 clients from a gate
 

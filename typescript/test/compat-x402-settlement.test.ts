@@ -148,3 +148,59 @@ describe('x402PaymentFlowOf — exact gained an upfront flow', () => {
     expect(fromX402Envelope(envelope).amount).toBe('1000');
   });
 });
+
+// ══════════════════════════════════════════════════════════════
+// The `payment-response` header name is shared with native s402
+// ══════════════════════════════════════════════════════════════
+
+describe('fromX402SettleResponseHeaders — PAYMENT-RESPONSE is also s402\'s own header name', () => {
+  // S402_HEADERS.PAYMENT_RESPONSE is byte-identical to x402 V2's PAYMENT-RESPONSE,
+  // so the header name alone cannot say which dialect answered. The body can:
+  // a native receipt carries `txDigest`/`receiptId`, an x402 one `transaction`/`network`.
+  it('returns null for a native s402 receipt so the caller falls back to the native decoder', () => {
+    const native = { success: true, txDigest: 'D1', receiptId: 'R1', finalityMs: 42 };
+    expect(fromX402SettleResponseHeaders(new Headers({ 'payment-response': enc(native) }))).toBeNull();
+  });
+
+  it('returns null for a native s402 failure receipt (error/errorCode, not errorReason)', () => {
+    const native = { success: false, error: 'insufficient funds', errorCode: 'INSUFFICIENT_BALANCE' };
+    expect(fromX402SettleResponseHeaders(new Headers({ 'payment-response': enc(native) }))).toBeNull();
+  });
+
+  it('still classifies a genuine x402 settle response under the same header name', () => {
+    const out = fromX402SettleResponseHeaders(
+      new Headers({ 'payment-response': enc({ success: true, transaction: '0xabc', network: 'base-sepolia' }) }),
+    );
+    expect(out?.state).toBe('settled');
+    expect(out?.transaction).toBe('0xabc');
+  });
+
+  it('a body with no dialect marker at all falls back to the native path', () => {
+    expect(fromX402SettleResponseHeaders(new Headers({ 'payment-response': enc({ success: true }) }))).toBeNull();
+  });
+
+  it('X-PAYMENT-RESPONSE is x402-only, so it needs no disambiguation', () => {
+    expect(fromX402SettleResponseHeaders(new Headers({ 'x-payment-response': enc({ success: true }) }))?.state)
+      .toBe('settled');
+  });
+});
+
+describe('fromX402SettleResponse — a failure holding a broadcast hash is not retryable', () => {
+  it('does not invite a second payment when the first one has a transaction hash', () => {
+    const out = fromX402SettleResponse({
+      success: false, errorReason: 'unexpected_settle_error',
+      transaction: '0xbroadcast', network: 'base-sepolia',
+    });
+    expect(out.state).toBe('failed');
+    expect(out.transaction).toBe('0xbroadcast');
+    expect(out.retryable).toBe(false);
+  });
+
+  it('keeps retryable true when nothing was broadcast', () => {
+    const out = fromX402SettleResponse({
+      success: false, errorReason: 'insufficient_funds', transaction: '', network: 'base-sepolia',
+    });
+    expect(out.state).toBe('failed');
+    expect(out.retryable).toBe(true);
+  });
+});

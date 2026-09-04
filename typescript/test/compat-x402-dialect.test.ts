@@ -42,6 +42,23 @@ describe('x402PayloadDialect — which dialect did the client address us in?', (
     const huge = 'A'.repeat(64 * 1024 + 4);
     expect(x402PayloadDialect(new Headers({ 'x-payment': huge }))).toBeNull();
   });
+
+  it('X-PAYMENT carrying BOTH version markers → null (s402 is the superset, same rule as isX402)', () => {
+    const both = {
+      s402Version: S402_VERSION, x402Version: 2, scheme: 'exact',
+      payload: { transaction: 't', signature: 's' },
+    };
+    expect(x402PayloadDialect(new Headers({ 'x-payment': enc(both) }))).toBeNull();
+  });
+
+  it('an EMPTY PAYMENT-SIGNATURE is not a payment (x402\'s own server uses a truthiness check)', () => {
+    expect(x402PayloadDialect(new Headers({ 'payment-signature': '' }))).toBeNull();
+  });
+
+  it('an empty PAYMENT-SIGNATURE does not shadow a native X-PAYMENT', () => {
+    const native = { s402Version: S402_VERSION, scheme: 'exact', payload: { transaction: 't', signature: 's' } };
+    expect(x402PayloadDialect(new Headers({ 'payment-signature': '', 'x-payment': enc(native) }))).toBeNull();
+  });
 });
 
 describe('toX402SettleResponse — the receipt in x402\'s dialect', () => {
