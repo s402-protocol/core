@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "type": "module",
   "private": true,
-  "description": "Demo API showcasing the s402 protocol — pay for endpoints with SUI",
+  "description": "Demo API showcasing the s402 protocol \u2014 pay for endpoints with SUI",
   "scripts": {
     "dev": "tsx src/server.ts",
     "build": "tsc",
@@ -11,7 +11,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "s402": "^0.6.0"
+    "s402": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

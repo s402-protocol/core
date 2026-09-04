@@ -111,6 +111,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `x402PayloadDialect`, `toX402SettleResponse`, `encodeX402SettleResponse`, `encodeX402V2Envelope`
   exported from `s402/compat/x402`; `@x402/core` and `@x402/fetch` added as pinned
   devDependencies (test-only; zero runtime dependencies unchanged).
+- **One demo you can run in sixty seconds, with no wallet, no keys and no network** — `pnpm demo`.
+  It encodes a 402 into a single HTTP header, decodes it from the client side, absorbs an x402 V1
+  payment body through the compat layer, and runs the 167 published conformance vectors against
+  the code in your clone. Source: `typescript/examples/quickstart.mjs`.
+  The demo reports **how many malformed headers were refused *and how many leaked through***,
+  because a suite that only ever watches things pass cannot distinguish a working validator from
+  one that returns `true` unconditionally. That counter was itself verified by poisoning a vector
+  and confirming the run turns red and exits non-zero.
+- **A README that says what is true today, and how to check it.** Two new sections: *What Is True
+  Today* (shipped / published / partial / not-runnable, per component) and *Receipts* (a command
+  for every claim the README makes about itself).
+- **`demo-api/` is reachable again.** It was absent from `pnpm-workspace.yaml`, had no README, and
+  depended on a published `s402@^0.6.0` while this repo ships `0.9.0` — so it was neither wired to
+  the workspace nor documented anywhere. It is now a workspace package on `workspace:*`, it
+  typechecks against the current source, and it has a README with the verified route (`/api/joke`,
+  not `/api/data`), the decoded 402 body, and an explicit statement that its facilitator is a mock
+  that settles nothing.
 
 - **`settlement_pending` is understood on intake, and it is never read as a failure.** x402 #3083
   specified a non-terminal settle outcome — the transaction was broadcast, the wait for its
@@ -247,6 +264,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   about the whole response, and x402 V2 has since added a third settlement state, so matching the
   name says nothing about matching what is inside it. The comment now says what is true and points
   at the open decision instead of implying there is not one.
+- **Every `s402/compat` import in the README failed at module resolution.** The README told you
+  to `import { normalizeRequirements, … } from 's402/compat'` in four places — the opening
+  paragraph, the compat example, the sub-path export table, and Design Principle 2. That subpath
+  is not exported; copying the example produced
+  `ERR_PACKAGE_PATH_NOT_EXPORTED: Package subpath './compat' is not defined by "exports"`. The
+  real path is **`s402/compat/x402`**, which exports all five documented functions. The sub-path
+  table was also missing six real entries (`server`, `receipts`, `extensions`, `test-utils`,
+  `compat/mpp`, `compat/l402`).
+- **The README described a published package as unreleased.** Design Principle 1 called the Sui
+  reference implementation `@sweefi/sui`, *"coming soon"* — while `@sweefi/sui` is on npm and
+  `@sweefi/server` alongside it. The same document simultaneously described that implementation
+  in the **present tense** two paragraphs earlier, so one fact appeared in two tenses. Both now
+  say what is true: it is published, and it lives in a separate package.
+- **The demo API misreported the protocol version it speaks.** `GET /api/catalog` returned a
+  hardcoded `"version": "0.3"` while `S402_VERSION` is `"1"`. Anyone curling the catalog to see
+  what the protocol advertises got a number that contradicts every payload the same server emits.
+- **Gas figures were stated without their conditions.** The comparison table presented modelled
+  estimates as flat facts and omitted the case the project's own whitepaper is careful to name:
+  **x402 on Solana (~$0.25 per 1K calls) is cheaper than s402 Exact on Sui (~$7.00) for one-shot
+  calls.** The table now marks the numbers as modelled, links the method, and states where a
+  competitor wins.
 
 - **The documented size of the conformance suite was wrong everywhere it appeared.** The repo
   stated it three different ways — `README.md` said 133 vectors, `docs/specification.md` said
