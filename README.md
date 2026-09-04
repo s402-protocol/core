@@ -487,7 +487,7 @@ const offer: s402PaymentRequirements = {
 
 ## Conformance Testing
 
-s402 ships machine-readable JSON test vectors for cross-language conformance — 195 vectors across 14 files. If you're implementing s402 in Go, Python, Rust, or any other language, use these vectors to verify your implementation matches the spec.
+s402 ships machine-readable JSON test vectors for cross-language conformance — 196 vectors across 14 files. If you're implementing s402 in Go, Python, Rust, or any other language, use these vectors to verify your implementation matches the spec.
 
 ```bash
 # From the npm package
