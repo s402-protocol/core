@@ -20,6 +20,7 @@ import {
   detectTransport,
   s402Error,
   S402_VERSION,
+  type s402PaymentRequired,
   type s402PaymentRequirements,
   type s402ExactPayload,
   type s402SettleResponse,
@@ -27,14 +28,63 @@ import {
 
 const VALID_PAY_TO = '0x' + 'a'.repeat(64);
 
-const SAMPLE_REQUIREMENTS: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact'],
+const RESOURCE_URL = 'https://api.example.com/paid';
+
+/** One `accepts[]` entry — the offer of a single scheme. */
+const SAMPLE_OFFER: s402PaymentRequirements = {
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
   payTo: VALID_PAY_TO,
 };
+
+/** The 402 document: an x402 V2 `PaymentRequired` envelope (ADR-016). */
+const SAMPLE_REQUIREMENTS: s402PaymentRequired = {
+  x402Version: 2,
+  resource: { url: RESOURCE_URL },
+  accepts: [SAMPLE_OFFER],
+};
+
+/**
+ * Hand-build the WIRE envelope, the way a peer would put it on the network.
+ *
+ * `flat` names entry fields by their in-memory names; the x402-owned six stay
+ * on the entry and everything s402 adds is routed into that entry's `extra`,
+ * which is where it actually travels. `env` overrides envelope-level keys.
+ */
+const ENTRY_KEYS = ['scheme', 'network', 'asset', 'amount', 'payTo', 'maxTimeoutSeconds'];
+function wire(
+  flat: Record<string, unknown> = {},
+  env: Record<string, unknown> = {},
+): Record<string, unknown> {
+  const entry: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries({
+    scheme: 'exact',
+    network: 'sui:testnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000000',
+    payTo: VALID_PAY_TO,
+    ...flat,
+  })) {
+    (ENTRY_KEYS.includes(k) ? entry : extra)[k] = v;
+  }
+  entry.extra = extra;
+  return {
+    x402Version: 2,
+    resource: { url: RESOURCE_URL },
+    accepts: [entry],
+    extensions: { s402: { version: '2' } },
+    ...env,
+  };
+}
+
+/** The same wire envelope, base64'd for a `payment-required` header. */
+const wireHeader = (
+  flat: Record<string, unknown> = {},
+  env: Record<string, unknown> = {},
+): string => btoa(JSON.stringify(wire(flat, env)));
 
 const SAMPLE_PAYLOAD: s402ExactPayload = {
   s402Version: S402_VERSION,
@@ -107,10 +157,20 @@ describe('s402 HTTP encode/decode', () => {
       expect(typeof encoded).toBe('string');
 
       const decoded = decodePaymentRequired(encoded);
-      expect(decoded.s402Version).toBe('1');
-      expect(decoded.network).toBe('sui:testnet');
-      expect(decoded.amount).toBe('1000000000');
-      expect(decoded.accepts).toEqual(['exact']);
+      expect(decoded.x402Version).toBe(2);
+      expect(decoded.resource.url).toBe(RESOURCE_URL);
+      expect(decoded.accepts).toHaveLength(1);
+      expect(decoded.accepts[0].scheme).toBe('exact');
+      expect(decoded.accepts[0].network).toBe('sui:testnet');
+      expect(decoded.accepts[0].amount).toBe('1000000000');
+    });
+
+    it('marks the 402 as an s402-profile 402 via extensions.s402', () => {
+      const parsed = JSON.parse(atob(encodePaymentRequired(SAMPLE_REQUIREMENTS)));
+      expect(parsed.extensions.s402).toEqual({ version: '2' });
+      // The retired flat shape is gone from the wire entirely.
+      expect('s402Version' in parsed).toBe(false);
+      expect(parsed.accepts[0].scheme).toBe('exact');
     });
   });
 
@@ -141,13 +201,13 @@ describe('s402 HTTP encode/decode', () => {
 
   describe('Unicode safety', () => {
     it('handles CJK characters in extensions field', () => {
-      const reqs: s402PaymentRequirements = {
+      const reqs: s402PaymentRequired = {
         ...SAMPLE_REQUIREMENTS,
-        extensions: { description: '東京での支払い' },
+        accepts: [{ ...SAMPLE_OFFER, extensions: { description: '東京での支払い' } }],
       };
       const encoded = encodePaymentRequired(reqs);
       const decoded = decodePaymentRequired(encoded);
-      expect((decoded.extensions as Record<string, string>).description).toBe('東京での支払い');
+      expect((decoded.accepts[0].extensions as Record<string, string>).description).toBe('東京での支払い');
     });
 
     it('handles emoji in settle response error', () => {
@@ -439,9 +499,21 @@ describe('s402 HTTP encode/decode', () => {
 
   describe('requirements shape validation', () => {
     it('decodePaymentRequired rejects object missing required fields', () => {
-      const bad = btoa(JSON.stringify({ s402Version: '1' }));
+      const bad = btoa(JSON.stringify({ x402Version: 2, resource: { url: RESOURCE_URL } }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('Malformed payment requirements');
+    });
+
+    it('decodePaymentRequired rejects an envelope with no resource', () => {
+      const bad = btoa(JSON.stringify({ x402Version: 2, accepts: [{ ...SAMPLE_OFFER }] }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('missing resource');
+    });
+
+    it('decodePaymentRequired rejects a non-string resource.url', () => {
+      const bad = btoa(JSON.stringify(wire({}, { resource: { url: 42 } })));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('resource.url must be a string');
     });
 
     it('decodePaymentRequired rejects non-object', () => {
@@ -455,14 +527,19 @@ describe('s402 HTTP encode/decode', () => {
     });
 
     it('decodePaymentRequired reports all missing fields', () => {
-      const bad = btoa(JSON.stringify({ s402Version: '1' }));
+      const bad = btoa(JSON.stringify({
+        x402Version: 2,
+        resource: { url: RESOURCE_URL },
+        accepts: [{}],
+      }));
       try {
         decodePaymentRequired(bad);
         expect.unreachable('should have thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(s402Error);
         const msg = (e as Error).message;
-        expect(msg).toContain('accepts');
+        expect(msg).toContain('accepts[0]');
+        expect(msg).toContain('scheme');
         expect(msg).toContain('network');
         expect(msg).toContain('asset');
         expect(msg).toContain('amount');
@@ -471,125 +548,134 @@ describe('s402 HTTP encode/decode', () => {
     });
 
     it('decodePaymentRequired rejects wrong field types', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: 'exact', // should be array
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: 1000, // should be string
-        payTo: VALID_PAY_TO,
-      }));
+      const bad = btoa(JSON.stringify(wire({
+        scheme: 42,   // should be a string
+        amount: 1000, // should be a string
+      })));
       try {
         decodePaymentRequired(bad);
         expect.unreachable('should have thrown');
       } catch (e) {
         expect(e).toBeInstanceOf(s402Error);
         const msg = (e as Error).message;
-        expect(msg).toContain('accepts');
+        expect(msg).toContain('scheme');
         expect(msg).toContain('amount');
       }
     });
 
-    it('decodePaymentRequired rejects unsupported s402Version', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '99',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
-      }));
+    it('decodePaymentRequired rejects unsupported s402 wire version', () => {
+      const bad = btoa(JSON.stringify(wire({}, { extensions: { s402: { version: '99' } } })));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('Unsupported s402 version');
+      expect(() => decodePaymentRequired(bad)).toThrow('Unsupported s402 wire version');
+    });
+
+    it('decodePaymentRequired rejects unsupported x402Version', () => {
+      const bad = btoa(JSON.stringify(wire({}, { x402Version: 1 })));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('Unsupported x402Version');
+    });
+
+    it('decodePaymentRequired rejects non-plain extensions', () => {
+      const bad = btoa(JSON.stringify(wire({}, { extensions: ['nope'] })));
+      expect(() => decodePaymentRequired(bad)).toThrow('extensions must be a plain object');
+    });
+
+    it('decodePaymentRequired rejects non-plain extensions.s402', () => {
+      const bad = btoa(JSON.stringify(wire({}, { extensions: { s402: 'nope' } })));
+      expect(() => decodePaymentRequired(bad)).toThrow('extensions.s402 must be a plain object');
     });
 
     it('decodePaymentRequired rejects non-numeric amount', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: 'hello',
-        payTo: VALID_PAY_TO,
-      }));
+      const bad = wireHeader({ amount: 'hello' });
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
+      expect(() => decodePaymentRequired(bad)).toThrow('invalid amount');
     });
 
     it('decodePaymentRequired rejects negative amount', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '-100',
-        payTo: VALID_PAY_TO,
-      }));
+      const bad = wireHeader({ amount: '-100' });
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
+      expect(() => decodePaymentRequired(bad)).toThrow('invalid amount');
     });
 
     it('decodePaymentRequired rejects leading zeros in amount', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '007',
-        payTo: VALID_PAY_TO,
-      }));
+      const bad = wireHeader({ amount: '007' });
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('Invalid amount');
+      expect(() => decodePaymentRequired(bad)).toThrow('invalid amount');
+    });
+
+    it('decodePaymentRequired rejects empty payTo', () => {
+      const bad = wireHeader({ payTo: '' });
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('payTo must be a non-empty string');
+    });
+
+    it('decodePaymentRequired rejects control characters in identifier fields', () => {
+      for (const field of ['scheme', 'network', 'asset', 'payTo']) {
+        const bad = wireHeader({ [field]: 'bad\u0000value' });
+        expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+        expect(() => decodePaymentRequired(bad)).toThrow(`accepts[0]: ${field} contains control characters`);
+      }
+    });
+
+    it('decodePaymentRequired rejects a negative maxTimeoutSeconds', () => {
+      const bad = wireHeader({ maxTimeoutSeconds: -1 });
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+    });
+
+    it('decodePaymentRequired rejects a non-object extra', () => {
+      const bad = btoa(JSON.stringify({
+        x402Version: 2,
+        resource: { url: RESOURCE_URL },
+        accepts: [{ ...SAMPLE_OFFER, extra: 'nope' }],
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow('accepts[0]: extra must be a plain object');
     });
 
     it('decodePaymentRequired accepts zero amount', () => {
-      const encoded = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '0',
-        payTo: VALID_PAY_TO,
-      }));
-      const decoded = decodePaymentRequired(encoded);
-      expect(decoded.amount).toBe('0');
+      const decoded = decodePaymentRequired(wireHeader({ amount: '0' }));
+      expect(decoded.accepts[0].amount).toBe('0');
     });
 
     it('decodePaymentRequired accepts unknown scheme names in accepts (forward compat)', () => {
-      const encoded = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact', 'futureScheme'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
-      }));
-      const decoded = decodePaymentRequired(encoded);
-      expect(decoded.accepts).toEqual(['exact', 'futureScheme']);
+      // Postel: a scheme this build cannot pay is one a client SKIPS. The
+      // decoder refusing the whole 402 over it would turn a menu into a
+      // rejection.
+      const envelope = wire();
+      (envelope.accepts as unknown[]).push({ ...SAMPLE_OFFER, scheme: 'futureScheme', extra: {} });
+      const decoded = decodePaymentRequired(btoa(JSON.stringify(envelope)));
+      expect(decoded.accepts.map((a) => a.scheme)).toEqual(['exact', 'futureScheme']);
     });
 
-    it('decodePaymentRequired rejects non-string entries in accepts array', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact', 42],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
-      }));
+    it('decodePaymentRequired rejects non-object entries in accepts array', () => {
+      const envelope = wire();
+      (envelope.accepts as unknown[]).push(42);
+      const bad = btoa(JSON.stringify(envelope));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('expected string');
+      expect(() => decodePaymentRequired(bad)).toThrow('accepts[1] is not an object');
     });
 
     it('decodePaymentRequired accepts valid requirements', () => {
       const encoded = encodePaymentRequired(SAMPLE_REQUIREMENTS);
       const decoded = decodePaymentRequired(encoded);
-      expect(decoded.amount).toBe('1000000000');
-      expect(decoded.network).toBe('sui:testnet');
+      expect(decoded.accepts[0].amount).toBe('1000000000');
+      expect(decoded.accepts[0].network).toBe('sui:testnet');
     });
 
-    it('decodePaymentRequired rejects object without s402Version', () => {
+    it('decodePaymentRequired rejects object without x402Version', () => {
       const bad = btoa(JSON.stringify({
+        resource: { url: RESOURCE_URL },
+        accepts: [SAMPLE_OFFER],
+      }));
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('Missing x402Version');
+    });
+
+    it('decodePaymentRequired rejects the retired s402 v1 flat shape', () => {
+      // The flat `{ s402Version, accepts: string[], network, … }` document is
+      // no longer a wire format; reading it is compat's job, not the codec's.
+      const bad = btoa(JSON.stringify({
+        s402Version: '1',
         accepts: ['exact'],
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
@@ -597,77 +683,75 @@ describe('s402 HTTP encode/decode', () => {
         payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('Missing s402Version');
+      expect(() => decodePaymentRequired(bad)).toThrow('retired in wire v2');
+      expect(() => decodePaymentRequired(bad)).toThrow('fromS402V1Requirements()');
     });
 
     it('decodePaymentRequired rejects empty accepts array', () => {
       const bad = btoa(JSON.stringify({
-        s402Version: '1',
+        x402Version: 2,
+        resource: { url: RESOURCE_URL },
         accepts: [],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
       }));
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('at least one scheme');
+      expect(() => decodePaymentRequired(bad)).toThrow('at least one requirement');
     });
 
     it('decodePaymentRequired rejects protocolFeeBps > 10000', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
-        protocolFeeBps: 50000,
-      }));
+      const bad = wireHeader({ protocolFeeBps: 50000 });
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('protocolFeeBps');
     });
 
     it('decodePaymentRequired rejects negative protocolFeeBps', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
-        protocolFeeBps: -1,
-      }));
-      expect(() => decodePaymentRequired(bad)).toThrow('protocolFeeBps');
+      expect(() => decodePaymentRequired(wireHeader({ protocolFeeBps: -1 }))).toThrow('protocolFeeBps');
     });
 
     it('decodePaymentRequired rejects non-numeric expiresAt', () => {
-      const bad = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
-        expiresAt: 'never',
-      }));
+      const bad = wireHeader({ expiresAt: 'never' });
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
       expect(() => decodePaymentRequired(bad)).toThrow('expiresAt must be a positive finite number');
     });
 
+    it('decodePaymentRequired rejects a facilitatorUrl with a dangerous scheme', () => {
+      const bad = wireHeader({ facilitatorUrl: 'file:///etc/passwd' });
+      expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
+      expect(() => decodePaymentRequired(bad)).toThrow('facilitatorUrl must use https:// or http://');
+    });
+
     it('decodePaymentRequired accepts valid protocolFeeBps and expiresAt', () => {
-      const encoded = btoa(JSON.stringify({
-        s402Version: '1',
-        accepts: ['exact'],
-        network: 'sui:testnet',
-        asset: '0x2::sui::SUI',
-        amount: '1000',
-        payTo: VALID_PAY_TO,
+      const decoded = decodePaymentRequired(wireHeader({
         protocolFeeBps: 50,
         expiresAt: Date.now() + 60000,
       }));
-      const decoded = decodePaymentRequired(encoded);
-      expect(decoded.protocolFeeBps).toBe(50);
-      expect(typeof decoded.expiresAt).toBe('number');
+      expect(decoded.accepts[0].protocolFeeBps).toBe(50);
+      expect(typeof decoded.accepts[0].expiresAt).toBe('number');
+    });
+
+    it('decodePaymentRequired keeps unknown keys inside an entry extra (x402 owns that bag)', () => {
+      const decoded = decodePaymentRequired(wireHeader({ paymentFlow: 'upfront', name: 'USDC' }));
+      expect(decoded.accepts[0].extra).toEqual({ paymentFlow: 'upfront', name: 'USDC' });
+    });
+
+    it('decodePaymentRequired strips unknown keys at the envelope, entry and resource levels', () => {
+      const envelope = wire();
+      (envelope.accepts as Record<string, unknown>[])[0].rogue = 'injected';
+      (envelope.resource as Record<string, unknown>).rogue = 'injected';
+      envelope.rogue = 'injected';
+      const decoded = decodePaymentRequired(btoa(JSON.stringify(envelope)));
+      expect((decoded as unknown as Record<string, unknown>).rogue).toBeUndefined();
+      expect((decoded.accepts[0] as unknown as Record<string, unknown>).rogue).toBeUndefined();
+      expect((decoded.resource as unknown as Record<string, unknown>).rogue).toBeUndefined();
+    });
+
+    it('decodePaymentRequired lifts the envelope mandate out of extensions.s402', () => {
+      const bad = wireHeader({}, { extensions: { s402: { version: '2', mandate: { required: 'yes' } } } });
+      expect(() => decodePaymentRequired(bad)).toThrow('mandate.required must be a boolean');
+
+      const decoded = decodePaymentRequired(
+        wireHeader({}, { extensions: { s402: { version: '2', mandate: { required: true } } } }),
+      );
+      expect(decoded.mandate).toEqual({ required: true });
     });
   });
 
@@ -679,8 +763,9 @@ describe('s402 HTTP encode/decode', () => {
 
       const reqs = extractRequirementsFromResponse(response);
       expect(reqs).not.toBeNull();
-      expect(reqs!.network).toBe('sui:testnet');
-      expect(reqs!.amount).toBe('1000000000');
+      expect(reqs!.resource.url).toBe(RESOURCE_URL);
+      expect(reqs!.accepts[0].network).toBe('sui:testnet');
+      expect(reqs!.accepts[0].amount).toBe('1000000000');
     });
 
     it('returns null for response without payment-required header', () => {
@@ -709,6 +794,20 @@ describe('s402 HTTP encode/decode', () => {
       const headers = new Headers();
       headers.set('payment-required', btoa(JSON.stringify(x402Req)));
       expect(detectProtocol(headers)).toBe('x402');
+    });
+
+    it('detects x402 for a plain V2 envelope with no extensions.s402', () => {
+      // Same envelope shape s402 emits; only `extensions.s402` separates them,
+      // and its absence means "no s402 extensions on it" — never "not payable".
+      const headers = new Headers();
+      headers.set('payment-required', btoa(JSON.stringify(wire({}, { extensions: { sep2007: {} } }))));
+      expect(detectProtocol(headers)).toBe('x402');
+    });
+
+    it('returns unknown when neither marker is present', () => {
+      const headers = new Headers();
+      headers.set('payment-required', btoa(JSON.stringify({ accepts: [], resource: { url: RESOURCE_URL } })));
+      expect(detectProtocol(headers)).toBe('unknown');
     });
 
     it('returns unknown for missing header', () => {
@@ -740,30 +839,52 @@ describe('s402 body transport', () => {
       const json = encodeRequirementsBody(SAMPLE_REQUIREMENTS);
       expect(typeof json).toBe('string');
       const decoded = decodeRequirementsBody(json);
-      expect(decoded.s402Version).toBe('1');
-      expect(decoded.network).toBe('sui:testnet');
-      expect(decoded.amount).toBe('1000000000');
-      expect(decoded.accepts).toEqual(['exact']);
+      expect(decoded.x402Version).toBe(2);
+      expect(decoded.resource.url).toBe(RESOURCE_URL);
+      expect(decoded.accepts[0].scheme).toBe('exact');
+      expect(decoded.accepts[0].network).toBe('sui:testnet');
+      expect(decoded.accepts[0].amount).toBe('1000000000');
     });
 
     it('produces valid JSON (not base64)', () => {
       const json = encodeRequirementsBody(SAMPLE_REQUIREMENTS);
       const parsed = JSON.parse(json);
-      expect(parsed.s402Version).toBe('1');
+      expect(parsed.x402Version).toBe(2);
+      expect(parsed.extensions.s402.version).toBe('2');
     });
 
     it('preserves all fields including optional ones', () => {
-      const full: s402PaymentRequirements = {
+      const full: s402PaymentRequired = {
         ...SAMPLE_REQUIREMENTS,
-        facilitatorUrl: 'https://facilitator.example.com',
-        protocolFeeBps: 50,
-        expiresAt: Date.now() + 60000,
-        extensions: { custom: 'data' },
+        accepts: [{
+          ...SAMPLE_OFFER,
+          facilitatorUrl: 'https://facilitator.example.com',
+          protocolFeeBps: 50,
+          expiresAt: Date.now() + 60000,
+          extensions: { custom: 'data' },
+        }],
+        mandate: { required: true },
       };
       const decoded = decodeRequirementsBody(encodeRequirementsBody(full));
-      expect(decoded.facilitatorUrl).toBe('https://facilitator.example.com');
-      expect(decoded.protocolFeeBps).toBe(50);
-      expect((decoded.extensions as Record<string, string>).custom).toBe('data');
+      expect(decoded.accepts[0].facilitatorUrl).toBe('https://facilitator.example.com');
+      expect(decoded.accepts[0].protocolFeeBps).toBe(50);
+      expect((decoded.accepts[0].extensions as Record<string, string>).custom).toBe('data');
+      expect(decoded.mandate).toEqual({ required: true });
+    });
+
+    it('carries one accepts[] entry per offered scheme', () => {
+      const multi: s402PaymentRequired = {
+        ...SAMPLE_REQUIREMENTS,
+        accepts: [
+          SAMPLE_OFFER,
+          { ...SAMPLE_OFFER, scheme: 'prepaid', prepaid: { ratePerCall: '100', minDeposit: '1000', withdrawalDelayMs: '86400000' } },
+        ],
+      };
+      const decoded = decodeRequirementsBody(encodeRequirementsBody(multi));
+      expect(decoded.accepts.map((a) => a.scheme)).toEqual(['exact', 'prepaid']);
+      expect(decoded.accepts[1].prepaid!.ratePerCall).toBe('100');
+      // Each entry names ONE scheme — there is no scheme list anywhere else.
+      expect('accepts' in decoded.accepts[0]).toBe(false);
     });
   });
 
@@ -823,10 +944,10 @@ describe('s402 body transport', () => {
       expect(() => decodeRequirementsBody('not json {')).toThrow('Failed to parse');
     });
 
-    it('decodeRequirementsBody rejects missing s402Version', () => {
-      const json = JSON.stringify({ accepts: ['exact'], network: 'sui:testnet' });
+    it('decodeRequirementsBody rejects missing x402Version', () => {
+      const json = JSON.stringify({ resource: { url: RESOURCE_URL }, accepts: [SAMPLE_OFFER] });
       expect(() => decodeRequirementsBody(json)).toThrow(s402Error);
-      expect(() => decodeRequirementsBody(json)).toThrow('Missing s402Version');
+      expect(() => decodeRequirementsBody(json)).toThrow('Missing x402Version');
     });
 
     it('decodePayloadBody rejects invalid JSON', () => {
@@ -851,7 +972,7 @@ describe('s402 body transport', () => {
 
     it('decodeRequirementsBody strips unknown fields (same as header path)', () => {
       const json = JSON.stringify({
-        ...SAMPLE_REQUIREMENTS,
+        ...wire(),
         malicious: 'injected',
         __proto__: { evil: true },
       });
@@ -932,44 +1053,65 @@ describe('s402 body transport', () => {
 // ── V2: estimatedAmount + settlementCeiling validation ──
 
 describe('V2: upto.estimatedAmount validation', () => {
+  /**
+   * `exact` first, then the `upto` offer — one `accepts[]` entry per scheme,
+   * with the upto sub-object riding inside that entry's `extra` where it now
+   * travels.
+   */
   function makeUptoRequirements(uptoOverrides: Record<string, unknown> = {}): string {
-    return btoa(JSON.stringify({
-      s402Version: '1',
-      accepts: ['exact', 'upto'],
+    const offer = {
+      scheme: 'exact',
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000000',
       payTo: VALID_PAY_TO,
-      upto: {
-        maxAmount: '5000000',
-        settlementDeadlineMs: '1700000000000',
-        ...uptoOverrides,
-      },
+    };
+    return btoa(JSON.stringify({
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [
+        { ...offer, extra: {} },
+        {
+          ...offer,
+          scheme: 'upto',
+          extra: {
+            upto: {
+              maxAmount: '5000000',
+              settlementDeadlineMs: '1700000000000',
+              ...uptoOverrides,
+            },
+          },
+        },
+      ],
+      extensions: { s402: { version: '2' } },
     }));
   }
+
+  /** The `upto` offer is the second entry. */
+  const UPTO_ENTRY = 1;
 
   it('valid estimatedAmount roundtrips', () => {
     const header = makeUptoRequirements({ estimatedAmount: '3000000' });
     const decoded = decodePaymentRequired(header);
-    expect(decoded.upto!.estimatedAmount).toBe('3000000');
+    expect(decoded.accepts[UPTO_ENTRY].upto!.estimatedAmount).toBe('3000000');
   });
 
   it('estimatedAmount = maxAmount passes (boundary)', () => {
     const header = makeUptoRequirements({ estimatedAmount: '5000000' });
     const decoded = decodePaymentRequired(header);
-    expect(decoded.upto!.estimatedAmount).toBe('5000000');
+    expect(decoded.accepts[UPTO_ENTRY].upto!.estimatedAmount).toBe('5000000');
   });
 
   it('estimatedAmount = "0" passes (valid advisory)', () => {
     const header = makeUptoRequirements({ estimatedAmount: '0' });
     const decoded = decodePaymentRequired(header);
-    expect(decoded.upto!.estimatedAmount).toBe('0');
+    expect(decoded.accepts[UPTO_ENTRY].upto!.estimatedAmount).toBe('0');
   });
 
   it('estimatedAmount absent passes', () => {
     const header = makeUptoRequirements({});
     const decoded = decodePaymentRequired(header);
-    expect(decoded.upto!.estimatedAmount).toBeUndefined();
+    expect(decoded.accepts[UPTO_ENTRY].upto!.estimatedAmount).toBeUndefined();
   });
 
   it('rejects non-string estimatedAmount', () => {
@@ -1064,5 +1206,27 @@ describe('V2: upto payload.settlementCeiling validation', () => {
     }));
     expect(() => decodePaymentPayload(header)).toThrow(s402Error);
     expect(() => decodePaymentPayload(header)).toThrow('maxAmount');
+  });
+});
+
+describe('decodePaymentRequired — `extra` is x402\'s bag, not ours', () => {
+  it('does not validate a `mandate` key inside an entry extra', () => {
+    // `mandate` is envelope-level since wire v2. A key by that name inside an
+    // entry's `extra` belongs to whoever put it there — validating it would let
+    // an unrelated foreign key take down an otherwise payable 402.
+    const header = wireHeader({ mandate: { required: 'not a boolean', anything: 1 } });
+    const decoded = decodePaymentRequired(header);
+    expect(decoded.mandate).toBeUndefined();
+    expect(decoded.accepts[0].extra).toEqual({ mandate: { required: 'not a boolean', anything: 1 } });
+  });
+
+  it('still validates the mandate that IS ours, at extensions.s402.mandate', () => {
+    const bad = {
+      x402Version: 2,
+      resource: { url: 'https://api.example.com/paid' },
+      accepts: [{ ...SAMPLE_OFFER, extra: {} }],
+      extensions: { s402: { version: '2', mandate: { required: 'not a boolean' } } },
+    };
+    expect(() => decodePaymentRequired(btoa(JSON.stringify(bad)))).toThrow(/required must be a boolean/);
   });
 });

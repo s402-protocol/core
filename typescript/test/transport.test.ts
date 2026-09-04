@@ -8,18 +8,25 @@ import {
   S402_HEADERS,
 } from '../src/index.js';
 import type {
-  s402PaymentRequirements,
+  s402PaymentRequired,
   s402PaymentPayload,
   s402SettleResponse,
 } from '../src/index.js';
 
-const requirements: s402PaymentRequirements = {
-  s402Version: '1',
-  accepts: ['exact'],
-  network: 'sui:testnet',
-  asset: '0x2::sui::SUI',
-  amount: '1000000',
-  payTo: '0xabc',
+// The 402 document, not a bare requirement: wire v2 makes every 402 an x402 V2
+// `PaymentRequired` envelope. `maxTimeoutSeconds` is named explicitly because
+// the encoder supplies it when omitted — naming it keeps the round-trip exact.
+const requirements: s402PaymentRequired = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:testnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xabc',
+    maxTimeoutSeconds: 60,
+  }],
 };
 
 const payload: s402PaymentPayload = {

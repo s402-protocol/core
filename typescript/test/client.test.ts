@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   s402Client,
   S402_VERSION,
+  type s402PaymentRequired,
   type s402PaymentRequirements,
   type s402PaymentPayload,
 } from '../src/index.js';
@@ -46,14 +47,23 @@ function mockStreamScheme(): s402ClientScheme {
   };
 }
 
+/** ONE `accepts[]` entry. A requirement names a single scheme in wire v2. */
 const REQUIREMENTS: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000',
   payTo: '0xrecipient',
 };
+
+/** Wrap entries in the 402 document `createPayment` also accepts. */
+function doc(...accepts: s402PaymentRequirements[]): s402PaymentRequired {
+  return {
+    x402Version: 2,
+    resource: { url: 'https://api.example.com/paid' },
+    accepts,
+  };
+}
 
 describe('s402Client', () => {
   describe('register', () => {
@@ -110,17 +120,17 @@ describe('s402Client', () => {
       }
     });
 
-    it('selects first matching scheme from accepts array', async () => {
+    it('selects the first matching accepts[] entry of the 402 document', async () => {
       const client = new s402Client();
       client
         .register('sui:testnet', mockExactScheme())
         .register('sui:testnet', mockStreamScheme());
 
       // Server prefers stream, client has both → picks stream
-      const streamFirst: s402PaymentRequirements = {
-        ...REQUIREMENTS,
-        accepts: ['stream', 'exact'],
-      };
+      const streamFirst = doc(
+        { ...REQUIREMENTS, scheme: 'stream' },
+        { ...REQUIREMENTS, scheme: 'exact' },
+      );
       const payload = await client.createPayment(streamFirst);
       expect(payload.scheme).toBe('stream');
     });
@@ -130,13 +140,45 @@ describe('s402Client', () => {
       client.register('sui:testnet', mockExactScheme());
       // No stream registered
 
-      const streamFirst: s402PaymentRequirements = {
-        ...REQUIREMENTS,
-        accepts: ['stream', 'exact'],
-      };
+      const streamFirst = doc(
+        { ...REQUIREMENTS, scheme: 'stream' },
+        { ...REQUIREMENTS, scheme: 'exact' },
+      );
       const payload = await client.createPayment(streamFirst);
       // stream not available, falls back to exact
       expect(payload.scheme).toBe('exact');
+    });
+
+    it('matches an entry on its OWN network, not the document\'s first one', async () => {
+      // New in wire v2: each accepts[] entry carries its own network, so one 402
+      // may offer a scheme on a chain this client cannot pay and another it can.
+      const client = new s402Client();
+      client.register('sui:testnet', mockExactScheme());
+
+      const mixed = doc(
+        { ...REQUIREMENTS, scheme: 'exact', network: 'sui:mainnet' },
+        { ...REQUIREMENTS, scheme: 'exact', network: 'sui:testnet' },
+      );
+      const payload = await client.createPayment(mixed);
+      expect(payload.scheme).toBe('exact');
+      if (payload.scheme === 'exact') {
+        expect(payload.payload.transaction).toBe('tx-for-1000000');
+      }
+    });
+
+    it('passes the MATCHED entry to the scheme, not the whole document', async () => {
+      const client = new s402Client();
+      client.register('sui:testnet', mockExactScheme());
+
+      const twoPrices = doc(
+        { ...REQUIREMENTS, scheme: 'stream', amount: '999' },
+        { ...REQUIREMENTS, scheme: 'exact', amount: '4200' },
+      );
+      const payload = await client.createPayment(twoPrices);
+      // The mock signs `requirements.amount` — proof it saw the exact entry.
+      if (payload.scheme === 'exact') {
+        expect(payload.payload.transaction).toBe('tx-for-4200');
+      }
     });
 
     it('throws NETWORK_MISMATCH for unregistered network', async () => {
@@ -156,10 +198,7 @@ describe('s402Client', () => {
       const client = new s402Client();
       client.register('sui:testnet', mockExactScheme());
 
-      const streamOnly: s402PaymentRequirements = {
-        ...REQUIREMENTS,
-        accepts: ['stream'],
-      };
+      const streamOnly = doc({ ...REQUIREMENTS, scheme: 'stream' });
 
       await expect(client.createPayment(streamOnly))
         .rejects.toThrow('No registered scheme matches');

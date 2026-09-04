@@ -145,6 +145,7 @@ describe('x402PaymentFlowOf — exact gained an upfront flow', () => {
       accepts: [{ ...base, extra: { paymentFlow: 'upfront' } }],
     };
     expect(x402PaymentFlowOf(envelope.accepts[0])).toBe('upfront');
-    expect(fromX402Envelope(envelope).amount).toBe('1000');
+    // fromX402Envelope returns the 402 DOCUMENT now — the price lives on the entry.
+    expect(fromX402Envelope(envelope).accepts[0].amount).toBe('1000');
   });
 });

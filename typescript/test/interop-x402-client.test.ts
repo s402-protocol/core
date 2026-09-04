@@ -8,9 +8,13 @@ import { x402HTTPClient } from '@x402/core/http';
 import type { SchemeNetworkClient, PaymentRequirements } from '@x402/core/types';
 import { wrapFetchWithPayment } from '@x402/fetch';
 import {
+  s402Client,
   s402ResourceServer,
   s402Facilitator,
+  decodePaymentRequired,
+  detectProtocol,
   S402_VERSION,
+  S402_WIRE_VERSION,
   type s402ServerScheme,
   type s402FacilitatorScheme,
   type s402PaymentRequirements,
@@ -35,8 +39,7 @@ function serverScheme(): s402ServerScheme {
     scheme: 'exact',
     buildRequirements(config: s402RouteConfig): s402PaymentRequirements {
       return {
-        s402Version: S402_VERSION,
-        accepts: [...new Set([...config.schemes, 'exact' as const])],
+        scheme: 'exact',
         network: config.network,
         asset: config.asset,
         amount: config.price,
@@ -90,6 +93,19 @@ function suiExactClient(): SchemeNetworkClient {
   };
 }
 
+/** The prepaid counterpart of {@link suiExactClient}, for the ordering test. */
+function suiPrepaidClient(): SchemeNetworkClient {
+  return {
+    scheme: 'prepaid',
+    async createPaymentPayload(x402Version: number, req: PaymentRequirements) {
+      return {
+        x402Version,
+        payload: { transaction: `mock-prepaid-${req.amount}`, signature: 'sig' },
+      };
+    },
+  };
+}
+
 /** An unmodified x402 client: `x402Client` + `wrapFetchWithPayment`, straight from upstream. */
 function x402Fetch(fetchImpl: typeof globalThis.fetch) {
   const client = new x402Client()
@@ -108,8 +124,9 @@ function inProcess(handler: (r: Request) => Response | Promise<Response>): typeo
 // ── The claim under test ──────────────────────────────────────────────────
 //
 // README (and docs/api/compat.md) say: "An x402 client can talk to an s402
-// server using this scheme with zero modifications." This is that sentence,
-// executed. Three legs, each one a wire boundary the x402 client crosses:
+// server with zero modifications — no client changes and no server options."
+// This is that sentence, executed. Three legs, each a wire boundary the x402
+// client crosses:
 //
 //   1. the 402 — the client must be able to READ s402's payment requirements
 //   2. the payment — s402 must ACCEPT the header and payload shape x402 sends
@@ -123,7 +140,7 @@ describe('an unmodified x402 client pays an s402 gate', () => {
     const gate = s402Gate({
       server,
       requirements: server.buildRequirements({ schemes: ['exact'], price: PRICE, network: NETWORK, payTo: PAY_TO, asset: ASSET }),
-      x402: { resource: { url: URL_, description: 'paid content', mimeType: 'application/json' } },
+      resource: { url: URL_, description: 'paid content', mimeType: 'application/json' },
     });
     const handler = gate(async () => { handlerRuns++; return Response.json({ data: 'paid' }); });
 
@@ -147,7 +164,7 @@ describe('an unmodified x402 client pays an s402 gate', () => {
     const gate = s402Gate({
       server,
       requirements: server.buildRequirements({ schemes: ['exact'], price: PRICE, network: NETWORK, payTo: PAY_TO, asset: ASSET }),
-      x402: { resource: { url: URL_ } },
+      resource: { url: URL_ },
     });
     const res = await gate(async () => Response.json({}))(new Request(URL_));
     expect(res.status).toBe(402);
@@ -162,17 +179,122 @@ describe('an unmodified x402 client pays an s402 gate', () => {
     expect(pr.accepts[0].extra).toEqual({});
   });
 
-  it('without the x402 option the 402 stays s402-native (no wire change for existing servers)', async () => {
+  it('there is no second grammar: the 402 is an x402 envelope with no server option set', async () => {
+    // ADR-016's invariant, stated as an absence. The gate below sets nothing
+    // beyond what any s402 route needs, and what comes back on the wire is
+    // still x402's document — there is no `accepts` of strings anywhere.
     const server = buildServer('x');
     const gate = s402Gate({
       server,
       requirements: server.buildRequirements({ schemes: ['exact'], price: PRICE, network: NETWORK, payTo: PAY_TO, asset: ASSET }),
+      resource: { url: URL_ },
     });
     const res = await gate(async () => Response.json({}))(new Request(URL_));
     const decoded = JSON.parse(atob(res.headers.get('payment-required')!));
-    expect(decoded.s402Version).toBe(S402_VERSION);
-    expect(decoded.x402Version).toBeUndefined();
-    expect(decoded.accepts).toEqual(['exact']);
+
+    expect(decoded.x402Version).toBe(2);
+    expect(decoded.s402Version).toBeUndefined();
+    expect(decoded.accepts).toEqual([{
+      scheme: 'exact', network: NETWORK, asset: ASSET, amount: PRICE, payTo: PAY_TO,
+      maxTimeoutSeconds: 60, extra: {},
+    }]);
+    // s402's own marker rides in extensions, where x402 leaves room for it.
+    expect(decoded.extensions.s402).toEqual({ version: S402_WIRE_VERSION });
+    // …and the body says the same thing, for a V1 client that reads only that.
+    expect(await res.clone().json()).toEqual(decoded);
+  });
+
+  it('offers exact FIRST alongside prepaid, and the upstream client picks exact', async () => {
+    // x402's client pays the first `accepts[]` entry it has a handler for. This
+    // client has handlers for BOTH, so the only thing that can decide is order
+    // — which is why `exact` is first whenever it is offered.
+    const DIGEST = 'D4';
+    const server = buildServer(DIGEST);
+    const gate = s402Gate({
+      server,
+      requirements: server.buildPaymentRequired(
+        { schemes: ['prepaid'], price: PRICE, network: NETWORK, payTo: PAY_TO, asset: ASSET },
+        { url: URL_ },
+      ).accepts,
+      resource: { url: URL_ },
+    });
+    const handler = gate(async () => Response.json({ data: 'paid' }));
+
+    let paidScheme: string | undefined;
+    const observe = inProcess(async (request) => {
+      const signature = request.headers.get('PAYMENT-SIGNATURE');
+      if (signature) paidScheme = JSON.parse(atob(signature)).accepted?.scheme;
+      return handler(request);
+    });
+
+    const client = new x402Client()
+      .register(NETWORK, suiExactClient())
+      .register(NETWORK, suiPrepaidClient())
+      .setSpendControls(false);
+    const http = new x402HTTPClient(client);
+
+    // The 402 reads as a two-offer PaymentRequired to upstream's own decoder.
+    const challenge = await observe(URL_);
+    const pr = http.getPaymentRequiredResponse((n) => challenge.headers.get(n), await challenge.clone().json());
+    expect(pr.accepts.map((a) => a.scheme)).toEqual(['exact', 'prepaid']);
+    expect(pr.accepts[0].network).toBe(NETWORK);
+
+    const res = await wrapFetchWithPayment(observe, client)(URL_);
+    expect(res.status).toBe(200);
+    expect(paidScheme).toBe('exact');
+  });
+
+  it('a plain x402 402 — no s402 extensions at all — decodes into something payable', async () => {
+    // The other direction of the same claim: an s402 client reaching a server
+    // that has never heard of s402 gets requirements it can act on. Nothing of
+    // ours produced this document.
+    const plain = {
+      x402Version: 2,
+      resource: { url: 'https://x402.example.com/paid' },
+      accepts: [{
+        scheme: 'exact',
+        network: 'eip155:8453',
+        asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        amount: '10000',
+        payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+        maxTimeoutSeconds: 300,
+        extra: { name: 'USD Coin', version: '2' },
+      }],
+    };
+
+    const decoded = decodePaymentRequired(btoa(JSON.stringify(plain)));
+    expect(decoded.x402Version).toBe(2);
+    expect(decoded.mandate).toBeUndefined();
+    expect(decoded.extensions).toBeUndefined();
+    expect(decoded.accepts[0]).toEqual({
+      scheme: 'exact',
+      network: 'eip155:8453',
+      asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      amount: '10000',
+      payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+      maxTimeoutSeconds: 300,
+      // x402's own `extra` keys survive; the bag is theirs and open by spec.
+      extra: { name: 'USD Coin', version: '2' },
+    });
+    // `detectProtocol` calls it x402 — that names the absence of s402's
+    // extensions, never "not for us".
+    const headers = new Headers({ 'payment-required': btoa(JSON.stringify(plain)) });
+    expect(detectProtocol(headers)).toBe('x402');
+
+    // And an s402 client pays it: the offer goes straight into createPayment.
+    const client = new s402Client().register('eip155:8453', {
+      scheme: 'exact',
+      async createPayment(requirements) {
+        return {
+          s402Version: S402_VERSION,
+          scheme: 'exact' as const,
+          payload: { transaction: paidTx(requirements.amount, requirements.payTo), signature: 'sig' },
+        };
+      },
+      verifySettlement: () => ({ verified: false, expectedDigest: '', actualDigest: null }),
+    });
+    const payload = await client.createPayment(decoded);
+    expect(payload.scheme).toBe('exact');
   });
 
   it('an x402 V2 payload under PAYMENT-SIGNATURE is accepted even when the 402 was s402-native', async () => {
@@ -184,6 +306,7 @@ describe('an unmodified x402 client pays an s402 gate', () => {
     const gate = s402Gate({
       server,
       requirements: server.buildRequirements({ schemes: ['exact'], price: PRICE, network: NETWORK, payTo: PAY_TO, asset: ASSET }),
+      resource: { url: URL_ },
     });
     const handler = gate(async () => Response.json({ data: 'paid' }));
 
@@ -207,6 +330,7 @@ describe('an unmodified x402 client pays an s402 gate', () => {
     const gate = s402Gate({
       server,
       requirements: server.buildRequirements({ schemes: ['exact'], price: PRICE, network: NETWORK, payTo: PAY_TO, asset: ASSET }),
+      resource: { url: URL_ },
     });
     const handler = gate(async () => Response.json({ data: 'paid' }));
     const native = { s402Version: S402_VERSION, scheme: 'exact', payload: { transaction: paidTx(PRICE, PAY_TO), signature: 'sig' } };

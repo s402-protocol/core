@@ -18,6 +18,7 @@ import {
   decodeSettleResponse,
   S402_VERSION,
   S402_HEADERS,
+  type s402PaymentRequired,
   type s402PaymentRequirements,
   type s402PaymentPayload,
   type s402SettleResponse,
@@ -26,6 +27,7 @@ import type { s402ClientScheme, s402FacilitatorScheme } from '../src/scheme.js';
 
 const MERCHANT = '0x' + 'a'.repeat(64);
 const VENDOR = '0x' + 'b'.repeat(64);
+const RESOURCE = { url: 'https://api.example.com/paid' };
 
 // ── Mock scheme implementations ──
 
@@ -83,26 +85,27 @@ describe('integration: full payment flow', () => {
     facilitator.register(NETWORK, mockFacilitatorScheme());
     server.setFacilitator(facilitator);
 
-    const requirements = server.buildRequirements({
+    const required = server.buildPaymentRequired({
       schemes: ['exact'],
       price: '5000000',
       network: NETWORK,
       payTo: MERCHANT,
       asset: '0x2::sui::SUI',
-    });
+    }, RESOURCE);
 
-    expect(requirements.s402Version).toBe(S402_VERSION);
-    expect(requirements.accepts).toContain('exact');
-    expect(requirements.amount).toBe('5000000');
+    expect(required.x402Version).toBe(2);
+    expect(required.accepts.map((a) => a.scheme)).toEqual(['exact']);
+    expect(required.accepts[0].amount).toBe('5000000');
 
     // ── 2. Server encodes 402 response ──
-    const encoded402 = encodePaymentRequired(requirements);
+    const encoded402 = encodePaymentRequired(required);
     expect(typeof encoded402).toBe('string');
 
-    // ── 3. Client decodes requirements ──
-    const decodedReqs = decodePaymentRequired(encoded402);
-    expect(decodedReqs.amount).toBe('5000000');
-    expect(decodedReqs.payTo).toBe(MERCHANT);
+    // ── 3. Client decodes the 402 document ──
+    const decodedReqs: s402PaymentRequired = decodePaymentRequired(encoded402);
+    expect(decodedReqs.resource.url).toBe(RESOURCE.url);
+    expect(decodedReqs.accepts[0].amount).toBe('5000000');
+    expect(decodedReqs.accepts[0].payTo).toBe(MERCHANT);
 
     // ── 4. Client creates payment ──
     const client = new s402Client();
@@ -120,7 +123,8 @@ describe('integration: full payment flow', () => {
     expect(decodedPayload.scheme).toBe('exact');
 
     // ── 7. Facilitator processes (verify + settle) ──
-    const result = await server.process(decodedPayload, decodedReqs);
+    // The facilitator settles against ONE entry — the offer the payload matched.
+    const result = await server.process(decodedPayload, decodedReqs.accepts[0]);
     expect(result.success).toBe(true);
     expect(result.txDigest).toBe('integration-tx-ABC123');
     expect(result.finalityMs).toBe(380);
@@ -196,10 +200,10 @@ describe('integration: full payment flow', () => {
   });
 
   it('HTTP header roundtrip preserves all data through the full wire format', () => {
-    // Simulate the full HTTP exchange using headers
-    const requirements: s402PaymentRequirements = {
-      s402Version: S402_VERSION,
-      accepts: ['exact', 'stream'],
+    // Simulate the full HTTP exchange using headers. Two offered schemes are
+    // two `accepts[]` entries now; the s402-only fields ride in each entry's
+    // `extra` on the wire and come back flat on decode.
+    const base: Omit<s402PaymentRequirements, 'scheme'> = {
       network: 'sui:mainnet',
       asset: '0x2::sui::SUI',
       amount: '999999',
@@ -207,6 +211,11 @@ describe('integration: full payment flow', () => {
       facilitatorUrl: 'https://facilitator.example.com',
       protocolFeeBps: 25,
       expiresAt: Date.now() + 300_000,
+    };
+    const requirements: s402PaymentRequired = {
+      x402Version: 2,
+      resource: RESOURCE,
+      accepts: [{ ...base, scheme: 'exact' }, { ...base, scheme: 'stream' }],
     };
 
     // Server → Client (402 response)
@@ -217,10 +226,13 @@ describe('integration: full payment flow', () => {
     const clientReqs = decodePaymentRequired(
       responseHeaders.get(S402_HEADERS.PAYMENT_REQUIRED)!,
     );
-    expect(clientReqs.amount).toBe('999999');
-    expect(clientReqs.protocolFeeBps).toBe(25);
-    expect(clientReqs.expiresAt).toBe(requirements.expiresAt);
-    expect(clientReqs.accepts).toEqual(['exact', 'stream']);
+    expect(clientReqs.resource.url).toBe(RESOURCE.url);
+    expect(clientReqs.accepts.map((a) => a.scheme)).toEqual(['exact', 'stream']);
+    expect(clientReqs.accepts[0].amount).toBe('999999');
+    expect(clientReqs.accepts[0].facilitatorUrl).toBe('https://facilitator.example.com');
+    expect(clientReqs.accepts[0].protocolFeeBps).toBe(25);
+    expect(clientReqs.accepts[0].expiresAt).toBe(base.expiresAt);
+    expect(clientReqs.accepts[1].protocolFeeBps).toBe(25);
 
     // Client → Server (payment)
     const payload: s402PaymentPayload = {

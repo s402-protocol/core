@@ -8,32 +8,49 @@
  * CONDITION MAP — validateRequirementsShape() (http.ts)
  * ═══════════════════════════════════════════════════════════════════════
  *
+ * The argument is the WIRE ENVELOPE — an x402 V2 `PaymentRequired`, not the
+ * flat s402 v1 record (ADR-016). Every per-requirement condition below moved
+ * one level down into `accepts[i]`, and every s402-only one moved down again
+ * into `accepts[i].extra`; none of them was relaxed on the way.
+ *
  * C1:  obj == null || typeof obj !== 'object'         → "not an object"
- * C2:  record.s402Version === undefined               → "Missing s402Version"
- * C3:  record.s402Version !== '1'                     → "Unsupported s402 version"
- * C4:  !Array.isArray(record.accepts)                 → missing "accepts (array)"
- * C5:  typeof record.network !== 'string'             → missing "network (string)"
- * C6:  typeof record.asset !== 'string'               → missing "asset (string)"
- * C7:  typeof record.amount !== 'string'              → missing "amount (string)"
- * C8:  amount is string AND !isValidAmount()           → "Invalid amount" (format-only, S7: no magnitude bounds)
- * C9:  typeof record.payTo !== 'string'               → missing "payTo (string)"
- * C10: payTo.length === 0                             → "payTo must be non-empty"
- * C11: /[\x00-\x1f\x7f]/.test(network)               → "network contains control characters"
- * C12: /[\x00-\x1f\x7f]/.test(asset)                 → "asset contains control characters"
- * C13: /[\x00-\x1f\x7f]/.test(payTo)                 → "payTo contains control characters"
- * C14: accepts.length === 0                           → "at least one scheme"
- * C15: accepts entry is not string                    → "expected string, got ..."
- * C16: protocolFeeBps present AND invalid             → rejects (6 sub-conditions)
- * C17: expiresAt present AND invalid                  → rejects (4 sub-conditions)
- * C18: protocolFeeAddress present AND not non-empty string → rejects
- * C19: protocolFeeAddress has control chars            → rejects
- * C20: facilitatorUrl present AND not string           → rejects
- * C21: facilitatorUrl has control chars                → rejects
- * C22: facilitatorUrl not valid URL                    → rejects
- * C23: facilitatorUrl valid URL but not http/https     → rejects
- * C24: settlementMode present AND not 'facilitator'|'direct' → rejects
- * C25: receiptRequired present AND not boolean         → rejects
- * C26-C32: sub-object validators (mandate, upto, settlementOverrides, prepaid, stream, escrow, unlock)
+ * C2:  record.x402Version === undefined               → "Missing x402Version"
+ *      …and record.s402Version present                → "s402 v1 flat requirements shape, retired"
+ * C3:  record.x402Version !== 2                       → "Unsupported x402Version"
+ * C4:  !Array.isArray(record.accepts)                 → missing "accepts (array of requirement objects)"
+ * C5:  typeof entry.network !== 'string'              → missing "network (string)"
+ * C6:  typeof entry.asset !== 'string'                → missing "asset (string)"
+ * C7:  typeof entry.amount !== 'string'               → missing "amount (string)"
+ * C8:  amount is string AND !isValidAmount()           → "invalid amount" (format-only, S7: no magnitude bounds)
+ * C9:  typeof entry.payTo !== 'string'                → missing "payTo (string)"
+ * C10: entry.payTo.length === 0                       → "payTo must be non-empty"
+ * C11: /[\x00-\x1f\x7f]/.test(entry.network)         → "network contains control characters"
+ * C12: /[\x00-\x1f\x7f]/.test(entry.asset)           → "asset contains control characters"
+ * C13: /[\x00-\x1f\x7f]/.test(entry.payTo)           → "payTo contains control characters"
+ * C14: accepts.length === 0                           → "at least one requirement"
+ * C15: accepts entry is not an object                 → "accepts[i] is not an object"
+ * C16: extra.protocolFeeBps present AND invalid       → rejects (6 sub-conditions)
+ * C17: extra.expiresAt present AND invalid            → rejects (4 sub-conditions)
+ * C18: extra.protocolFeeAddress present AND not non-empty string → rejects
+ * C19: extra.protocolFeeAddress has control chars      → rejects
+ * C20: extra.facilitatorUrl present AND not string     → rejects
+ * C21: extra.facilitatorUrl has control chars          → rejects
+ * C22: extra.facilitatorUrl not valid URL              → rejects
+ * C23: extra.facilitatorUrl valid URL but not http/https → rejects
+ * C24: extra.settlementMode present AND not 'facilitator'|'direct' → rejects
+ * C25: extra.receiptRequired present AND not boolean   → rejects
+ * C26-C32: sub-object validators — mandate (at extensions.s402.mandate),
+ *          upto/settlementOverrides/prepaid/stream/escrow/unlock (inside extra)
+ *
+ * ── conditions the envelope added (wire v2) ──
+ * C33: record.resource is not a plain object          → "missing resource (object with a url)"
+ * C34: typeof record.resource.url !== 'string'        → "resource.url must be a string"
+ * C35: entry.scheme not a non-empty string            → missing "scheme (non-empty string)"
+ * C36: /[\x00-\x1f\x7f]/.test(entry.scheme)          → "scheme contains control characters"
+ * C37: entry.maxTimeoutSeconds present AND invalid    → rejects
+ * C38: entry.extra present AND not a plain object     → "extra must be a plain object"
+ * C39: extensions / extensions.s402 not a plain object → rejects
+ * C40: extensions.s402.version !== '2'                → "Unsupported s402 wire version"
  * ═══════════════════════════════════════════════════════════════════════
  */
 
@@ -44,6 +61,8 @@ import {
   decodeSettleResponse,
   encodePaymentRequired,
   s402Error,
+  S402_WIRE_VERSION,
+  type s402PaymentRequired,
   type s402PaymentRequirements,
 } from '../src/index.js';
 import {
@@ -60,11 +79,17 @@ import {
 // ══════════════════════════════════════════════════════════════
 
 const VALID_PAY_TO = '0x' + 'a'.repeat(64);
+const RESOURCE_URL = 'https://api.example.com/paid';
 
-/** Minimal valid requirements — all conditions TRUE (happy path). */
+/**
+ * Minimal valid requirements, written FLAT — all conditions TRUE (happy path).
+ *
+ * Flat is the memory shape, not the wire shape: `valid()` routes each key to
+ * wherever wire v2 actually carries it, so a test that flips one field still
+ * reads as one field.
+ */
 const VALID: Record<string, unknown> = {
-  s402Version: '1',
-  accepts: ['exact'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
@@ -83,12 +108,60 @@ const VALID_FULL: Record<string, unknown> = {
   extensions: { custom: 'data' },
 };
 
+/** The six keys x402 owns on one `accepts[]` entry. Everything else is s402's. */
+const ENTRY_KEYS = new Set(['scheme', 'network', 'asset', 'amount', 'payTo', 'maxTimeoutSeconds']);
+
+/** Keys that belong to the envelope itself, above the `accepts[]` list. */
+const ENVELOPE_KEYS = new Set(['x402Version', 'resource', 'accepts', 'extensions', 'error']);
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+/**
+ * Build the wire envelope a flat override describes.
+ *
+ * Routing, and it is the whole of wire v2 in six lines: the six x402 keys stay
+ * on `accepts[0]`; `mandate` goes to `extensions.s402.mandate`; envelope keys
+ * stay at envelope level; everything else is an s402 field and drops into
+ * `accepts[0].extra`.
+ */
+function wireFrom(fields: Record<string, unknown>): Record<string, unknown> {
+  const entry: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = {};
+  const envelope: Record<string, unknown> = { x402Version: 2, resource: { url: RESOURCE_URL } };
+  const s402Ext: Record<string, unknown> = { version: S402_WIRE_VERSION };
+
+  for (const [key, value] of Object.entries(fields)) {
+    if (ENTRY_KEYS.has(key)) entry[key] = value;
+    else if (key === 'mandate') s402Ext.mandate = value;
+    else if (ENVELOPE_KEYS.has(key)) envelope[key] = value;
+    else extra[key] = value;
+  }
+
+  if (Object.keys(extra).length > 0) entry.extra = extra;
+  if (!('accepts' in envelope)) envelope.accepts = [entry];
+  if (envelope.extensions === undefined) envelope.extensions = { s402: s402Ext };
+  else if (isPlainObject(envelope.extensions)) envelope.extensions = { ...envelope.extensions, s402: s402Ext };
+  return envelope;
+}
+
 function valid(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { ...VALID, ...overrides };
+  return wireFrom({ ...VALID, ...overrides });
 }
 
 function validFull(overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  return { ...VALID_FULL, ...overrides };
+  return wireFrom({ ...VALID_FULL, ...overrides });
+}
+
+/** The same fixture as an in-memory 402 document, for the encode → decode paths. */
+function doc(overrides: Partial<s402PaymentRequirements> = {}, envelope: Partial<s402PaymentRequired> = {}): s402PaymentRequired {
+  return {
+    x402Version: 2,
+    resource: { url: RESOURCE_URL },
+    accepts: [{ ...(VALID as unknown as s402PaymentRequirements), ...overrides }],
+    ...envelope,
+  };
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -104,12 +177,33 @@ describe('mcdc: validateRequirementsShape — happy paths', () => {
     expect(() => validateRequirementsShape(validFull())).not.toThrow();
   });
 
-  it('mcdc-hp: multiple schemes in accepts passes', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: ['exact', 'upto', 'prepaid', 'stream', 'escrow', 'unlock'] }))).not.toThrow();
+  it('mcdc-hp: one accepts[] entry per offered scheme passes', () => {
+    // Wire v2: offering six schemes is six entries, not one entry listing six
+    // names. `exact` first, because an x402 client pays the first entry it can.
+    const schemes = ['exact', 'upto', 'prepaid', 'stream', 'escrow', 'unlock'];
+    expect(() => validateRequirementsShape(valid({
+      accepts: schemes.map((scheme) => ({ ...VALID, scheme })),
+    }))).not.toThrow();
   });
 
-  it('mcdc-hp: unknown scheme names in accepts pass (forward compat)', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: ['exact', 'futureScheme2030'] }))).not.toThrow();
+  it('mcdc-hp: unknown scheme names pass (forward compat — a menu may list a dish we do not order)', () => {
+    expect(() => validateRequirementsShape(valid({
+      accepts: [{ ...VALID }, { ...VALID, scheme: 'futureScheme2030' }],
+    }))).not.toThrow();
+  });
+
+  it('mcdc-hp: an entry carrying unknown `extra` keys passes (x402 owns that bag)', () => {
+    expect(() => validateRequirementsShape(valid({
+      accepts: [{ ...VALID, extra: { paymentFlow: 'authorize-capture', name: 'USDC' } }],
+    }))).not.toThrow();
+  });
+
+  it('mcdc-hp: a plain x402 402 with no extensions.s402 passes', () => {
+    // The s402 profile marker is optional on intake — a plain x402 V2 402 is
+    // still a readable, payable 402.
+    const plain = valid();
+    delete (plain as Record<string, unknown>).extensions;
+    expect(() => validateRequirementsShape(plain)).not.toThrow();
   });
 
   it('mcdc-hp: settlementMode "direct" passes', () => {
@@ -150,25 +244,41 @@ describe('mcdc: validateRequirementsShape — isolation tests', () => {
   });
 
   // Note: Array IS an object in JS but passes typeof check. However, it won't
-  // have s402Version, so it fails at C2. This is tested implicitly.
+  // have x402Version, so it fails at C2. This is tested implicitly.
 
-  // C2: s402Version === undefined
-  it('mcdc-mc2: rejects missing s402Version', () => {
-    const { s402Version: _, ...rest } = valid();
-    expect(() => validateRequirementsShape(rest)).toThrow('Missing s402Version');
+  // C2: x402Version === undefined
+  it('mcdc-mc2: rejects missing x402Version', () => {
+    const { x402Version: _, ...rest } = valid();
+    expect(() => validateRequirementsShape(rest)).toThrow('Missing x402Version');
   });
 
-  // C3: s402Version !== '1'
-  it('mcdc-mc3a: rejects s402Version "2"', () => {
-    expect(() => validateRequirementsShape(valid({ s402Version: '2' }))).toThrow('Unsupported s402 version');
+  it('mcdc-mc2b: rejects the retired s402 v1 flat shape by name', () => {
+    // The abolished shape, verbatim: a version field on the 402 itself and
+    // `accepts` as a list of scheme-name strings. It must be REFUSED, with a
+    // message that names where to read it instead — not half-parsed.
+    const v1Flat = {
+      s402Version: '1',
+      accepts: ['exact'],
+      network: 'sui:testnet',
+      asset: '0x2::sui::SUI',
+      amount: '1000000000',
+      payTo: VALID_PAY_TO,
+    };
+    expect(() => validateRequirementsShape(v1Flat)).toThrow('retired in wire v2');
+    expect(() => validateRequirementsShape(v1Flat)).toThrow('fromS402V1Requirements');
   });
 
-  it('mcdc-mc3b: rejects s402Version "0"', () => {
-    expect(() => validateRequirementsShape(valid({ s402Version: '0' }))).toThrow('Unsupported s402 version');
+  // C3: x402Version !== 2
+  it('mcdc-mc3a: rejects x402Version 1 (the x402 V1 flat shape)', () => {
+    expect(() => validateRequirementsShape(valid({ x402Version: 1 }))).toThrow('Unsupported x402Version');
   });
 
-  it('mcdc-mc3c: rejects numeric s402Version 1 (must be string "1")', () => {
-    expect(() => validateRequirementsShape(valid({ s402Version: 1 }))).toThrow('Unsupported s402 version');
+  it('mcdc-mc3b: rejects x402Version 3', () => {
+    expect(() => validateRequirementsShape(valid({ x402Version: 3 }))).toThrow('Unsupported x402Version');
+  });
+
+  it('mcdc-mc3c: rejects string x402Version "2" (must be the number 2)', () => {
+    expect(() => validateRequirementsShape(valid({ x402Version: '2' }))).toThrow('Unsupported x402Version');
   });
 
   // C4: !Array.isArray(accepts)
@@ -194,19 +304,19 @@ describe('mcdc: validateRequirementsShape — isolation tests', () => {
 
   // C8: amount is string AND !isValidAmount() — format-only check (S7: no chain-specific magnitude bounds)
   it('mcdc-mc8a: rejects non-numeric amount string', () => {
-    expect(() => validateRequirementsShape(valid({ amount: 'abc' }))).toThrow('Invalid amount');
+    expect(() => validateRequirementsShape(valid({ amount: 'abc' }))).toThrow('invalid amount');
   });
 
   it('mcdc-mc8b: rejects negative amount', () => {
-    expect(() => validateRequirementsShape(valid({ amount: '-1' }))).toThrow('Invalid amount');
+    expect(() => validateRequirementsShape(valid({ amount: '-1' }))).toThrow('invalid amount');
   });
 
   it('mcdc-mc8c: rejects leading zeros', () => {
-    expect(() => validateRequirementsShape(valid({ amount: '007' }))).toThrow('Invalid amount');
+    expect(() => validateRequirementsShape(valid({ amount: '007' }))).toThrow('invalid amount');
   });
 
   it('mcdc-mc8d: rejects decimal amount', () => {
-    expect(() => validateRequirementsShape(valid({ amount: '1.5' }))).toThrow('Invalid amount');
+    expect(() => validateRequirementsShape(valid({ amount: '1.5' }))).toThrow('invalid amount');
   });
 
   it('mcdc-mc8e: accepts amount exceeding u64 max — S7: magnitude bounds belong in chain adapters', () => {
@@ -258,24 +368,31 @@ describe('mcdc: validateRequirementsShape — isolation tests', () => {
 
   // C14: accepts.length === 0
   it('mcdc-mc14: rejects empty accepts array', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: [] }))).toThrow('at least one scheme');
+    expect(() => validateRequirementsShape(valid({ accepts: [] }))).toThrow('at least one requirement');
   });
 
-  // C15: accepts entry is not string
+  // C15: an accepts entry is not a requirement object.
+  // Wire v2 inverted this condition: an entry used to have to BE a scheme-name
+  // string, and now a bare string is exactly what is refused.
   it('mcdc-mc15a: rejects number in accepts', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: [42] }))).toThrow('expected string');
+    expect(() => validateRequirementsShape(valid({ accepts: [42] }))).toThrow('accepts[0] is not an object');
   });
 
   it('mcdc-mc15b: rejects null in accepts', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: [null] }))).toThrow('expected string');
+    expect(() => validateRequirementsShape(valid({ accepts: [null] }))).toThrow('accepts[0] is not an object');
   });
 
-  it('mcdc-mc15c: rejects object in accepts', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: [{ scheme: 'exact' }] }))).toThrow('expected string');
+  it('mcdc-mc15c: rejects a bare scheme-name string in accepts (the retired v1 idiom)', () => {
+    expect(() => validateRequirementsShape(valid({ accepts: ['exact'] }))).toThrow('accepts[0] is not an object');
   });
 
-  it('mcdc-mc15d: rejects mixed valid/invalid in accepts', () => {
-    expect(() => validateRequirementsShape(valid({ accepts: ['exact', 42] }))).toThrow('expected string');
+  it('mcdc-mc15d: rejects mixed valid/invalid in accepts, naming the bad index', () => {
+    expect(() => validateRequirementsShape(valid({ accepts: [{ ...VALID }, 42] }))).toThrow('accepts[1] is not an object');
+  });
+
+  it('mcdc-mc15e: rejects an accepts entry missing scheme', () => {
+    const { scheme: _, ...noScheme } = VALID;
+    expect(() => validateRequirementsShape(valid({ accepts: [noScheme] }))).toThrow('missing scheme (non-empty string)');
   });
 
   // C16: protocolFeeBps validation sub-conditions
@@ -406,6 +523,85 @@ describe('mcdc: validateRequirementsShape — isolation tests', () => {
 
   it('mcdc-mc25b: rejects receiptRequired as number', () => {
     expect(() => validateRequirementsShape(valid({ receiptRequired: 1 }))).toThrow('receiptRequired must be a boolean');
+  });
+
+  // ── conditions the envelope added (wire v2) ──
+
+  // C33: resource is not a plain object
+  it('mcdc-mc33a: rejects missing resource', () => {
+    const { resource: _, ...rest } = valid();
+    expect(() => validateRequirementsShape(rest)).toThrow('missing resource (object with a url)');
+  });
+
+  it('mcdc-mc33b: rejects array resource', () => {
+    expect(() => validateRequirementsShape(valid({ resource: [] }))).toThrow('missing resource (object with a url)');
+  });
+
+  // C34: resource.url is not a string
+  it('mcdc-mc34a: rejects missing resource.url', () => {
+    expect(() => validateRequirementsShape(valid({ resource: {} }))).toThrow('resource.url must be a string');
+  });
+
+  it('mcdc-mc34b: rejects non-string resource.url', () => {
+    expect(() => validateRequirementsShape(valid({ resource: { url: 42 } }))).toThrow('resource.url must be a string');
+  });
+
+  // C35: scheme is not a non-empty string
+  it('mcdc-mc35a: rejects non-string scheme', () => {
+    expect(() => validateRequirementsShape(valid({ scheme: 42 }))).toThrow('missing scheme (non-empty string)');
+  });
+
+  it('mcdc-mc35b: rejects empty scheme', () => {
+    expect(() => validateRequirementsShape(valid({ scheme: '' }))).toThrow('missing scheme (non-empty string)');
+  });
+
+  // C36: scheme contains control characters
+  it('mcdc-mc36: rejects scheme with control char', () => {
+    expect(() => validateRequirementsShape(valid({ scheme: 'exa\x00ct' }))).toThrow('scheme contains control characters');
+  });
+
+  // C37: maxTimeoutSeconds present AND invalid
+  it('mcdc-mc37a: rejects non-numeric maxTimeoutSeconds', () => {
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: '60' }))).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+  });
+
+  it('mcdc-mc37b: rejects negative maxTimeoutSeconds', () => {
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: -1 }))).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+  });
+
+  it('mcdc-mc37c: rejects Infinity maxTimeoutSeconds', () => {
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: Infinity }))).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+  });
+
+  it('mcdc-mc37d: accepts maxTimeoutSeconds = 0 (lower bound)', () => {
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: 0 }))).not.toThrow();
+  });
+
+  // C38: entry.extra present AND not a plain object
+  it('mcdc-mc38a: rejects string extra', () => {
+    expect(() => validateRequirementsShape(valid({ accepts: [{ ...VALID, extra: 'nope' }] }))).toThrow('extra must be a plain object');
+  });
+
+  it('mcdc-mc38b: rejects array extra', () => {
+    expect(() => validateRequirementsShape(valid({ accepts: [{ ...VALID, extra: [] }] }))).toThrow('extra must be a plain object');
+  });
+
+  // C39: extensions / extensions.s402 must be plain objects
+  it('mcdc-mc39a: rejects non-object envelope extensions', () => {
+    expect(() => validateRequirementsShape({ ...valid(), extensions: 'nope' })).toThrow('extensions must be a plain object');
+  });
+
+  it('mcdc-mc39b: rejects non-object extensions.s402', () => {
+    expect(() => validateRequirementsShape({ ...valid(), extensions: { s402: 'nope' } })).toThrow('extensions.s402 must be a plain object');
+  });
+
+  // C40: extensions.s402.version is a version this build does not implement
+  it('mcdc-mc40a: rejects s402 wire version "1"', () => {
+    expect(() => validateRequirementsShape({ ...valid(), extensions: { s402: { version: '1' } } })).toThrow('Unsupported s402 wire version');
+  });
+
+  it('mcdc-mc40b: rejects s402 wire version "3"', () => {
+    expect(() => validateRequirementsShape({ ...valid(), extensions: { s402: { version: '3' } } })).toThrow('Unsupported s402 wire version');
   });
 });
 
@@ -761,12 +957,8 @@ describe('mcdc-bva: validateRequirementsShape — boundary values', () => {
 
   // Header size boundary (tested via decode)
   it('bva: header at exactly 64KB passes decode (if valid content)', () => {
-    // Create a requirements with extensions that pad to near 64KB
-    const reqs = {
-      ...VALID,
-      extensions: { padding: 'x'.repeat(40_000) },
-    } as unknown as s402PaymentRequirements;
-    const encoded = encodePaymentRequired(reqs);
+    // Create a 402 with extensions that pad to near 64KB
+    const encoded = encodePaymentRequired(doc({ extensions: { padding: 'x'.repeat(40_000) } }));
     // This should be under 64KB after base64 encoding
     if (encoded.length <= 64 * 1024) {
       expect(() => decodePaymentRequired(encoded)).not.toThrow();
@@ -791,12 +983,12 @@ describe('mcdc: validatePayloadShape — isolation tests', () => {
   const VALID_PAYLOAD = { scheme: 'exact', payload: { transaction: 'tx', signature: 'sig' } };
 
   it('mcdc-hp: valid exact payload passes', () => {
-    expect(() => decodePaymentRequired(encodePaymentRequired(VALID as unknown as s402PaymentRequirements))).not.toThrow();
+    expect(() => decodePaymentRequired(encodePaymentRequired(doc()))).not.toThrow();
   });
 
-  // C1: array is typeof 'object' but has no s402Version — hits version gate
-  it('mcdc-mc1: rejects array (passes typeof but fails s402Version)', () => {
-    expect(() => decodePaymentRequired(btoa(JSON.stringify([])))).toThrow('Missing s402Version');
+  // C1: array is typeof 'object' but has no x402Version — hits version gate
+  it('mcdc-mc1: rejects array (passes typeof but fails x402Version)', () => {
+    expect(() => decodePaymentRequired(btoa(JSON.stringify([])))).toThrow('Missing x402Version');
   });
 
   // Payload version gate
@@ -897,21 +1089,27 @@ describe('mcdc: all rejections throw s402Error with INVALID_PAYLOAD code', () =>
     ['null', null],
     ['undefined', undefined],
     ['number', 42],
-    ['missing s402Version', { accepts: ['exact'], network: 'n', asset: 'a', amount: '0', payTo: 'p' }],
-    ['wrong version', { ...VALID, s402Version: '99' }],
-    ['non-array accepts', { ...VALID, accepts: 'exact' }],
-    ['empty accepts', { ...VALID, accepts: [] }],
-    ['non-string network', { ...VALID, network: 42 }],
-    ['non-string amount', { ...VALID, amount: 42 }],
-    ['invalid amount', { ...VALID, amount: 'hello' }],
-    ['empty payTo', { ...VALID, payTo: '' }],
-    ['control char in network', { ...VALID, network: 'sui\x00' }],
-    ['invalid facilitatorUrl', { ...VALID, facilitatorUrl: 'not-a-url' }],
-    ['SSRF facilitatorUrl', { ...VALID, facilitatorUrl: 'file:///etc/passwd' }],
-    ['bad settlementMode', { ...VALID, settlementMode: 'fast' }],
-    ['bad receiptRequired', { ...VALID, receiptRequired: 'yes' }],
-    ['bad protocolFeeBps', { ...VALID, protocolFeeBps: 50001 }],
-    ['bad expiresAt', { ...VALID, expiresAt: 'never' }],
+    ['missing x402Version', { resource: { url: RESOURCE_URL }, accepts: [{ ...VALID }] }],
+    ['retired s402 v1 flat shape', { s402Version: '1', accepts: ['exact'], network: 'n', asset: 'a', amount: '0', payTo: 'p' }],
+    ['wrong x402Version', valid({ x402Version: 99 })],
+    ['missing resource', { x402Version: 2, accepts: [{ ...VALID }] }],
+    ['non-string resource.url', valid({ resource: { url: 42 } })],
+    ['non-array accepts', valid({ accepts: 'exact' })],
+    ['empty accepts', valid({ accepts: [] })],
+    ['bare string accepts entry', valid({ accepts: ['exact'] })],
+    ['non-string network', valid({ network: 42 })],
+    ['non-string amount', valid({ amount: 42 })],
+    ['invalid amount', valid({ amount: 'hello' })],
+    ['empty payTo', valid({ payTo: '' })],
+    ['control char in network', valid({ network: 'sui\x00' })],
+    ['non-object entry extra', valid({ accepts: [{ ...VALID, extra: 'nope' }] })],
+    ['invalid facilitatorUrl', valid({ facilitatorUrl: 'not-a-url' })],
+    ['SSRF facilitatorUrl', valid({ facilitatorUrl: 'file:///etc/passwd' })],
+    ['bad settlementMode', valid({ settlementMode: 'fast' })],
+    ['bad receiptRequired', valid({ receiptRequired: 'yes' })],
+    ['bad protocolFeeBps', valid({ protocolFeeBps: 50001 })],
+    ['bad expiresAt', valid({ expiresAt: 'never' })],
+    ['unsupported s402 wire version', { ...valid(), extensions: { s402: { version: '3' } } }],
   ] as const;
 
   for (const [label, input] of INVALID_INPUTS) {

@@ -9,6 +9,7 @@ import {
   fromX402Requirements,
   fromX402Payload,
   fromX402Envelope,
+  fromS402V1Requirements,
   toX402Requirements,
   toX402Payload,
   toX402V2Requirements,
@@ -22,6 +23,9 @@ import {
 } from '../src/compat/x402.js';
 
 const VALID_PAY_TO = '0x' + 'a'.repeat(64);
+
+/** `resource` is mandatory on an x402 V2 envelope, so every V2 fixture carries one. */
+const RESOURCE = { url: 'https://api.example.com/paid' };
 
 // x402 V2 format (uses `amount`)
 const SAMPLE_X402_V2: x402PaymentRequirements = {
@@ -45,16 +49,17 @@ const SAMPLE_X402_V1: x402PaymentRequirements = {
   description: 'API access',
 };
 
+// ONE `accepts[]` entry. Since wire v2 a requirement names a single scheme;
+// offering several is what the envelope's `accepts[]` array is for.
 const SAMPLE_S402: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact', 'stream'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
   payTo: VALID_PAY_TO,
   facilitatorUrl: 'https://facilitator.example.com',
   protocolFeeBps: 50,
-  mandate: { required: true },
+  receiptRequired: true,
 };
 
 describe('s402 compat layer', () => {
@@ -62,8 +67,7 @@ describe('s402 compat layer', () => {
     it('converts x402 V2 (amount) to s402 format', () => {
       const s402 = fromX402Requirements(SAMPLE_X402_V2);
 
-      expect(s402.s402Version).toBe('1');
-      expect(s402.accepts).toEqual(['exact']);
+      expect(s402.scheme).toBe('exact');
       expect(s402.network).toBe('sui:testnet');
       expect(s402.amount).toBe('1000000000');
       expect(s402.payTo).toBe('0xabc');
@@ -72,8 +76,7 @@ describe('s402 compat layer', () => {
     it('converts x402 V1 (maxAmountRequired) to s402 format', () => {
       const s402 = fromX402Requirements(SAMPLE_X402_V1);
 
-      expect(s402.s402Version).toBe('1');
-      expect(s402.accepts).toEqual(['exact']);
+      expect(s402.scheme).toBe('exact');
       expect(s402.amount).toBe('1000000000');
       expect(s402.payTo).toBe('0xabc');
     });
@@ -129,6 +132,7 @@ describe('s402 compat layer', () => {
       // s402-only fields should NOT be present
       expect('mandate' in x402).toBe(false);
       expect('protocolFeeBps' in x402).toBe(false);
+      expect('receiptRequired' in x402).toBe(false);
       expect('accepts' in x402).toBe(false);
     });
 
@@ -164,8 +168,9 @@ describe('s402 compat layer', () => {
       const x402 = toX402Requirements(SAMPLE_S402);
       const roundtripped = fromX402Requirements(x402);
 
-      // mandate was s402-only, gets stripped in x402 conversion
-      expect(roundtripped.mandate).toBeUndefined();
+      // receiptRequired and protocolFeeBps are s402-only, so the x402 V1
+      // projection drops them and they do not come back.
+      expect(roundtripped.receiptRequired).toBeUndefined();
       expect(roundtripped.protocolFeeBps).toBeUndefined();
     });
   });
@@ -223,23 +228,25 @@ describe('s402 compat layer', () => {
   });
 
   describe('normalizeRequirements', () => {
-    it('passes through s402 requirements', () => {
+    it('expands the retired s402 v1 flat shape into an envelope', () => {
       const result = normalizeRequirements({ s402Version: '1', accepts: ['exact'], network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO });
-      expect(result.s402Version).toBe('1');
+      expect(result.x402Version).toBe(2);
+      expect(result.accepts).toHaveLength(1);
+      expect(result.accepts[0].scheme).toBe('exact');
     });
 
     it('converts x402 V2 requirements (amount)', () => {
       const result = normalizeRequirements({ x402Version: 2, scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO });
-      expect(result.s402Version).toBe('1');
-      expect(result.accepts).toEqual(['exact']);
-      expect(result.amount).toBe('100');
+      expect(result.x402Version).toBe(2);
+      expect(result.accepts[0].scheme).toBe('exact');
+      expect(result.accepts[0].amount).toBe('100');
     });
 
     it('converts x402 V1 requirements (maxAmountRequired)', () => {
       const result = normalizeRequirements({ x402Version: 1, scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', maxAmountRequired: '500', payTo: VALID_PAY_TO });
-      expect(result.s402Version).toBe('1');
-      expect(result.accepts).toEqual(['exact']);
-      expect(result.amount).toBe('500');
+      expect(result.x402Version).toBe(2);
+      expect(result.accepts[0].scheme).toBe('exact');
+      expect(result.accepts[0].amount).toBe('500');
     });
 
     it('throws s402Error on unknown format', () => {
@@ -249,7 +256,7 @@ describe('s402 compat layer', () => {
 
     it('throws s402Error on s402 object missing required fields', () => {
       expect(() => normalizeRequirements({ s402Version: '1' })).toThrow(s402Error);
-      expect(() => normalizeRequirements({ s402Version: '1' })).toThrow('missing');
+      expect(() => normalizeRequirements({ s402Version: '1' })).toThrow('non-empty accepts array');
     });
 
     it('throws s402Error listing all missing fields', () => {
@@ -275,7 +282,7 @@ describe('s402 compat layer', () => {
         amount: '100',
         payTo: VALID_PAY_TO,
       });
-      expect(result.network).toBe('sui:testnet');
+      expect(result.accepts[0].network).toBe('sui:testnet');
     });
 
     it('strips unknown top-level keys from s402 input (trust boundary)', () => {
@@ -290,11 +297,13 @@ describe('s402 compat layer', () => {
         unknownField: 42,
         extensions: { safe: true },
       });
-      expect(result.network).toBe('sui:testnet');
+      expect(result.accepts[0].network).toBe('sui:testnet');
       expect((result as any).__proto__hack).toBeUndefined();
+      expect((result.accepts[0] as any).__proto__hack).toBeUndefined();
       expect((result as any).unknownField).toBeUndefined();
-      // Known field 'extensions' should survive
-      expect(result.extensions).toEqual({ safe: true });
+      expect((result.accepts[0] as any).unknownField).toBeUndefined();
+      // Known field 'extensions' should survive, on the entry it described
+      expect(result.accepts[0].extensions).toEqual({ safe: true });
     });
 
     it('preserves all known optional fields through normalization', () => {
@@ -311,17 +320,17 @@ describe('s402 compat layer', () => {
         receiptRequired: true,
         settlementMode: 'direct',
       });
-      expect(result.facilitatorUrl).toBe('https://example.com');
-      expect(result.protocolFeeBps).toBe(50);
-      expect(result.receiptRequired).toBe(true);
-      expect(result.settlementMode).toBe('direct');
+      expect(result.accepts[0].facilitatorUrl).toBe('https://example.com');
+      expect(result.accepts[0].protocolFeeBps).toBe(50);
+      expect(result.accepts[0].receiptRequired).toBe(true);
+      expect(result.accepts[0].settlementMode).toBe('direct');
     });
 
     it('rejects empty accepts array in s402 format', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: [], network: 'sui:testnet',
         asset: '0x2::sui::SUI', amount: '100', payTo: VALID_PAY_TO,
-      })).toThrow('at least one scheme');
+      })).toThrow('non-empty accepts array');
     });
 
     it('rejects protocolFeeBps > 10000 in s402 format', () => {
@@ -367,7 +376,7 @@ describe('s402 compat layer', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
         asset: '0x2::sui::SUI', amount: 'hello', payTo: VALID_PAY_TO,
-      })).toThrow('Invalid amount');
+      })).toThrow('invalid amount');
     });
 
     it('rejects x402 with non-numeric amount', () => {
@@ -385,7 +394,7 @@ describe('s402 compat layer', () => {
       expect(() => normalizeRequirements({
         s402Version: '1', accepts: ['exact'], network: 'sui:testnet',
         asset: '0x2::sui::SUI', amount: '007', payTo: VALID_PAY_TO,
-      })).toThrow('Invalid amount');
+      })).toThrow('invalid amount');
     });
 
     it('rejects x402 with leading zeros in amount', () => {
@@ -404,40 +413,77 @@ describe('s402 compat layer', () => {
         maxAmountRequired: '999',
         payTo: VALID_PAY_TO,
       });
-      expect(result.amount).toBe('999');
+      expect(result.accepts[0].amount).toBe('999');
     });
 
     it('converts x402 V2 envelope (accepts array)', () => {
       const envelope = {
         x402Version: 2,
+        resource: RESOURCE,
         accepts: [
           { scheme: 'exact', network: 'eip155:8453', asset: '0x2::sui::SUI', amount: '5000', payTo: '0xvendor' },
         ],
       };
       const result = normalizeRequirements(envelope as Record<string, unknown>);
-      expect(result.s402Version).toBe('1');
-      expect(result.accepts).toEqual(['exact']);
-      expect(result.amount).toBe('5000');
-      expect(result.payTo).toBe('0xvendor');
+      expect(result.x402Version).toBe(2);
+      expect(result.accepts[0].scheme).toBe('exact');
+      expect(result.accepts[0].amount).toBe('5000');
+      expect(result.accepts[0].payTo).toBe('0xvendor');
     });
 
-    it('converts x402 V2 envelope with multiple accepts (picks first)', () => {
+    it('converts x402 V2 envelope with multiple accepts (keeps every offer)', () => {
+      // Wire v2 keeps the whole menu. Picking one is the CLIENT's job — the
+      // decoder that discarded offers here made a payable entry unreachable.
       const envelope = {
         x402Version: 2,
+        resource: RESOURCE,
         accepts: [
           { scheme: 'exact', network: 'eip155:8453', asset: 'USDC', amount: '1000', payTo: '0xfirst' },
           { scheme: 'exact', network: 'eip155:1', asset: 'ETH', amount: '9999', payTo: '0xsecond' },
         ],
       };
       const result = normalizeRequirements(envelope as Record<string, unknown>);
-      expect(result.amount).toBe('1000');
-      expect(result.payTo).toBe('0xfirst');
+      expect(result.accepts).toHaveLength(2);
+      expect(result.accepts[0].amount).toBe('1000');
+      expect(result.accepts[0].payTo).toBe('0xfirst');
+      expect(result.accepts[1].amount).toBe('9999');
+      expect(result.accepts[1].payTo).toBe('0xsecond');
+    });
+
+    it('gives a foreign x402 402 an expiresAt so S1 has something to read', () => {
+      // No `extensions.s402` means the server never heard of s402; without a
+      // derived expiry the facilitator's three staleness guards all skip.
+      const now = 1_700_000_000_000;
+      const result = normalizeRequirements({
+        x402Version: 2,
+        resource: RESOURCE,
+        accepts: [{ scheme: 'exact', network: 'eip155:8453', asset: 'USDC', amount: '1000', payTo: '0xfirst', maxTimeoutSeconds: 30 }],
+      }, now);
+      expect(result.accepts[0].expiresAt).toBe(now + 30_000);
+    });
+
+    it('leaves an s402-profile 402 expiry alone (it says what it means)', () => {
+      const result = normalizeRequirements({
+        x402Version: 2,
+        resource: RESOURCE,
+        accepts: [{ scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '1000', payTo: VALID_PAY_TO, maxTimeoutSeconds: 30 }],
+        extensions: { s402: { version: '2' } },
+      }, 1_700_000_000_000);
+      expect(result.accepts[0].expiresAt).toBeUndefined();
     });
 
     it('throws on x402 V2 envelope with empty accepts', () => {
-      const envelope = { x402Version: 2, accepts: [] };
+      const envelope = { x402Version: 2, resource: RESOURCE, accepts: [] };
       expect(() => normalizeRequirements(envelope as Record<string, unknown>)).toThrow(s402Error);
-      expect(() => normalizeRequirements(envelope as Record<string, unknown>)).toThrow('empty accepts');
+      expect(() => normalizeRequirements(envelope as Record<string, unknown>)).toThrow('at least one requirement');
+    });
+
+    it('throws on an x402 V2 envelope with no resource', () => {
+      const envelope = {
+        x402Version: 2,
+        accepts: [{ scheme: 'exact', network: 'eip155:8453', asset: 'USDC', amount: '1000', payTo: '0xfirst' }],
+      };
+      expect(() => normalizeRequirements(envelope as Record<string, unknown>)).toThrow('missing resource');
     });
   });
 
@@ -448,7 +494,7 @@ describe('s402 compat layer', () => {
       expect(isX402Envelope({ s402Version: '1', accepts: ['exact'] })).toBe(false);
     });
 
-    it('fromX402Envelope extracts first requirement', () => {
+    it('fromX402Envelope decodes the envelope and keeps its resource', () => {
       const envelope: x402PaymentRequiredEnvelope = {
         x402Version: 2,
         accepts: [
@@ -457,38 +503,141 @@ describe('s402 compat layer', () => {
         resource: { url: '/api/data', mimeType: 'application/json' },
       };
       const result = fromX402Envelope(envelope);
-      expect(result.s402Version).toBe('1');
-      expect(result.amount).toBe('777');
-      expect(result.network).toBe('sui:testnet');
+      expect(result.x402Version).toBe(2);
+      expect(result.resource).toEqual({ url: '/api/data', mimeType: 'application/json' });
+      expect(result.accepts[0].amount).toBe('777');
+      expect(result.accepts[0].network).toBe('sui:testnet');
+      // `x402Version` on the inner requirement is a V1 carry-over — stripped.
+      expect((result.accepts[0] as any).x402Version).toBeUndefined();
     });
 
     it('fromX402Envelope throws on empty accepts', () => {
       const envelope: x402PaymentRequiredEnvelope = {
         x402Version: 2,
+        resource: RESOURCE,
         accepts: [],
       };
-      expect(() => fromX402Envelope(envelope)).toThrow('empty accepts');
+      expect(() => fromX402Envelope(envelope)).toThrow('at least one requirement');
     });
 
     it('fromX402Envelope rejects malformed inner requirement', () => {
       const envelope: x402PaymentRequiredEnvelope = {
         x402Version: 2,
+        resource: RESOURCE,
         accepts: [
           { scheme: 'exact', network: 'sui:testnet' } as any, // missing asset, amount, payTo
         ],
       };
       expect(() => fromX402Envelope(envelope)).toThrow(s402Error);
-      expect(() => fromX402Envelope(envelope)).toThrow('Malformed x402');
+      expect(() => fromX402Envelope(envelope)).toThrow('Malformed payment requirements: accepts[0]');
     });
 
     it('fromX402Envelope rejects non-numeric amount in inner requirement', () => {
       const envelope: x402PaymentRequiredEnvelope = {
         x402Version: 2,
+        resource: RESOURCE,
         accepts: [
           { scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', amount: 'not-a-number', payTo: '0xabc' } as any,
         ],
       };
-      expect(() => fromX402Envelope(envelope)).toThrow('Invalid amount');
+      expect(() => fromX402Envelope(envelope)).toThrow('accepts[0]: invalid amount');
+    });
+  });
+
+  // ══════════════════════════════════════════════════════════
+  // fromS402V1Requirements — the retired flat shape, read-only
+  // ══════════════════════════════════════════════════════════
+
+  describe('fromS402V1Requirements', () => {
+    const V1 = {
+      s402Version: '1',
+      accepts: ['exact'],
+      network: 'sui:testnet',
+      asset: '0x2::sui::SUI',
+      amount: '1000000000',
+      payTo: VALID_PAY_TO,
+    };
+
+    it('decodes a v1 flat document into a wire-v2 envelope', () => {
+      const result = fromS402V1Requirements(V1);
+      expect(result.x402Version).toBe(2);
+      expect(result.accepts).toHaveLength(1);
+      expect(result.accepts[0].scheme).toBe('exact');
+      expect(result.accepts[0].amount).toBe('1000000000');
+      // `s402Version` does not survive — it is not a wire-v2 field.
+      expect((result as any).s402Version).toBeUndefined();
+    });
+
+    it('expands one accepts[] entry per scheme, exact hoisted first', () => {
+      const result = fromS402V1Requirements({ ...V1, accepts: ['prepaid', 'exact'] });
+      expect(result.accepts.map((a) => a.scheme)).toEqual(['exact', 'prepaid']);
+    });
+
+    it('deduplicates repeated scheme names', () => {
+      const result = fromS402V1Requirements({ ...V1, accepts: ['exact', 'prepaid', 'exact'] });
+      expect(result.accepts.map((a) => a.scheme)).toEqual(['exact', 'prepaid']);
+    });
+
+    it('lands every per-requirement field on every expanded entry', () => {
+      const result = fromS402V1Requirements({
+        ...V1,
+        accepts: ['exact', 'stream'],
+        facilitatorUrl: 'https://facilitator.example.com',
+        protocolFeeBps: 50,
+        receiptRequired: true,
+        settlementMode: 'direct',
+        extensions: { custom: 'data' },
+      });
+      expect(result.accepts).toHaveLength(2);
+      for (const entry of result.accepts) {
+        expect(entry.network).toBe('sui:testnet');
+        expect(entry.asset).toBe('0x2::sui::SUI');
+        expect(entry.amount).toBe('1000000000');
+        expect(entry.payTo).toBe(VALID_PAY_TO);
+        expect(entry.facilitatorUrl).toBe('https://facilitator.example.com');
+        expect(entry.protocolFeeBps).toBe(50);
+        expect(entry.receiptRequired).toBe(true);
+        expect(entry.settlementMode).toBe('direct');
+        expect(entry.extensions).toEqual({ custom: 'data' });
+      }
+    });
+
+    it('hoists mandate to the envelope (it authorizes the agent, not a price line)', () => {
+      const result = fromS402V1Requirements({ ...V1, accepts: ['exact', 'upto'], mandate: { required: true, minPerTx: '100' } });
+      expect(result.mandate).toEqual({ required: true, minPerTx: '100' });
+      for (const entry of result.accepts) {
+        expect((entry as any).mandate).toBeUndefined();
+      }
+    });
+
+    it('uses the supplied resource, and an empty url when none is known', () => {
+      expect(fromS402V1Requirements(V1).resource).toEqual({ url: '' });
+      expect(fromS402V1Requirements(V1, { resource: RESOURCE }).resource).toEqual(RESOURCE);
+    });
+
+    it('strips unknown v1 keys at the trust boundary', () => {
+      const result = fromS402V1Requirements({ ...V1, unknownField: 42, __proto__hack: 'malicious' });
+      expect((result.accepts[0] as any).unknownField).toBeUndefined();
+      expect((result.accepts[0] as any).__proto__hack).toBeUndefined();
+    });
+
+    it('rejects a document that is not the flat "1" shape', () => {
+      expect(() => fromS402V1Requirements({ ...V1, s402Version: '2' })).toThrow(s402Error);
+      expect(() => fromS402V1Requirements({ ...V1, s402Version: '2' })).toThrow('fromS402V1Requirements reads the flat "1" shape only');
+      expect(() => fromS402V1Requirements(null as any)).toThrow('must be a plain object');
+    });
+
+    it('rejects an empty or non-string accepts list', () => {
+      expect(() => fromS402V1Requirements({ ...V1, accepts: [] })).toThrow('non-empty accepts array');
+      expect(() => fromS402V1Requirements({ ...V1, accepts: ['exact', 42] })).toThrow('expected a non-empty string');
+    });
+
+    it('runs the canonical wire validators over the expanded document', () => {
+      expect(() => fromS402V1Requirements({ ...V1, amount: '007' })).toThrow('invalid amount');
+      expect(() => fromS402V1Requirements({ ...V1, facilitatorUrl: 'file:///etc/passwd' }))
+        .toThrow('facilitatorUrl must use https:// or http://');
+      expect(() => fromS402V1Requirements({ ...V1, mandate: { required: 'yes' } }))
+        .toThrow('mandate.required must be a boolean');
     });
   });
 
@@ -531,8 +680,7 @@ describe('s402 compat layer', () => {
 
 describe('toX402V2Requirements (write path)', () => {
   const SAMPLE_S402: s402PaymentRequirements = {
-    s402Version: '1',
-    accepts: ['exact'],
+    scheme: 'exact',
     network: 'eip155:8453',
     asset: '0x' + 'd'.repeat(40),
     amount: '10000',
@@ -571,37 +719,49 @@ describe('toX402V2Requirements (write path)', () => {
     expect(v2.extra).toEqual({ permit2Address: '0x' + 'b'.repeat(40) });
   });
 
-  it('throws when accepts[0] is not "exact" (prevents silent scheme downgrade)', () => {
-    const nonExactS402: s402PaymentRequirements = {
+  it('projects a non-exact scheme instead of refusing it', () => {
+    // Wire v2 made every s402 scheme expressible as an x402 requirement. An
+    // x402 client with no `prepaid` handler skips the entry — which is what
+    // `accepts[]` is FOR — so refusing to emit it was the stricter error.
+    const prepaidS402: s402PaymentRequirements = {
       ...SAMPLE_S402,
-      accepts: ['prepaid'],
+      scheme: 'prepaid',
+      prepaid: { ratePerCall: '100', minDeposit: '1000', withdrawalDelayMs: '86400000' },
     };
-    expect(() => toX402V2Requirements(nonExactS402)).toThrow(s402Error);
-    expect(() => toX402V2Requirements(nonExactS402)).toThrow(/only translates s402.accepts\[0\] === 'exact'/);
+    const v2 = toX402V2Requirements(prepaidS402);
+    expect(v2.scheme).toBe('prepaid');
+    expect(v2.amount).toBe('10000');
+    expect(v2.extra.prepaid).toEqual({ ratePerCall: '100', minDeposit: '1000', withdrawalDelayMs: '86400000' });
   });
 
-  it('throws on empty accepts array', () => {
-    const emptyAcceptsS402: s402PaymentRequirements = {
-      ...SAMPLE_S402,
-      accepts: [],
-    };
-    expect(() => toX402V2Requirements(emptyAcceptsS402)).toThrow(s402Error);
+  it('projects a foreign scheme name verbatim (Postel)', () => {
+    const foreign = toX402V2Requirements({ ...SAMPLE_S402, scheme: 'auth-capture' });
+    expect(foreign.scheme).toBe('auth-capture');
   });
 
-  it('accepts arrays where exact is first, even if other schemes follow', () => {
-    const multiSchemeS402: s402PaymentRequirements = {
+  it('routes s402-only fields into extra, never onto the entry itself', () => {
+    const v2 = toX402V2Requirements({
       ...SAMPLE_S402,
-      accepts: ['exact', 'upto'],
-    };
-    const v2 = toX402V2Requirements(multiSchemeS402);
-    expect(v2.scheme).toBe('exact');
+      facilitatorUrl: 'https://facilitator.example.com',
+      protocolFeeBps: 50,
+      expiresAt: 1_700_000_000_000,
+      extensions: { custom: 'data' },
+    });
+    expect(Object.keys(v2).sort()).toEqual(
+      ['amount', 'asset', 'extra', 'maxTimeoutSeconds', 'network', 'payTo', 'scheme'],
+    );
+    expect(v2.extra).toEqual({
+      facilitatorUrl: 'https://facilitator.example.com',
+      protocolFeeBps: 50,
+      expiresAt: 1_700_000_000_000,
+      extensions: { custom: 'data' },
+    });
   });
 });
 
 describe('toX402V2Envelope (write path)', () => {
   const SAMPLE_S402: s402PaymentRequirements = {
-    s402Version: '1',
-    accepts: ['exact'],
+    scheme: 'exact',
     network: 'eip155:8453',
     asset: '0x' + 'd'.repeat(40),
     amount: '10000',
@@ -636,13 +796,28 @@ describe('toX402V2Envelope (write path)', () => {
     expect(envelope.error).toBe('Optional error string');
   });
 
+  it('accepts an array of offers, one accepts[] entry each, order preserved', () => {
+    const envelope = toX402V2Envelope(
+      [SAMPLE_S402, { ...SAMPLE_S402, scheme: 'prepaid', payTo: '0x' + 'b'.repeat(40) }],
+      { url: 'mcp://tool/summarize' },
+    );
+    expect(envelope.accepts).toHaveLength(2);
+    expect(envelope.accepts.map((a) => a.scheme)).toEqual(['exact', 'prepaid']);
+    expect(envelope.accepts[1].payTo).toBe('0x' + 'b'.repeat(40));
+  });
+
+  it('requires a non-empty resource.url (mandatory on a V2 envelope)', () => {
+    expect(() => toX402V2Envelope(SAMPLE_S402, { url: '' })).toThrow(s402Error);
+    expect(() => toX402V2Envelope(SAMPLE_S402, { url: '' })).toThrow('non-empty resource.url');
+  });
+
   it('roundtrips via fromX402Envelope to preserve s402 fields', () => {
     const envelope = toX402V2Envelope(SAMPLE_S402, { url: 'mcp://tool/summarize' });
     const recovered = fromX402Envelope(envelope as unknown as x402PaymentRequiredEnvelope);
-    expect(recovered.network).toBe(SAMPLE_S402.network);
-    expect(recovered.asset).toBe(SAMPLE_S402.asset);
-    expect(recovered.amount).toBe(SAMPLE_S402.amount);
-    expect(recovered.payTo).toBe(SAMPLE_S402.payTo);
+    expect(recovered.accepts[0].network).toBe(SAMPLE_S402.network);
+    expect(recovered.accepts[0].asset).toBe(SAMPLE_S402.asset);
+    expect(recovered.accepts[0].amount).toBe(SAMPLE_S402.amount);
+    expect(recovered.accepts[0].payTo).toBe(SAMPLE_S402.payTo);
   });
 
   it('omits extensions / error when not provided (no undefined keys leak)', () => {

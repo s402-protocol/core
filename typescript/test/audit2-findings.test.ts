@@ -80,15 +80,6 @@ describe('FINDING 1: fromX402Payload validation (FIXED)', () => {
 // FINDING 2: detectProtocol uses truthiness, not 'in' operator
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 2: detectProtocol now uses in-check (FIXED)', () => {
-  it('detectProtocol and isS402 agree on s402Version=0', () => {
-    const obj = { s402Version: 0 };
-    expect(isS402(obj as any)).toBe(true);
-    // Now consistent: detectProtocol also uses 'in' operator
-    const headers = new Headers();
-    headers.set('payment-required', btoa(JSON.stringify(obj)));
-    expect(detectProtocol(headers)).toBe('s402');
-  });
-
   it('detectProtocol and isX402 agree on x402Version=0', () => {
     const obj = { x402Version: 0 };
     expect(isX402(obj as any)).toBe(true);
@@ -96,50 +87,71 @@ describe('FINDING 2: detectProtocol now uses in-check (FIXED)', () => {
     headers.set('payment-required', btoa(JSON.stringify(obj)));
     expect(detectProtocol(headers)).toBe('x402');
   });
+
+  it('the s402 marker is the PRESENCE of extensions.s402, even when it is empty', () => {
+    // Wire v2 moved the marker: `s402Version` is gone from the 402, and what
+    // says "s402 profile" is the extensions.s402 KEY. An empty object there is
+    // still the marker — a truthiness check on its contents would miss it.
+    const headers = new Headers();
+    headers.set('payment-required', btoa(JSON.stringify({ x402Version: 2, extensions: { s402: {} } })));
+    expect(detectProtocol(headers)).toBe('s402');
+  });
+
+  it('a retired s402 v1 flat document is never reported as an s402-profile 402', () => {
+    // isS402 still flags the flat shape for the compat reader (its job is
+    // "which era wrote this")...
+    const obj = { s402Version: 0 };
+    expect(isS402(obj as any)).toBe(true);
+    // ...but it carries no extensions.s402, so detectProtocol will not claim it.
+    const headers = new Headers();
+    headers.set('payment-required', btoa(JSON.stringify(obj)));
+    expect(detectProtocol(headers)).toBe('unknown');
+  });
 });
 
 // ════════════════════════════════════════════════════════════════
 // FINDING 3: x402 V2 envelope inner requirement field injection
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 3: V2 envelope inner requirement field injection → fromX402Requirements', () => {
-  it('extensions field in V2 inner requirement propagates to s402 output via extensions', () => {
-    // fromX402Requirements copies x402.extensions to the output
-    // An attacker can inject arbitrary data via the extensions field in V2 inner reqs
+  it('extensions injected into an accepts[] entry\'s extra propagates to s402 output', () => {
+    // Wire v2: the entry's s402 fields ride in its `extra`, so that is where an
+    // attacker injects. `extensions` is lifted back out of `extra` as a known
+    // field — it survives, and its CONTENTS stay attacker-controlled and unvalidated.
     const envelope: x402PaymentRequiredEnvelope = {
       x402Version: 2,
+      resource: { url: 'https://api.example.com/paid' },
       accepts: [{
-        x402Version: 2,
         scheme: 'exact',
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
         payTo: '0xabc',
-        extensions: { __proto__: { polluted: true }, toString: 'gotcha' },
+        extra: { extensions: { __proto__: { polluted: true }, toString: 'gotcha' } },
       }],
     };
     const result = fromX402Envelope(envelope);
-    // extensions IS a known s402 field, so it survives.
-    // But the CONTENTS of extensions are attacker-controlled and unvalidated.
-    expect(result.extensions).toBeDefined();
-    expect((result.extensions as any).__proto__).toBeDefined();
+    const entry = result.accepts[0];
+    expect(entry.extensions).toBeDefined();
+    expect((entry.extensions as any).__proto__).toBeDefined();
   });
 
-  it('V2 inner requirement with injected facilitatorUrl overrides envelope-level intent', () => {
+  it('an accepts[] entry with an injected facilitatorUrl still carries it after decode', () => {
     const envelope: x402PaymentRequiredEnvelope = {
       x402Version: 2,
+      resource: { url: 'https://api.example.com/paid' },
       accepts: [{
-        x402Version: 2,
         scheme: 'exact',
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
         amount: '1000',
         payTo: '0xabc',
-        facilitatorUrl: 'https://evil-facilitator.com',
+        extra: { facilitatorUrl: 'https://evil-facilitator.com' },
       }],
     };
     const result = normalizeRequirements(envelope as any);
-    // Attacker's facilitatorUrl survives because fromX402Requirements copies it
-    expect(result.facilitatorUrl).toBe('https://evil-facilitator.com');
+    // Attacker's facilitatorUrl survives — the decoder validates its SHAPE
+    // (scheme, no credentials), never its trustworthiness.
+    expect(result.accepts[0].facilitatorUrl).toBe('https://evil-facilitator.com');
   });
 });
 
@@ -191,20 +203,21 @@ describe('FINDING 4: x402 conversion path bypasses pickS402Fields allowlist', ()
 // FINDING 5: accepts array entries not validated in s402 path
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 5: accepts array content validation gaps', () => {
-  it('validateRequirementsShape accepts empty strings in accepts array', () => {
-    // Empty string passes typeof === 'string' check
-    const result = normalizeRequirements({
+  it('an empty scheme name is now REJECTED (wire v2 closed the gap)', () => {
+    // v1 let '' through because it passed typeof === 'string'. A scheme name is
+    // one accepts[] entry's identity in wire v2, and the entry validator
+    // requires it to be non-empty — on the v1 reader's path too.
+    expect(() => normalizeRequirements({
       s402Version: '1',
-      accepts: [''],  // empty string is a string
+      accepts: [''],
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',
       payTo: VALID_PAY_TO,
-    });
-    expect(result.accepts).toContain('');
+    })).toThrow('expected a non-empty string');
   });
 
-  it('validateRequirementsShape accepts extremely long strings in accepts array', () => {
+  it('an extremely long scheme name is still accepted (Postel: a scheme we cannot pay is one we SKIP)', () => {
     const longScheme = 'a'.repeat(10000);
     const result = normalizeRequirements({
       s402Version: '1',
@@ -214,7 +227,7 @@ describe('FINDING 5: accepts array content validation gaps', () => {
       amount: '1000',
       payTo: VALID_PAY_TO,
     });
-    expect(result.accepts[0].length).toBe(10000);
+    expect(result.accepts[0].scheme.length).toBe(10000);
   });
 });
 
@@ -231,7 +244,7 @@ describe('FINDING 6: String field length/content not bounded', () => {
       amount: '1000',
       payTo: VALID_PAY_TO,
     });
-    expect(result.network.length).toBe(100000);
+    expect(result.accepts[0].network.length).toBe(100000);
   });
 
   it('rejects null bytes in network field (FIXED)', () => {
@@ -391,7 +404,7 @@ describe('FINDING 10: x402 dual amount fields — validation gap', () => {
       maxAmountRequired: 'ATTACK',  // Invalid but unchecked
       payTo: '0xabc',
     });
-    expect(result.amount).toBe('1000');
+    expect(result.accepts[0].amount).toBe('1000');
   });
 });
 
@@ -399,25 +412,35 @@ describe('FINDING 10: x402 dual amount fields — validation gap', () => {
 // FINDING 11: decodePaymentRequired does not strip unknown keys
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 11: decodePaymentRequired now strips unknown keys (FIXED)', () => {
-  it('unknown keys are stripped by decodePaymentRequired', () => {
+  it('unknown keys are stripped by decodePaymentRequired — at every level of the envelope', () => {
     const malicious = {
-      s402Version: '1',
-      accepts: ['exact'],
-      network: 'sui:testnet',
-      asset: '0x2::sui::SUI',
-      amount: '1000',
-      payTo: VALID_PAY_TO,
+      x402Version: 2,
+      resource: { url: 'https://api.example.com/paid', __injected: 'malicious_value' },
+      accepts: [{
+        scheme: 'exact',
+        network: 'sui:testnet',
+        asset: '0x2::sui::SUI',
+        amount: '1000',
+        payTo: VALID_PAY_TO,
+        __injected: 'malicious_value',
+        admin: true,
+      }],
+      extensions: { s402: { version: '2' } },
       __injected: 'malicious_value',
       admin: true,
     };
     const encoded = btoa(JSON.stringify(malicious));
     const decoded = decodePaymentRequired(encoded) as any;
-    // Now stripped by pickRequirementsFields
+    // Now stripped by pickRequirementsFields — envelope, entry and resource alike
     expect(decoded.__injected).toBeUndefined();
     expect(decoded.admin).toBeUndefined();
+    expect(decoded.accepts[0].__injected).toBeUndefined();
+    expect(decoded.accepts[0].admin).toBeUndefined();
+    expect(decoded.resource.__injected).toBeUndefined();
     // But known fields survive
-    expect(decoded.s402Version).toBe('1');
-    expect(decoded.amount).toBe('1000');
+    expect(decoded.x402Version).toBe(2);
+    expect(decoded.resource.url).toBe('https://api.example.com/paid');
+    expect(decoded.accepts[0].amount).toBe('1000');
   });
 });
 

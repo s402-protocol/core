@@ -2,18 +2,41 @@ import { describe, it, expect } from 'vitest';
 import { a2aTransport, S402_A2A_KEYS, S402_VERSION } from '../src/index.js';
 import { fromX402PayloadA2A } from '../src/compat/x402.js';
 import type {
-  s402PaymentRequirements,
+  s402PaymentRequired,
   s402PaymentPayload,
   s402SettleResponse,
 } from '../src/index.js';
 
-const requirements: s402PaymentRequirements = {
-  s402Version: '1',
-  accepts: ['exact'],
-  network: 'sui:testnet',
-  asset: '0x2::sui::SUI',
-  amount: '1000000',
-  payTo: '0xabc',
+// The 402 document — wire v2 makes every 402 an x402 V2 `PaymentRequired`
+// envelope. `maxTimeoutSeconds` is named because the encoder supplies it when
+// omitted; naming it keeps the round-trip exact.
+const requirements: s402PaymentRequired = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:testnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xabc',
+    maxTimeoutSeconds: 60,
+  }],
+};
+
+/** What the task metadata actually carries: the WIRE envelope, not the in-memory doc. */
+const requirementsWire = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:testnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xabc',
+    maxTimeoutSeconds: 60,
+    extra: {},
+  }],
+  extensions: { s402: { version: '2' } },
 };
 const payload: s402PaymentPayload = {
   s402Version: '1',
@@ -30,7 +53,8 @@ describe('a2aTransport — payment on the A2A task lifecycle (ADR-011 Chunk 2, t
   it('encodes explicit lifecycle status + correlation into task metadata', () => {
     const frame = a2aTransport.encodeRequirements(requirements, { correlationId: 'task-1' });
     expect(frame[S402_A2A_KEYS.STATUS]).toBe('payment-required');
-    expect(frame[S402_A2A_KEYS.REQUIRED]).toEqual(requirements);
+    // The metadata carries the same x402 V2 envelope the HTTP header carries.
+    expect(frame[S402_A2A_KEYS.REQUIRED]).toEqual(requirementsWire);
     expect(frame[S402_A2A_KEYS.CORRELATION]).toBe('task-1');
   });
 
@@ -68,7 +92,7 @@ describe('a2aTransport — payment on the A2A task lifecycle (ADR-011 Chunk 2, t
     // A requirements payload, but the task metadata explicitly says submitted.
     const frame = {
       [S402_A2A_KEYS.STATUS]: 'payment-submitted',
-      [S402_A2A_KEYS.REQUIRED]: requirements,
+      [S402_A2A_KEYS.REQUIRED]: requirementsWire,
     };
     const decoded = a2aTransport.decodeRequirements(frame)!;
     expect(decoded.ctx.status).toBe('submitted'); // read, not the 'required' a derive would give

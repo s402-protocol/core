@@ -10,7 +10,11 @@
  *   README.md            "133 machine-readable JSON test vectors"
  *   specification.md §0  "161 vectors across 13 files"
  *   specification.md §13 "the 161 machine-readable conformance test vectors"
- *   spec/vectors/        167 vectors across 14 files   <- the truth
+ *   spec/vectors/        167 vectors across 14 files   <- the truth, that day
+ *
+ * (Those four numbers are the 2026-08-16 snapshot, kept as the record of the
+ * incident. They are NOT a current count — the current count is whatever
+ * actualCounts() reads off disk, which is the whole point of this file.)
  *
  * The first two are cosmetic. The third is NORMATIVE: §13 "Conformance"
  * criterion 5 defines what makes an implementation s402-conformant, so a

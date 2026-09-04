@@ -9,14 +9,17 @@ import {
   type s402ServerScheme,
 } from '../src/index.js';
 
+// ONE `accepts[]` entry: a requirement offers a single scheme in wire v2.
 const REQUIREMENTS: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
   payTo: '0xabc',
 };
+
+/** The resource the buildPaymentRequired() tests below are paying for. */
+const RESOURCE = { url: 'https://api.example.com/paid' };
 
 const PAYLOAD: s402ExactPayload = {
   s402Version: S402_VERSION,
@@ -380,7 +383,7 @@ describe('s402Facilitator standalone verify/settle guards', () => {
 });
 
 describe('s402ResourceServer.buildRequirements()', () => {
-  it('builds generic requirements with exact always in accepts', () => {
+  it('builds ONE generic entry for the config\'s first scheme', () => {
     const server = new s402ResourceServer();
     const reqs = server.buildRequirements({
       schemes: ['stream'],
@@ -390,12 +393,26 @@ describe('s402ResourceServer.buildRequirements()', () => {
       asset: '0x2::sui::SUI',
     });
 
-    expect(reqs.s402Version).toBe(S402_VERSION);
-    expect(reqs.accepts).toContain('exact');
-    expect(reqs.accepts).toContain('stream');
+    // Wire v2: an entry names ONE scheme and carries no `accepts` of its own.
+    // Offering several is `buildPaymentRequired`'s job, tested below.
+    expect(reqs.scheme).toBe('stream');
+    expect('accepts' in reqs).toBe(false);
     expect(reqs.amount).toBe('5000000');
     expect(reqs.payTo).toBe('0xrecipient');
     expect(reqs.network).toBe('sui:testnet');
+  });
+
+  it('builds the entry for an explicitly requested scheme', () => {
+    const server = new s402ResourceServer();
+    const reqs = server.buildRequirements({
+      schemes: ['stream'],
+      price: '5000000',
+      network: 'sui:testnet',
+      payTo: '0xrecipient',
+      asset: '0x2::sui::SUI',
+    }, 'exact');
+
+    expect(reqs.scheme).toBe('exact');
   });
 
   it('passes through asset without chain-specific defaults', () => {
@@ -424,7 +441,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
     expect(reqs.asset).toBe('0xdba::usdc::USDC');
   });
 
-  it('includes mandate config when provided', () => {
+  it('leaves mandate off the entry — it is envelope-level now', () => {
     const server = new s402ResourceServer();
     const reqs = server.buildRequirements({
       schemes: ['exact'],
@@ -435,7 +452,9 @@ describe('s402ResourceServer.buildRequirements()', () => {
       mandate: { required: true, minPerTx: '500' },
     });
 
-    expect(reqs.mandate).toEqual({ required: true, minPerTx: '500' });
+    // A mandate authorizes the AGENT, not one price line, so it cannot differ
+    // per entry. buildPaymentRequired() hoists it to the envelope.
+    expect('mandate' in reqs).toBe(false);
   });
 
   it('includes stream/escrow/unlock extensions', () => {
@@ -452,14 +471,13 @@ describe('s402ResourceServer.buildRequirements()', () => {
     expect(reqs.stream?.ratePerSecond).toBe('100');
   });
 
-  it('enforces exact in accepts when scheme impl omits it', () => {
+  it('overrides the scheme a scheme impl names on its own entry', () => {
     const server = new s402ResourceServer();
     const streamServerScheme: s402ServerScheme = {
       scheme: 'stream',
       buildRequirements(config) {
         return {
-          s402Version: S402_VERSION,
-          accepts: ['stream'], // deliberately omits 'exact'
+          scheme: 'escrow', // deliberately names the wrong scheme
           network: config.network,
           asset: config.asset,
           amount: config.price,
@@ -477,8 +495,9 @@ describe('s402ResourceServer.buildRequirements()', () => {
       asset: '0x2::sui::SUI',
     });
 
-    expect(reqs.accepts).toContain('exact');
-    expect(reqs.accepts).toContain('stream');
+    // A scheme implementation owns its extras; it does not get to change which
+    // scheme the entry is for.
+    expect(reqs.scheme).toBe('stream');
   });
 
   it('buildRequirements rejects invalid price', () => {
@@ -503,18 +522,82 @@ describe('s402ResourceServer.buildRequirements()', () => {
     })).toThrow('Invalid price');
   });
 
-  it('deduplicates exact in accepts', () => {
+});
+
+describe('s402ResourceServer.buildPaymentRequired()', () => {
+  it('wraps one accepts[] entry per offered scheme, exact always and first', () => {
     const server = new s402ResourceServer();
-    const reqs = server.buildRequirements({
+    const required = server.buildPaymentRequired({
+      schemes: ['stream'],
+      price: '5000000',
+      network: 'sui:testnet',
+      payTo: '0xrecipient',
+      asset: '0x2::sui::SUI',
+    }, RESOURCE);
+
+    expect(required.x402Version).toBe(2);
+    expect(required.resource).toEqual(RESOURCE);
+    // exact FIRST: an x402 client pays the first entry it has a handler for.
+    expect(required.accepts.map((a) => a.scheme)).toEqual(['exact', 'stream']);
+    expect(required.accepts[0].amount).toBe('5000000');
+    expect(required.accepts[0].payTo).toBe('0xrecipient');
+    expect(required.accepts[0].network).toBe('sui:testnet');
+  });
+
+  it('deduplicates exact across the accepts[] entries', () => {
+    const server = new s402ResourceServer();
+    const required = server.buildPaymentRequired({
       schemes: ['exact', 'stream', 'exact'],
       price: '1000',
       network: 'sui:testnet',
       payTo: '0x1',
       asset: '0x2::sui::SUI',
-    });
+    }, RESOURCE);
 
-    const exactCount = reqs.accepts.filter(s => s === 'exact').length;
+    const exactCount = required.accepts.filter((a) => a.scheme === 'exact').length;
     expect(exactCount).toBe(1);
+    expect(required.accepts.map((a) => a.scheme)).toEqual(['exact', 'stream']);
+  });
+
+  it('hoists the mandate to the envelope, off every entry', () => {
+    const server = new s402ResourceServer();
+    const required = server.buildPaymentRequired({
+      schemes: ['stream'],
+      price: '1000',
+      network: 'sui:testnet',
+      payTo: '0x1',
+      asset: '0x2::sui::SUI',
+      mandate: { required: true, minPerTx: '500' },
+    }, RESOURCE);
+
+    expect(required.mandate).toEqual({ required: true, minPerTx: '500' });
+    for (const entry of required.accepts) {
+      expect('mandate' in entry).toBe(false);
+    }
+  });
+
+  it('omits mandate entirely when the route does not configure one', () => {
+    const server = new s402ResourceServer();
+    const required = server.buildPaymentRequired({
+      schemes: ['exact'],
+      price: '1000',
+      network: 'sui:testnet',
+      payTo: '0x1',
+      asset: '0x2::sui::SUI',
+    }, RESOURCE);
+
+    expect(required.mandate).toBeUndefined();
+  });
+
+  it('rejects an invalid price before it reaches the wire', () => {
+    const server = new s402ResourceServer();
+    expect(() => server.buildPaymentRequired({
+      schemes: ['exact'],
+      price: 'abc',
+      network: 'sui:testnet',
+      payTo: '0x1',
+      asset: '0x2::sui::SUI',
+    }, RESOURCE)).toThrow('Invalid price');
   });
 });
 

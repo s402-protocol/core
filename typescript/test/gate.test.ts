@@ -6,6 +6,7 @@ import {
   decodeSettleResponse,
   S402_HEADERS,
   S402_VERSION,
+  S402_WIRE_VERSION,
   type s402ServerScheme,
   type s402FacilitatorScheme,
   type s402PaymentRequirements,
@@ -19,14 +20,15 @@ import { s402Gate } from '../src/gate.js';
 
 const NETWORK = 'sui:testnet';
 const PAY_TO = '0x' + 'a'.repeat(64);
+/** x402's V2 envelope requires a resource, so every gate does too (ADR-016). */
+const RESOURCE = { url: 'https://test/api/paid' };
 
 function mockServerScheme(): s402ServerScheme {
   return {
     scheme: 'exact',
     buildRequirements(config: s402RouteConfig): s402PaymentRequirements {
       return {
-        s402Version: S402_VERSION,
-        accepts: [...new Set([...config.schemes, 'exact' as const])],
+        scheme: 'exact',
         network: config.network,
         asset: config.asset,
         amount: config.price,
@@ -103,7 +105,7 @@ describe('s402Gate — 402 flow', () => {
   });
 
   it('responds 402 with payment-required header when no payment header present', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'should not see this' }));
 
     const res = await handler(new Request('http://test/api/paid'));
@@ -111,32 +113,41 @@ describe('s402Gate — 402 flow', () => {
     expect(res.status).toBe(402);
     expect(res.headers.get(S402_HEADERS.PAYMENT_REQUIRED)).toBeTruthy();
     expect(res.headers.get('content-type')).toContain('application/json');
-    const body = (await res.json()) as { error: string; accepts: string[] };
+    const body = (await res.json()) as {
+      x402Version: number;
+      error: string;
+      resource: { url: string };
+      accepts: Array<{ scheme: string }>;
+    };
+    expect(body.x402Version).toBe(2);
     expect(body.error).toBe('Payment Required');
-    expect(body.accepts).toContain('exact');
+    expect(body.resource.url).toBe(RESOURCE.url);
+    expect(body.accepts.map((a) => a.scheme)).toContain('exact');
   });
 
-  it('includes s402Version + amount + network in default 402 body', async () => {
-    const gate = s402Gate({ server, requirements });
+  it('carries the wire version, amount and network in the default 402 body', async () => {
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'nope' }));
 
     const res = await handler(new Request('http://test/api/paid'));
     const body = (await res.json()) as {
-      s402Version: string;
-      amount: string;
-      network: string;
+      accepts: Array<{ amount: string; network: string; extra: Record<string, unknown> }>;
+      extensions: { s402: { version: string } };
     };
-    expect(body.s402Version).toBe(S402_VERSION);
-    expect(body.amount).toBe('1000000');
-    expect(body.network).toBe(NETWORK);
+    // The s402 version lives in extensions.s402 now, not at the top level —
+    // the top level is x402's, and every key on it is x402's to define.
+    expect(body.extensions.s402.version).toBe(S402_WIRE_VERSION);
+    expect(body.accepts[0].amount).toBe('1000000');
+    expect(body.accepts[0].network).toBe(NETWORK);
   });
 
   it('invokes on402 customizer when provided', async () => {
     const gate = s402Gate({
       server,
       requirements,
-      on402: (_req, reqs) =>
-        new Response(`custom 402 for ${reqs.amount}`, { status: 402 }),
+      resource: RESOURCE,
+      on402: (_req, required) =>
+        new Response(`custom 402 for ${required.accepts[0].amount}`, { status: 402 }),
     });
     const handler = gate(async () => Response.json({ data: 'nope' }));
 
@@ -156,7 +167,7 @@ describe('s402Gate — accept + settle flow', () => {
   });
 
   it('runs the downstream handler when payment is valid and attaches x-payment-response', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'paid content' }));
 
     const res = await handler(
@@ -177,7 +188,7 @@ describe('s402Gate — accept + settle flow', () => {
   });
 
   it('preserves downstream response status and existing headers', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(
       async () =>
         new Response('created', {
@@ -200,7 +211,7 @@ describe('s402Gate — accept + settle flow', () => {
   });
 
   it('returns 402 with decoded-payload-invalid error when payment header is malformed', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'nope' }));
 
     const res = await handler(
@@ -216,7 +227,7 @@ describe('s402Gate — accept + settle flow', () => {
   });
 
   it('surfaces facilitator verify failures through the default error response', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'nope' }));
 
     // Build a syntactically valid payload whose transaction field does NOT match.
@@ -281,14 +292,14 @@ describe('s402Gate — dynamic requirements', () => {
     const handler = gate(async () => Response.json({ data: 'should 402' }));
 
     const cheap = (await (await handler(new Request('http://test/api/basic'))).json()) as {
-      amount: string;
+      accepts: Array<{ amount: string }>;
     };
     const premium = (await (await handler(new Request('http://test/api/premium'))).json()) as {
-      amount: string;
+      accepts: Array<{ amount: string }>;
     };
 
-    expect(cheap.amount).toBe('1000000');
-    expect(premium.amount).toBe('5000000');
+    expect(cheap.accepts[0].amount).toBe('1000000');
+    expect(premium.accepts[0].amount).toBe('5000000');
     expect(calls).toEqual(['/api/basic', '/api/premium']);
   });
 });
@@ -297,7 +308,7 @@ describe('s402Gate — .check() escape hatch', () => {
   it('returns accepted:false + response when no payment header', async () => {
     const server = buildServer();
     const requirements = buildRequirements(server);
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
 
     const result = await gate.check(new Request('http://test/api/paid'));
 
@@ -310,7 +321,7 @@ describe('s402Gate — .check() escape hatch', () => {
   it('returns accepted:true + settle() when payment is valid', async () => {
     const server = buildServer();
     const requirements = buildRequirements(server);
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
 
     const result = await gate.check(
       new Request('http://test/api/paid', {
@@ -330,7 +341,7 @@ describe('s402Gate — .check() escape hatch', () => {
   it('throws if settle() is called twice on the same check result', async () => {
     const server = buildServer();
     const requirements = buildRequirements(server);
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
 
     const result = await gate.check(
       new Request('http://test/api/paid', {
@@ -354,7 +365,7 @@ describe('s402Gate — HTTP hygiene', () => {
   });
 
   it('default 402 sets cache-control: no-store and exposes s402 headers via CORS', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'nope' }));
 
     const res = await handler(new Request('http://test/api/paid'));
@@ -368,7 +379,7 @@ describe('s402Gate — HTTP hygiene', () => {
   });
 
   it('default error response sets cache-control: no-store and CORS expose', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'nope' }));
 
     const res = await handler(
@@ -385,7 +396,7 @@ describe('s402Gate — HTTP hygiene', () => {
   });
 
   it('200 response after settlement exposes x-payment-response via CORS', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'paid content' }));
 
     const res = await handler(
@@ -400,7 +411,7 @@ describe('s402Gate — HTTP hygiene', () => {
   });
 
   it('merges CORS expose header when downstream handler already set one', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(
       async () =>
         new Response('ok', {
@@ -424,6 +435,7 @@ describe('s402Gate — HTTP hygiene', () => {
     const gate = s402Gate({
       server,
       requirements,
+      resource: RESOURCE,
       on402: () => new Response('custom', { status: 402 }),
     });
     const handler = gate(async () => Response.json({ data: 'nope' }));
@@ -441,6 +453,7 @@ describe('s402Gate — HTTP hygiene', () => {
     const gate = s402Gate({
       server,
       requirements,
+      resource: RESOURCE,
       on402: () =>
         new Response('custom', {
           status: 402,
@@ -481,7 +494,7 @@ describe('s402Gate — x402 wire compatibility (superset at the payment layer)',
   }
 
   it('accepts and settles an x402 exact payment with no special config', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'paid via x402' }));
 
     const res = await handler(
@@ -496,7 +509,7 @@ describe('s402Gate — x402 wire compatibility (superset at the payment layer)',
   });
 
   it('still rejects a payment that is neither s402 nor x402', async () => {
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
     const handler = gate(async () => Response.json({ data: 'nope' }));
 
     const res = await handler(
@@ -531,7 +544,7 @@ describe('s402Gate — verify-before-serve (security-first default)', () => {
 
   it('DEFAULT: rejects an invalid payment WITHOUT running the protected handler', async () => {
     const handler = vi.fn(async () => Response.json({ data: 'must not run' }));
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
 
     const res = await gate(handler)(
       new Request('http://test/api/paid', {
@@ -548,7 +561,7 @@ describe('s402Gate — verify-before-serve (security-first default)', () => {
 
   it('DEFAULT: runs the handler only after the payment verifies', async () => {
     const handler = vi.fn(async () => Response.json({ data: 'paid' }));
-    const gate = s402Gate({ server, requirements });
+    const gate = s402Gate({ server, requirements, resource: RESOURCE });
 
     const res = await gate(handler)(
       new Request('http://test/api/paid', {

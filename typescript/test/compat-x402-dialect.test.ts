@@ -86,7 +86,7 @@ describe('toX402SettleResponse — the receipt in x402\'s dialect', () => {
 describe('encodeX402V2Envelope — the 402 in x402\'s dialect', () => {
   it('encodes to a header upstream\'s decodePaymentRequiredHeader reads back', () => {
     const envelope = toX402V2Envelope(
-      { s402Version: S402_VERSION, accepts: ['exact'], network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '1', payTo: '0x' + 'a'.repeat(64) },
+      { scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '1', payTo: '0x' + 'a'.repeat(64) },
       { url: 'https://s402.test/r', description: 'ünïcode is fine' },
     );
     const decoded = decodePaymentRequiredHeader(encodeX402V2Envelope(envelope));

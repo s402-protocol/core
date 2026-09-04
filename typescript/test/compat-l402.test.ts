@@ -182,8 +182,7 @@ describe('fromL402Challenge — L402 → s402 translation', () => {
 
   it('translates a mainnet L402 challenge to s402 requirements', () => {
     const requirements = fromL402Challenge(baseChallenge);
-    expect(requirements.s402Version).toBe('1');
-    expect(requirements.accepts).toEqual(['exact']);
+    expect(requirements.scheme).toBe('exact');
     expect(requirements.network).toBe('lightning:mainnet');
     expect(requirements.asset).toBe('lightning:msat');
     expect(requirements.amount).toBe('250000000');

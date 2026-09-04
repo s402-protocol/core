@@ -8,8 +8,8 @@
  * C1:  requirements.expiresAt != null                  → enter expiry checks
  * C2:  typeof expiresAt !== 'number' || !isFinite()    → INVALID_PAYLOAD
  * C3:  Date.now() > expiresAt                          → REQUIREMENTS_EXPIRED
- * C4:  requirements.accepts exists && length > 0       → enter scheme check
- * C5:  !accepts.includes(payload.scheme)               → SCHEME_NOT_SUPPORTED
+ * C4:  requirements.scheme is set                      → enter scheme check
+ * C5:  requirements.scheme !== payload.scheme          → SCHEME_NOT_SUPPORTED
  * C6:  resolveScheme throws s402Error                  → return error
  * C7:  resolveScheme throws non-s402Error              → SCHEME_NOT_SUPPORTED
  * C8:  inFlight.has(dedupeKey)                         → INVALID_PAYLOAD (duplicate)
@@ -36,9 +36,10 @@ import {
 // Fixtures
 // ══════════════════════════════════════════════════════════════
 
+// ONE `accepts[]` entry — wire v2 replaced `accepts: string[]` with `scheme`,
+// so the facilitator's cross-check is an equality, not a membership test.
 const REQUIREMENTS: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
@@ -151,8 +152,8 @@ describe('mcdc: facilitator.process() — isolation tests', () => {
     expect(result.errorCode).toBe('REQUIREMENTS_EXPIRED');
   });
 
-  // C5: payload scheme not in accepts
-  it('mcdc-mc5a: rejects scheme not in accepts', async () => {
+  // C5: payload scheme is not the one this entry offers
+  it('mcdc-mc5a: rejects a scheme this entry does not offer', async () => {
     const f = createFacilitator();
     const streamPayload = { ...PAYLOAD, scheme: 'stream' as const, payload: PAYLOAD.payload };
     const result = await f.process(streamPayload, REQUIREMENTS);
@@ -162,9 +163,18 @@ describe('mcdc: facilitator.process() — isolation tests', () => {
     expect(result.error).toContain('exact');
   });
 
-  it('mcdc-mc5b: accepts scheme in multi-scheme accepts', async () => {
+  it('mcdc-mc5b: accepts the payload when the entry offers exactly that scheme', async () => {
     const f = createFacilitator();
-    const result = await f.process(PAYLOAD, { ...REQUIREMENTS, accepts: ['exact', 'stream'] });
+    const result = await f.process(PAYLOAD, { ...REQUIREMENTS, scheme: 'exact' });
+    expect(result.success).toBe(true);
+  });
+
+  // C4 false: no scheme on the entry at all → the cross-check is skipped and
+  // dispatch falls through to resolveScheme.
+  it('mcdc-mc5c: skips the cross-check when the entry names no scheme', async () => {
+    const f = createFacilitator();
+    const { scheme: _omitted, ...schemeless } = REQUIREMENTS;
+    const result = await f.process(PAYLOAD, schemeless as s402PaymentRequirements);
     expect(result.success).toBe(true);
   });
 
@@ -180,7 +190,7 @@ describe('mcdc: facilitator.process() — isolation tests', () => {
   it('mcdc-mc7: rejects unregistered scheme on registered network', async () => {
     const f = createFacilitator();
     const streamPayload = { ...PAYLOAD, scheme: 'stream' as const };
-    const result = await f.process(streamPayload, { ...REQUIREMENTS, accepts: ['exact', 'stream'] });
+    const result = await f.process(streamPayload, { ...REQUIREMENTS, scheme: 'stream' });
     expect(result.success).toBe(false);
     expect(result.errorCode).toBe('SCHEME_NOT_SUPPORTED');
   });
@@ -333,7 +343,7 @@ describe('mcdc: facilitator.verify() — isolation tests', () => {
     expect(result.invalidReason).toContain('expired');
   });
 
-  it('mcdc-mc3: verify rejects scheme not in accepts', async () => {
+  it('mcdc-mc3: verify rejects a scheme this entry does not offer', async () => {
     const f = createFacilitator();
     const streamPayload = { ...PAYLOAD, scheme: 'stream' as const };
     const result = await f.verify(streamPayload, REQUIREMENTS);
@@ -390,7 +400,7 @@ describe('mcdc: facilitator.settle() — isolation tests', () => {
     expect(result.errorCode).toBe('REQUIREMENTS_EXPIRED');
   });
 
-  it('mcdc-mc3: settle rejects scheme not in accepts', async () => {
+  it('mcdc-mc3: settle rejects a scheme this entry does not offer', async () => {
     const f = createFacilitator();
     const streamPayload = { ...PAYLOAD, scheme: 'stream' as const };
     const result = await f.settle(streamPayload, REQUIREMENTS);
