@@ -336,7 +336,7 @@ The Payment Payload is sent by the client in the `x-payment` header (or request 
 |-------|------|----------|-------------|-------------|
 | `s402Version` | string | No | If present, MUST be `"1"` | Protocol version. Optional on payloads for x402 interop. |
 | `scheme` | string | Yes | One of: `"exact"`, `"upto"`, `"stream"`, `"escrow"`, `"unlock"`, `"prepaid"` | The payment scheme being used. MUST be in the server's `accepts` array. |
-| `network` | string | No | If present, CAIP-2 (§4.2). | Names which `accepts[]` entry this payment answers. A decoder MUST carry it through (§10.2); a gate uses it to disambiguate two offers that share a scheme. Omitting it is valid — a payload identifies its offer on scheme alone whenever the route's entries for that scheme are the same contract. |
+| `network` | string | No | Non-empty. No control characters. SHOULD be the CAIP-2 network of the entry it answers (§4.2). | Names which `accepts[]` entry this payment answers. A decoder MUST carry it through (§10.2); a gate uses it to disambiguate two offers that share a scheme. Omitting it is valid — a payload identifies its offer on scheme alone whenever the route's entries for that scheme are the same contract. |
 | `payload` | object | Yes | Scheme-specific inner fields. See below. | The scheme-specific payment data. |
 
 ### 5.2 Payload Inner Fields by Scheme
