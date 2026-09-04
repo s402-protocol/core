@@ -12,7 +12,7 @@ s402-protocol/core
 ├── docs/                  — VitePress docs site (s402-protocol.org) + wire format specification
 ├── typescript/            — TypeScript reference implementation (npm: s402)
 │   ├── src/               — 19 source files (incl. 3 compat), zero runtime deps <!-- corrected 2026-07-19: was 11, then 16; count verified on disk -->
-│   ├── test/              — 1,256 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-09-04: was 1,098; wire v2 (DAN-1078) -->
+│   ├── test/              — 1,336 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-09-04: was 1,256, itself stale when written; measured by `pnpm test` -->
 │   └── examples/          — Runnable joke-api demo
 ├── python/                — Python implementation (pip: s402)
 │   ├── src/s402/          — 5 source files, zero runtime deps
@@ -64,13 +64,13 @@ typescript/src/
 # TypeScript (run from typescript/)
 cd typescript
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (1,256 across 32 files, incl. 187-vector conformance)
+pnpm run test       # Run tests (1,336 across 33 files, incl. 195-vector conformance)
 pnpm run typecheck  # tsc --noEmit
 
 # Python (run from python/)
 cd python
 pip install -e ".[dev]"
-pytest              # Run conformance tests (154 vectors — the 12 codec files; settlement-verification + transport-carriers vectors are TS-only for now)
+pytest              # 185 tests (182 codec vectors + the protocol-detection cases; settlement-verification and transport-carriers vectors are TS-only for now)
 ```
 
 ## Conformance test suite
