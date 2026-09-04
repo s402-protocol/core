@@ -137,6 +137,34 @@ describe('s402Gate — 402 flow', () => {
     expect(body.accepts[0].network).toBe(NETWORK);
   });
 
+  // N3 — the header carried the projected x402 V2 wire while the body carried
+  // the in-memory shape, so a mandate-bearing route published its spending
+  // authorization in the header and dropped it from the body. Two documents on
+  // one response, disagreeing about what the route requires.
+  it('the 402 body is the same projected wire as the header, mandate included', async () => {
+    const mandated: s402PaymentRequirements = {
+      ...requirements,
+      mandate: { required: true, minPerTx: '500000' },
+    };
+    const gate = s402Gate({ server, requirements: mandated, resource: RESOURCE });
+    const handler = gate(async () => Response.json({ data: 'nope' }));
+
+    const res = await handler(new Request('http://test/api/paid'));
+    const body = (await res.json()) as {
+      extensions?: { s402?: { version?: string; mandate?: { required: boolean } } };
+    };
+
+    expect(body.extensions?.s402?.mandate?.required).toBe(true);
+    expect(body.extensions?.s402?.version).toBeTruthy();
+
+    // And it is byte-for-byte the document the header carries.
+    const header = res.headers.get(S402_HEADERS.PAYMENT_REQUIRED) as string;
+    const fromHeader = JSON.parse(
+      new TextDecoder().decode(Uint8Array.from(atob(header), (c) => c.charCodeAt(0))),
+    ) as unknown;
+    expect(body).toEqual(fromHeader);
+  });
+
   it('invokes on402 customizer when provided', async () => {
     const gate = s402Gate({
       server,

@@ -23,6 +23,7 @@ import type {
 } from 's402';
 import {
   encodePaymentRequired,
+  encodeRequirementsBody,
   decodePaymentPayload,
   encodeSettleResponse,
   S402_HEADERS,
@@ -242,8 +243,13 @@ async function build402(
   if (custom) return withHygiene(custom);
 
   const required = toRequired(options, requirements);
+  // The body is the SAME projected wire the header carries, not the in-memory
+  // shape. `JSON.stringify` published `mandate` and the other s402 fields at the
+  // top of the entry, where nothing reads them, while the header carried them
+  // projected into `extra` and `extensions.s402` — one response, two documents,
+  // disagreeing about what the route requires.
   return new Response(
-    JSON.stringify(required),
+    encodeRequirementsBody(required),
     {
       status: 402,
       headers: {
