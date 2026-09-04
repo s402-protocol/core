@@ -20,8 +20,31 @@
 
 import type { s402ErrorCodeType } from './errors.js';
 
-/** Current protocol version. Always lowercase s. */
+/**
+ * Current PAYLOAD protocol version. Always lowercase s.
+ *
+ * This is the `s402Version` on a payment payload (`x-payment`) and on a
+ * settlement response. It is NOT the version of the 402 document — that is
+ * {@link S402_WIRE_VERSION}, and it lives in `extensions.s402.version`.
+ */
 export const S402_VERSION = '1' as const;
+
+/**
+ * The s402 wire version of the 402 document, carried in `extensions.s402.version`.
+ *
+ * Version 2 is the x402 V2 `PaymentRequired` envelope (ADR-016). Version 1 was
+ * the flat `{ s402Version, accepts: string[], network, … }` shape; nothing emits
+ * it any more, and `fromS402V1Requirements()` in `s402/compat/x402` reads it.
+ */
+export const S402_WIRE_VERSION = '2' as const;
+
+/**
+ * `maxTimeoutSeconds` supplied when a requirement does not name one. x402
+ * requires the field on every `accepts[]` entry; s402 has never had it, so the
+ * encoder has to choose. Sixty seconds is what `toX402Requirements` has
+ * defaulted to since the V1 emitter shipped.
+ */
+export const S402_DEFAULT_MAX_TIMEOUT_SECONDS = 60;
 
 // ══════════════════════════════════════════════════════════════
 // Payment schemes
@@ -44,15 +67,47 @@ export type s402SettlementMode = 'facilitator' | 'direct';
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Base payment requirements — included in every 402 response.
- * Wire-compatible with x402 PaymentRequirements where fields overlap.
+ * What is being paid for. x402 V2 `ResourceInfo`, verbatim — the 402 envelope
+ * carries exactly one of these, above the `accepts[]` list.
+ */
+export interface s402ResourceInfo {
+  /** Absolute URL of the resource. Mandatory on emission. */
+  url: string;
+  description?: string;
+  mimeType?: string;
+  serviceName?: string;
+  tags?: string[];
+  iconUrl?: string;
+}
+
+/**
+ * A scheme name as it appears on the wire.
+ *
+ * One of the six s402 schemes, or a foreign scheme an x402 server offered
+ * (`auth-capture`, `batch-settlement`, …). A requirement naming a scheme this
+ * build cannot pay is one a client SKIPS, not one the decoder rejects — the
+ * `accepts[]` list is a menu, and a menu may contain dishes you do not order.
+ */
+export type s402SchemeName = s402Scheme | (string & {});
+
+/**
+ * ONE entry of the 402's `accepts[]` — an offer of a single scheme.
+ *
+ * On the wire this is an x402 V2 `PaymentRequirements`: `scheme`, `network`,
+ * `asset`, `amount`, `payTo`, `maxTimeoutSeconds`, `extra`. Everything below
+ * that x402 does not name — `facilitatorUrl`, `expiresAt`, the fee fields, the
+ * per-scheme extras — travels inside that entry's `extra` and is lifted back to
+ * the top level here on decode. In memory the fields are flat; on the wire they
+ * are namespaced under `extra`. See ADR-016.
+ *
+ * **Architecture Invariant:** there is no `accepts` on this type. A requirement
+ * describes one scheme. Offering several is what the envelope's `accepts[]`
+ * array is for, and it is the only place a list of schemes exists.
  */
 export interface s402PaymentRequirements {
-  /** Protocol version (always "1") */
-  s402Version: typeof S402_VERSION;
-  /** Which payment schemes the server accepts. Always includes "exact" for x402 compat. */
-  accepts: s402Scheme[];
-  /** Network identifier (e.g., "sui:mainnet", "solana:mainnet-beta", "eip155:8453") */
+  /** The single scheme this entry offers. Replaced the flat list of scheme names in wire v2. */
+  scheme: s402SchemeName;
+  /** Network identifier, CAIP-2 (e.g., "sui:mainnet", "eip155:8453") */
   network: string;
   /** Asset/coin type identifier (chain-specific format, opaque to s402 core) */
   asset: string;
@@ -60,6 +115,14 @@ export interface s402PaymentRequirements {
   amount: string;
   /** Recipient address */
   payTo: string;
+  /**
+   * Seconds the facilitator will wait before rejecting. Required by x402 on the
+   * wire; the encoder supplies {@link S402_DEFAULT_MAX_TIMEOUT_SECONDS} when omitted.
+   */
+  maxTimeoutSeconds?: number;
+
+  // ── s402 fields — carried inside this entry's `extra` on the wire ──
+
   /**
    * Facilitator URL (optional for direct settlement).
    *
@@ -70,11 +133,6 @@ export interface s402PaymentRequirements {
    * DNS-based SSRF cannot be caught at URL parse time.
    */
   facilitatorUrl?: string;
-
-  // ── s402 extensions (not in x402) ──
-
-  /** AP2 mandate requirements (if agent spending authorization is needed) */
-  mandate?: s402MandateRequirements;
   /**
    * Protocol fee in basis points (0-10000). **Advisory only.**
    *
@@ -83,10 +141,6 @@ export interface s402PaymentRequirements {
    * settlement math. The authoritative fee rate is owned by the Facilitator
    * (configured in its ProtocolState or equivalent on-chain object) and
    * enforced at the smart contract level.
-   *
-   * Resource Servers SHOULD omit this field and let the Facilitator provide
-   * it via its `/.well-known/s402-facilitator` endpoint. If included, it MUST
-   * match the Facilitator's configured rate — a mismatch is a warning sign.
    *
    * Trust model: Facilitator owns the fee. Resource Server cannot override it.
    */
@@ -121,7 +175,8 @@ export interface s402PaymentRequirements {
   settlementOverrides?: s402SettlementOverrides;
 
   /**
-   * Arbitrary extension data (forward-compatible extensibility).
+   * Arbitrary per-requirement extension data (forward-compatible extensibility).
+   * Rides in `extra.extensions` on the wire.
    *
    * D-10 (Trust boundary): extensions is an opaque bag — the s402 library
    * passes it through without validation. Consumers MUST treat extension values
@@ -130,6 +185,52 @@ export interface s402PaymentRequirements {
    * validate any extension keys they consume.
    */
   extensions?: Record<string, unknown>;
+
+  /**
+   * Anything else this entry's `extra` carried that s402 does not name —
+   * x402's own keys (`paymentFlow`, EIP-712 `name` / `version`) and any future
+   * ones. Kept verbatim so a re-encode is byte-identical, and so an unknown
+   * upstream field is legible rather than merely unread (LESSONS, 2026-08-31).
+   */
+  extra?: Record<string, unknown>;
+}
+
+/**
+ * The 402 document itself: an x402 V2 `PaymentRequired` envelope.
+ *
+ * This is what `payment-required` carries, always, on every route. There is no
+ * s402-native flat shape and no option to select one — an unmodified x402 V2
+ * decoder parses every 402 s402 emits (ADR-016).
+ *
+ * **Architecture Invariant:** no header s402 emits carries a document an
+ * unmodified x402 V2 decoder at {@link X402_UPSTREAM_PIN} cannot parse.
+ */
+export interface s402PaymentRequired {
+  /** Always 2. The envelope is x402 V2's. */
+  x402Version: 2;
+  /** What is being paid for. Required by x402, therefore required by s402. */
+  resource: s402ResourceInfo;
+  /**
+   * One entry per offered scheme. `exact` is listed FIRST whenever it is
+   * offered, because an x402 client pays the first entry it has a handler for.
+   */
+  accepts: s402PaymentRequirements[];
+  /** Human-readable reason, surfaced by x402 clients. */
+  error?: string;
+  /**
+   * Envelope-level extensions. s402's own live under the `s402` key —
+   * `{ s402: { version: '2', mandate? } }` — and their PRESENCE is what makes a
+   * 402 an s402-profile 402 rather than a plain x402 one. An envelope without
+   * them is still payable by an s402 client.
+   */
+  extensions?: Record<string, unknown>;
+
+  /**
+   * AP2 mandate requirements for this 402 (agent spending authorization).
+   * Envelope-level: a mandate authorizes the AGENT, not one price line, so it
+   * cannot differ per `accepts[]` entry. Rides in `extensions.s402.mandate`.
+   */
+  mandate?: s402MandateRequirements;
 }
 
 // ── Tier 1: Single Payment ──────────────────────────────────
@@ -563,8 +664,16 @@ export interface s402ServiceEntry {
   name: string;
   /** Service endpoint URL */
   url: string;
-  /** Payment schemes this service accepts */
-  accepts: s402Scheme[];
+  /**
+   * Payment schemes this service accepts.
+   *
+   * Named `accepts` until wire v2, which is when the collision became a real
+   * one: `accepts` on the wire is now a list of requirement OBJECTS, and a
+   * second `accepts` in the same type file meaning a list of scheme NAMES is
+   * the exact ambiguity ADR-016 removed from the header. Its sibling
+   * {@link s402Discovery} already called this `schemes`.
+   */
+  schemes: s402Scheme[];
   /** Supported coin types */
   assets: string[];
   /** Base price in smallest unit (MIST for SUI, micro for USDC) */

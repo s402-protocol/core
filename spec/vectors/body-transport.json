@@ -4,27 +4,38 @@
     "input": {
       "type": "requirements",
       "value": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid"
+        },
         "accepts": [
-          "exact"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          {
+            "scheme": "exact",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          }
+        ]
       }
     },
     "expected": {
-      "body": "{\"s402Version\":\"1\",\"accepts\":[\"exact\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\"}",
+      "body": "{\"x402Version\":2,\"resource\":{\"url\":\"https://api.example.com/paid\"},\"accepts\":[{\"scheme\":\"exact\",\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\",\"maxTimeoutSeconds\":60,\"extra\":{}}],\"extensions\":{\"s402\":{\"version\":\"2\"}}}",
       "decoded": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid"
+        },
         "accepts": [
-          "exact"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          {
+            "scheme": "exact",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "maxTimeoutSeconds": 60
+          }
+        ]
       }
     },
     "shouldReject": false
@@ -34,41 +45,56 @@
     "input": {
       "type": "requirements",
       "value": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid",
+          "description": "Paid content",
+          "mimeType": "application/json"
+        },
         "accepts": [
-          "exact"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-        "extensions": {
-          "auction": {
-            "type": "sealed-bid",
-            "deadline": 1708000000000
-          },
-          "customField": "hello world"
-        }
+          {
+            "scheme": "exact",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "extensions": {
+              "auction": {
+                "type": "sealed-bid",
+                "deadline": 1708000000000
+              },
+              "customField": "hello world"
+            }
+          }
+        ]
       }
     },
     "expected": {
-      "body": "{\"s402Version\":\"1\",\"accepts\":[\"exact\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\",\"extensions\":{\"auction\":{\"type\":\"sealed-bid\",\"deadline\":1708000000000},\"customField\":\"hello world\"}}",
+      "body": "{\"x402Version\":2,\"resource\":{\"url\":\"https://api.example.com/paid\",\"description\":\"Paid content\",\"mimeType\":\"application/json\"},\"accepts\":[{\"scheme\":\"exact\",\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\",\"maxTimeoutSeconds\":60,\"extra\":{\"extensions\":{\"auction\":{\"type\":\"sealed-bid\",\"deadline\":1708000000000},\"customField\":\"hello world\"}}}],\"extensions\":{\"s402\":{\"version\":\"2\"}}}",
       "decoded": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid",
+          "description": "Paid content",
+          "mimeType": "application/json"
+        },
         "accepts": [
-          "exact"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-        "extensions": {
-          "auction": {
-            "type": "sealed-bid",
-            "deadline": 1708000000000
-          },
-          "customField": "hello world"
-        }
+          {
+            "scheme": "exact",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "maxTimeoutSeconds": 60,
+            "extensions": {
+              "auction": {
+                "type": "sealed-bid",
+                "deadline": 1708000000000
+              },
+              "customField": "hello world"
+            }
+          }
+        ]
       }
     },
     "shouldReject": false
@@ -78,39 +104,54 @@
     "input": {
       "type": "requirements",
       "value": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid",
+          "description": "Paid content",
+          "mimeType": "application/json"
+        },
         "accepts": [
-          "upto"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-        "upto": {
-          "maxAmount": "10000000",
-          "settlementDeadlineMs": "1700000000000",
-          "usageReportUrl": "https://api.example.com/usage",
-          "estimatedAmount": "7500000"
-        }
+          {
+            "scheme": "upto",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "upto": {
+              "maxAmount": "10000000",
+              "settlementDeadlineMs": "1700000000000",
+              "usageReportUrl": "https://api.example.com/usage",
+              "estimatedAmount": "7500000"
+            }
+          }
+        ]
       }
     },
     "expected": {
-      "body": "{\"s402Version\":\"1\",\"accepts\":[\"upto\"],\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\",\"upto\":{\"maxAmount\":\"10000000\",\"settlementDeadlineMs\":\"1700000000000\",\"usageReportUrl\":\"https://api.example.com/usage\",\"estimatedAmount\":\"7500000\"}}",
+      "body": "{\"x402Version\":2,\"resource\":{\"url\":\"https://api.example.com/paid\",\"description\":\"Paid content\",\"mimeType\":\"application/json\"},\"accepts\":[{\"scheme\":\"upto\",\"network\":\"sui:mainnet\",\"asset\":\"0x2::sui::SUI\",\"amount\":\"1000000\",\"payTo\":\"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890\",\"maxTimeoutSeconds\":60,\"extra\":{\"upto\":{\"maxAmount\":\"10000000\",\"settlementDeadlineMs\":\"1700000000000\",\"usageReportUrl\":\"https://api.example.com/usage\",\"estimatedAmount\":\"7500000\"}}}],\"extensions\":{\"s402\":{\"version\":\"2\"}}}",
       "decoded": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid",
+          "description": "Paid content",
+          "mimeType": "application/json"
+        },
         "accepts": [
-          "upto"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-        "upto": {
-          "maxAmount": "10000000",
-          "settlementDeadlineMs": "1700000000000",
-          "usageReportUrl": "https://api.example.com/usage",
-          "estimatedAmount": "7500000"
-        }
+          {
+            "scheme": "upto",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "maxTimeoutSeconds": 60,
+            "upto": {
+              "maxAmount": "10000000",
+              "settlementDeadlineMs": "1700000000000",
+              "usageReportUrl": "https://api.example.com/usage",
+              "estimatedAmount": "7500000"
+            }
+          }
+        ]
       }
     },
     "shouldReject": false

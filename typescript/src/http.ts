@@ -1,8 +1,12 @@
 /**
  * s402 HTTP Helpers — encode/decode for HTTP headers
  *
- * Wire-compatible with x402: same header names, same base64 encoding.
- * The presence of `s402Version` in the decoded JSON distinguishes s402 from x402.
+ * The `payment-required` document is an x402 V2 `PaymentRequired` envelope on
+ * every route — same header name, same base64, same JSON an unmodified x402 V2
+ * decoder reads (ADR-016). s402's own requirement fields ride inside each
+ * `accepts[]` entry's `extra`; s402's envelope-level fields ride in
+ * `extensions.s402`, and the PRESENCE of that key is what marks a 402 as an
+ * s402-profile 402 rather than a plain x402 one.
  *
  * Uses Unicode-safe base64 (UTF-8 → base64) so the `extensions` field and error
  * messages can contain any characters. For ASCII-only content (the common case),
@@ -10,11 +14,17 @@
  */
 
 import type {
+  s402PaymentRequired,
   s402PaymentRequirements,
   s402PaymentPayload,
   s402SettleResponse,
+  s402ResourceInfo,
 } from './types.js';
-import { S402_HEADERS } from './types.js';
+import {
+  S402_HEADERS,
+  S402_WIRE_VERSION,
+  S402_DEFAULT_MAX_TIMEOUT_SECONDS,
+} from './types.js';
 import { s402Error } from './errors.js';
 
 // ══════════════════════════════════════════════════════════════
@@ -39,9 +49,13 @@ function fromBase64(b64: string): string {
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Encode payment requirements for the `payment-required` header.
+ * Encode a 402 document for the `payment-required` header.
  *
- * @param requirements - Typed s402 payment requirements
+ * Emits the x402 V2 `PaymentRequired` envelope. s402's per-requirement fields
+ * are projected into each entry's `extra`; `mandate` and the wire version are
+ * projected into `extensions.s402`.
+ *
+ * @param required - The 402 envelope: resource + one entry per offered scheme
  * @returns Base64-encoded JSON string for the HTTP header
  *
  * @example
@@ -49,34 +63,23 @@ function fromBase64(b64: string): string {
  * import { encodePaymentRequired } from 's402/http';
  *
  * const header = encodePaymentRequired({
- *   s402Version: '1',
- *   accepts: ['exact'],
- *   network: 'your-chain:mainnet',
- *   asset: 'NATIVE_TOKEN',
- *   amount: '1000000',
- *   payTo: 'YOUR_ADDRESS',
+ *   x402Version: 2,
+ *   resource: { url: 'https://api.example.com/paid' },
+ *   accepts: [{
+ *     scheme: 'exact',
+ *     network: 'sui:mainnet',
+ *     asset: '0x2::sui::SUI',
+ *     amount: '1000000',
+ *     payTo: 'YOUR_ADDRESS',
+ *   }],
  * });
  * response.headers.set('payment-required', header);
  * ```
  */
-export function encodePaymentRequired(requirements: s402PaymentRequirements): string {
-  return toBase64(JSON.stringify(requirements));
+export function encodePaymentRequired(required: s402PaymentRequired): string {
+  return toBase64(JSON.stringify(toRequirementsWire(required)));
 }
 
-/**
- * Encode payment payload for the `x-payment` header.
- *
- * @param payload - Typed s402 payment payload (any scheme)
- * @returns Base64-encoded JSON string for the HTTP header
- *
- * @example
- * ```ts
- * import { encodePaymentPayload, S402_HEADERS } from 's402/http';
- *
- * const header = encodePaymentPayload(payload);
- * fetch(url, { headers: { [S402_HEADERS.PAYMENT]: header } });
- * ```
- */
 export function encodePaymentPayload(payload: s402PaymentPayload): string {
   return toBase64(JSON.stringify(payload));
 }
@@ -97,17 +100,33 @@ export function encodeSettleResponse(response: s402SettleResponse): string {
  */
 const MAX_HEADER_BYTES = 64 * 1024;
 
+/** x402 V2 `ResourceInfo` keys, per upstream `types/payments.ts` at the pin. */
+const S402_RESOURCE_KEYS = ['url', 'description', 'mimeType', 'serviceName', 'tags', 'iconUrl'] as const;
+
+/** x402 V2 `PaymentRequirements` keys — the shape of one `accepts[]` entry on the wire. */
+const X402_REQUIREMENT_KEYS = ['scheme', 'network', 'asset', 'amount', 'payTo', 'maxTimeoutSeconds', 'extra'] as const;
+
 /**
- * Known top-level keys on s402PaymentRequirements.
- * Single source of truth — compat.ts imports pickRequirementsFields from here.
- * Used by decodePaymentRequired to strip unknown keys at the HTTP trust boundary.
+ * s402's per-requirement fields, in the order the encoder writes them into an
+ * entry's `extra`.
+ *
+ * x402 owns the six keys above; everything s402 adds to a single offer lives
+ * here instead of at the top level, because the top level is x402's and a key
+ * it does not know is a key its decoder may reject tomorrow. `extra` is the
+ * slot x402's own family spec (#3145) names for method-specific fields.
+ *
+ * ⚠️ Order is load-bearing: the encoder writes passthrough keys first and then
+ * these, so decode → re-encode is byte-identical.
  */
-const S402_REQUIREMENTS_KEYS = new Set([
-  's402Version', 'accepts', 'network', 'asset', 'amount', 'payTo',
-  'facilitatorUrl', 'mandate', 'protocolFeeBps', 'protocolFeeAddress',
-  'receiptRequired', 'settlementMode', 'expiresAt',
-  'upto', 'settlementOverrides', 'prepaid', 'stream', 'escrow', 'unlock', 'extensions',
-]);
+const S402_EXTRA_KEYS = [
+  'facilitatorUrl', 'protocolFeeBps', 'protocolFeeAddress', 'receiptRequired',
+  'settlementMode', 'expiresAt',
+  'upto', 'settlementOverrides', 'prepaid', 'stream', 'escrow', 'unlock',
+  'extensions',
+] as const;
+
+/** The `extensions` key s402's envelope-level fields live under. */
+const S402_EXTENSION_KEY = 's402' as const;
 
 /** Known keys for each sub-object type — used to strip extra keys at the trust boundary. */
 const S402_SUB_OBJECT_KEYS: Record<string, Set<string>> = {
@@ -134,41 +153,148 @@ function pickSubObjectFields(key: string, value: unknown): unknown {
   return clean;
 }
 
-/** Return a clean object with only known s402 requirement fields. */
-export function pickRequirementsFields(obj: Record<string, unknown>): s402PaymentRequirements {
-  const result: Record<string, unknown> = {};
-  for (const key of S402_REQUIREMENTS_KEYS) {
-    if (key in obj) {
-      // Strip unknown keys from scheme-specific sub-objects (defense-in-depth)
-      if (key in S402_SUB_OBJECT_KEYS) {
-        result[key] = pickSubObjectFields(key, obj[key]);
-      } else {
-        result[key] = obj[key];
-      }
-    }
+/** True for a plain (non-array, non-null) object. */
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value != null && typeof value === 'object' && !Array.isArray(value);
+}
+
+// ══════════════════════════════════════════════════════════════
+// Wire projection — s402 fields ↔ x402's `extra` / `extensions`
+// ══════════════════════════════════════════════════════════════
+
+/** Project one s402 requirement into an x402 V2 `PaymentRequirements`. */
+function toWireRequirement(req: s402PaymentRequirements): Record<string, unknown> {
+  // Passthrough first, named s402 keys after: a key s402 names always wins over
+  // a same-named key that arrived in `extra` from somewhere else.
+  const extra: Record<string, unknown> = { ...(req.extra ?? {}) };
+  for (const key of S402_EXTRA_KEYS) {
+    const value = (req as unknown as Record<string, unknown>)[key];
+    if (value !== undefined) extra[key] = value;
   }
-  return result as unknown as s402PaymentRequirements;
+  return {
+    scheme: req.scheme,
+    network: req.network,
+    asset: req.asset,
+    amount: req.amount,
+    payTo: req.payTo,
+    maxTimeoutSeconds: req.maxTimeoutSeconds ?? S402_DEFAULT_MAX_TIMEOUT_SECONDS,
+    extra,
+  };
 }
 
 /**
- * Decode payment requirements from the `payment-required` header.
+ * Project a 402 document into the x402 V2 `PaymentRequired` envelope it is.
+ *
+ * Exported so non-HTTP carriers (the MCP `_meta` and A2A `metadata` codecs in
+ * `transport.ts`) put the SAME document on their wire that the header carries —
+ * one projection, not three.
+ */
+export function toRequirementsWire(required: s402PaymentRequired): Record<string, unknown> {
+  const resource: Record<string, unknown> = {};
+  for (const key of S402_RESOURCE_KEYS) {
+    const value = (required.resource ?? {} as s402ResourceInfo)[key];
+    if (value !== undefined) resource[key] = value;
+  }
+
+  const rest: Record<string, unknown> = { ...(required.extensions ?? {}) };
+  const carried = isPlainObject(rest[S402_EXTENSION_KEY]) ? rest[S402_EXTENSION_KEY] as Record<string, unknown> : {};
+  delete rest[S402_EXTENSION_KEY];
+  const s402Ext: Record<string, unknown> = { version: S402_WIRE_VERSION };
+  if (required.mandate !== undefined) s402Ext.mandate = required.mandate;
+  for (const [k, v] of Object.entries(carried)) {
+    if (k !== 'version' && k !== 'mandate') s402Ext[k] = v;
+  }
+
+  const out: Record<string, unknown> = { x402Version: 2 };
+  if (required.error !== undefined) out.error = required.error;
+  out.resource = resource;
+  out.accepts = (required.accepts ?? []).map(toWireRequirement);
+  out.extensions = { ...rest, [S402_EXTENSION_KEY]: s402Ext };
+  return out;
+}
+
+/**
+ * Lift one wire `accepts[]` entry back to the flat s402 requirement.
+ *
+ * Unrecognized `extra` keys are KEPT (in `extra`), not stripped. x402's `extra`
+ * is an open bag by spec — `paymentFlow` and the EIP-712 `name` / `version`
+ * live there — and a whitelist at this boundary is exactly where the next
+ * upstream field would go missing without erroring (LESSONS, 2026-08-31).
+ */
+function fromWireRequirement(raw: Record<string, unknown>): s402PaymentRequirements {
+  const out: Record<string, unknown> = {};
+  for (const key of X402_REQUIREMENT_KEYS) {
+    if (key !== 'extra' && key in raw) out[key] = raw[key];
+  }
+  const extra: Record<string, unknown> = isPlainObject(raw.extra) ? { ...raw.extra } : {};
+  for (const key of S402_EXTRA_KEYS) {
+    if (!(key in extra)) continue;
+    out[key] = key in S402_SUB_OBJECT_KEYS ? pickSubObjectFields(key, extra[key]) : extra[key];
+    delete extra[key];
+  }
+  if (Object.keys(extra).length > 0) out.extra = extra;
+  return out as unknown as s402PaymentRequirements;
+}
+
+/**
+ * Return a clean 402 document with only known fields — the wire envelope lifted
+ * into s402's shape, with unknown envelope/entry/resource keys stripped.
+ *
+ * Kept under its historical name because it is the same trust boundary it
+ * always was; what changed is the document it guards.
+ */
+export function pickRequirementsFields(obj: Record<string, unknown>): s402PaymentRequired {
+  const out: Record<string, unknown> = { x402Version: 2 };
+  if (obj.error !== undefined) out.error = obj.error;
+
+  const resource: Record<string, unknown> = {};
+  const rawResource = isPlainObject(obj.resource) ? obj.resource : {};
+  for (const key of S402_RESOURCE_KEYS) {
+    if (key in rawResource) resource[key] = rawResource[key];
+  }
+  out.resource = resource;
+
+  const accepts = Array.isArray(obj.accepts) ? obj.accepts : [];
+  out.accepts = accepts.map((entry) => fromWireRequirement(isPlainObject(entry) ? entry : {}));
+
+  const extensions: Record<string, unknown> = isPlainObject(obj.extensions) ? { ...obj.extensions } : {};
+  const s402Ext = isPlainObject(extensions[S402_EXTENSION_KEY])
+    ? { ...(extensions[S402_EXTENSION_KEY] as Record<string, unknown>) }
+    : undefined;
+  if (s402Ext) {
+    delete extensions[S402_EXTENSION_KEY];
+    if (s402Ext.mandate !== undefined) out.mandate = pickSubObjectFields('mandate', s402Ext.mandate);
+    delete s402Ext.version;
+    delete s402Ext.mandate;
+    if (Object.keys(s402Ext).length > 0) extensions[S402_EXTENSION_KEY] = s402Ext;
+  }
+  if (Object.keys(extensions).length > 0) out.extensions = extensions;
+
+  return out as unknown as s402PaymentRequired;
+}
+
+/**
+ * Decode the 402 document from the `payment-required` header.
  * Validates shape, strips unknown keys, enforces size limit (64KB).
  *
+ * Works on a PLAIN x402 V2 402 as well as an s402-profile one: the only
+ * difference between them is the presence of `extensions.s402`, and its absence
+ * is not an error. What comes back is payable either way.
+ *
  * @param header - Base64-encoded JSON string from the HTTP header
- * @returns Validated s402 payment requirements
+ * @returns Validated s402 402 document
  * @throws {s402Error} `INVALID_PAYLOAD` on oversized header, invalid base64/JSON, or malformed shape
  *
  * @example
  * ```ts
  * import { decodePaymentRequired } from 's402/http';
  *
- * const header = response.headers.get('payment-required')!;
- * const requirements = decodePaymentRequired(header);
- * console.log(requirements.accepts); // ['exact', 'prepaid']
- * console.log(requirements.amount);  // '1000000'
+ * const required = decodePaymentRequired(response.headers.get('payment-required')!);
+ * console.log(required.accepts.map((a) => a.scheme)); // ['exact', 'prepaid']
+ * console.log(required.accepts[0].amount);            // '1000000'
  * ```
  */
-export function decodePaymentRequired(header: string): s402PaymentRequirements {
+export function decodePaymentRequired(header: string): s402PaymentRequired {
   if (typeof header !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `payment-required header must be a string, got ${typeof header}`);
@@ -559,9 +685,17 @@ export function validatePrepaidShape(value: unknown): void {
 /**
  * Validate all optional sub-objects on a requirements record.
  * Called from validateRequirementsShape during wire decode and compat normalization.
+ *
+ * The record here is one `accepts[]` entry's `extra`, where the sub-objects
+ * live on the wire — not the entry itself.
  */
 export function validateSubObjects(record: Record<string, unknown>): void {
-  if (record.mandate !== undefined) validateMandateShape(record.mandate);
+  // ⚠️ `mandate` is deliberately NOT in this list. It is envelope-level since
+  // wire v2 and is validated at `extensions.s402.mandate`. A `mandate` key
+  // inside an entry's `extra` belongs to whoever put it there — s402 does not
+  // own that address — and validating it would let an unrelated foreign key
+  // take down an otherwise payable 402, against the open-bag rule this file
+  // argues for two comments above.
   if (record.upto !== undefined) validateUptoShape(record.upto);
   if (record.settlementOverrides !== undefined) validateSettlementOverridesShape(record.settlementOverrides);
   if (record.prepaid !== undefined) validatePrepaidShape(record.prepaid);
@@ -570,148 +704,212 @@ export function validateSubObjects(record: Record<string, unknown>): void {
   if (record.unlock !== undefined) validateUnlockShape(record.unlock);
 }
 
-/** Validate that decoded payment requirements have the required shape. */
+/**
+ * Validate the s402 fields carried inside one `accepts[]` entry's `extra`.
+ *
+ * Every check here was a top-level check before wire v2. It moved one level
+ * down with the fields it guards; none of it was relaxed.
+ */
+function validateExtraFields(extra: Record<string, unknown>, where: string): void {
+  if (extra.protocolFeeBps !== undefined) {
+    if (typeof extra.protocolFeeBps !== 'number' || !Number.isFinite(extra.protocolFeeBps) || !Number.isInteger(extra.protocolFeeBps) || extra.protocolFeeBps < 0 || extra.protocolFeeBps > 10000) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: protocolFeeBps must be an integer between 0 and 10000, got ${extra.protocolFeeBps}`);
+    }
+  }
+  if (extra.expiresAt !== undefined) {
+    if (typeof extra.expiresAt !== 'number' || !Number.isFinite(extra.expiresAt) || extra.expiresAt <= 0) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: expiresAt must be a positive finite number (Unix timestamp ms), got ${extra.expiresAt}`);
+    }
+  }
+  if (extra.protocolFeeAddress !== undefined) {
+    if (typeof extra.protocolFeeAddress !== 'string' || extra.protocolFeeAddress.length === 0) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: protocolFeeAddress must be a non-empty string, got ${JSON.stringify(extra.protocolFeeAddress)}`);
+    }
+    if (/[\x00-\x1f\x7f]/.test(extra.protocolFeeAddress)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: protocolFeeAddress contains control characters`);
+    }
+  }
+  if (extra.facilitatorUrl !== undefined) {
+    if (typeof extra.facilitatorUrl !== 'string') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: facilitatorUrl must be a string, got ${typeof extra.facilitatorUrl}`);
+    }
+    // Reject control characters (CRLF injection, null bytes) — defense-in-depth
+    if (/[\x00-\x1f\x7f]/.test(extra.facilitatorUrl)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: facilitatorUrl contains control characters (potential header injection)`);
+    }
+    // M-1: Validate URL scheme to prevent SSRF via dangerous protocols (file://, gopher://, etc.)
+    try {
+      const url = new URL(extra.facilitatorUrl);
+      if (url.protocol !== 'https:' && url.protocol !== 'http:') {
+        throw new s402Error('INVALID_PAYLOAD',
+          `${where}: facilitatorUrl must use https:// or http://, got "${url.protocol}"`);
+      }
+      // Reject embedded credentials — they leak via logs, error messages, and Referrer headers.
+      // RFC 3986 §3.2.1 deprecated userinfo in HTTP(S) URIs.
+      if (url.username || url.password) {
+        throw new s402Error('INVALID_PAYLOAD',
+          `${where}: facilitatorUrl must not contain embedded credentials (user:password@)`);
+      }
+    } catch (e) {
+      if (e instanceof s402Error) throw e;
+      throw new s402Error('INVALID_PAYLOAD', `${where}: facilitatorUrl is not a valid URL`);
+    }
+  }
+  if (extra.settlementMode !== undefined) {
+    if (extra.settlementMode !== 'facilitator' && extra.settlementMode !== 'direct') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: settlementMode must be "facilitator" or "direct", got ${JSON.stringify(extra.settlementMode)}`);
+    }
+  }
+  if (extra.receiptRequired !== undefined) {
+    if (typeof extra.receiptRequired !== 'boolean') {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: receiptRequired must be a boolean, got ${typeof extra.receiptRequired}`);
+    }
+  }
+  if (extra.extensions !== undefined && !isPlainObject(extra.extensions)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `${where}: extra.extensions must be a plain object`);
+  }
+  validateSubObjects(extra);
+}
+
+/** Validate one `accepts[]` entry as it arrived on the wire. */
+function validateRequirementEntry(entry: unknown, index: number): void {
+  const where = `accepts[${index}]`;
+  if (!isPlainObject(entry)) {
+    throw new s402Error('INVALID_PAYLOAD', `${where} is not an object`);
+  }
+
+  const missing: string[] = [];
+  // Postel: the scheme name is NOT checked against s402's six. An x402 server
+  // may offer `auth-capture`; a scheme we cannot pay is one we SKIP, and a
+  // decoder that refuses the whole 402 over it turns a menu into a rejection.
+  if (typeof entry.scheme !== 'string' || entry.scheme.length === 0) missing.push('scheme (non-empty string)');
+  if (typeof entry.network !== 'string') missing.push('network (string)');
+  if (typeof entry.asset !== 'string') missing.push('asset (string)');
+  if (typeof entry.amount !== 'string') {
+    missing.push('amount (string)');
+  } else if (!isValidAmount(entry.amount)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `${where}: invalid amount "${entry.amount}": must be a non-negative integer string`);
+  }
+  if (typeof entry.payTo !== 'string') {
+    missing.push('payTo (string)');
+  } else if (entry.payTo.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD', `${where}: payTo must be a non-empty string`);
+  }
+  if (missing.length > 0) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Malformed payment requirements: ${where} missing ${missing.join(', ')}`);
+  }
+
+  // Reject control characters in protocol-semantic identifier fields.
+  // These feed into Map keys, error messages, and downstream logs — null bytes
+  // and CRLF are never legitimate in scheme/network/asset/address identifiers.
+  for (const field of ['scheme', 'network', 'asset', 'payTo'] as const) {
+    if (/[\x00-\x1f\x7f]/.test(entry[field] as string)) {
+      throw new s402Error('INVALID_PAYLOAD', `${where}: ${field} contains control characters`);
+    }
+  }
+
+  if (entry.maxTimeoutSeconds !== undefined) {
+    if (typeof entry.maxTimeoutSeconds !== 'number' || !Number.isFinite(entry.maxTimeoutSeconds) || entry.maxTimeoutSeconds < 0) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `${where}: maxTimeoutSeconds must be a non-negative finite number, got ${JSON.stringify(entry.maxTimeoutSeconds)}`);
+    }
+  }
+
+  if (entry.extra !== undefined) {
+    if (!isPlainObject(entry.extra)) {
+      throw new s402Error('INVALID_PAYLOAD', `${where}: extra must be a plain object`);
+    }
+    validateExtraFields(entry.extra, where);
+  }
+}
+
+/**
+ * Validate that a decoded 402 document has the required shape.
+ *
+ * Takes the WIRE envelope — `{ x402Version: 2, resource, accepts: [...] }` —
+ * not the lifted s402 view. Everything s402 adds is validated where it actually
+ * travels: inside each entry's `extra`, and inside `extensions.s402`.
+ */
 export function validateRequirementsShape(obj: unknown): void {
   if (obj == null || typeof obj !== 'object') {
     throw new s402Error('INVALID_PAYLOAD', 'Payment requirements is not an object');
   }
   const record = obj as Record<string, unknown>;
 
-  // Version gate — s402Version is required for s402 wire format.
-  // (x402 format should go through normalizeRequirements in compat.ts instead.)
-  if (record.s402Version === undefined) {
+  // Version gate. The flat s402 v1 shape (`s402Version` + `accepts: string[]`)
+  // is no longer emitted by anything and is not decoded here — reading it is an
+  // intake obligation (ADR-013) discharged in compat, not a wire format.
+  if (record.x402Version === undefined) {
+    if (record.s402Version !== undefined) {
+      throw new s402Error('INVALID_PAYLOAD',
+        'This is the s402 v1 flat requirements shape, retired in wire v2. ' +
+        'Use fromS402V1Requirements() or normalizeRequirements() from s402/compat/x402.');
+    }
     throw new s402Error('INVALID_PAYLOAD',
-      'Missing s402Version. For x402 format, use normalizeRequirements() from s402/compat/x402.');
+      'Missing x402Version. An s402 402 is an x402 V2 PaymentRequired envelope.');
   }
-  if (record.s402Version !== '1') {
+  if (record.x402Version !== 2) {
     throw new s402Error('INVALID_PAYLOAD',
-      `Unsupported s402 version "${record.s402Version}". This library supports version "1".`);
+      `Unsupported x402Version ${JSON.stringify(record.x402Version)}. ` +
+      'The s402 wire is x402 V2; use normalizeRequirements() from s402/compat/x402 for V1.');
   }
 
-  const missing: string[] = [];
-  if (!Array.isArray(record.accepts)) missing.push('accepts (array)');
-  if (typeof record.network !== 'string') missing.push('network (string)');
-  if (typeof record.asset !== 'string') missing.push('asset (string)');
-  if (typeof record.amount !== 'string') {
-    missing.push('amount (string)');
-  } else if (!isValidAmount(record.amount)) {
+  // `resource` is mandatory on an x402 V2 envelope. Emission requires a
+  // non-empty url (see toX402V2Envelope); decode only requires the field to be
+  // there and to be a string, so a peer with an empty url is still readable.
+  if (!isPlainObject(record.resource)) {
     throw new s402Error('INVALID_PAYLOAD',
-      `Invalid amount "${record.amount}": must be a non-negative integer string`);
+      'Malformed payment requirements: missing resource (object with a url)');
   }
-  if (typeof record.payTo !== 'string') {
-    missing.push('payTo (string)');
-  } else if ((record.payTo as string).length === 0) {
-    throw new s402Error('INVALID_PAYLOAD', 'payTo must be a non-empty string');
-  }
-  if (missing.length > 0) {
+  if (typeof (record.resource as Record<string, unknown>).url !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
-      `Malformed payment requirements: missing ${missing.join(', ')}`);
+      'Malformed payment requirements: resource.url must be a string');
   }
 
-  // Reject control characters in protocol-semantic identifier fields.
-  // These feed into Map keys, error messages, and downstream logs — null bytes
-  // and CRLF are never legitimate in network/asset/address identifiers.
-  if (/[\x00-\x1f\x7f]/.test(record.network as string)) {
+  if (!Array.isArray(record.accepts)) {
     throw new s402Error('INVALID_PAYLOAD',
-      'network contains control characters');
+      'Malformed payment requirements: missing accepts (array of requirement objects)');
   }
-  if (/[\x00-\x1f\x7f]/.test(record.asset as string)) {
-    throw new s402Error('INVALID_PAYLOAD',
-      'asset contains control characters');
+  // Empty accepts is semantically invalid — the client cannot match any offer.
+  if (record.accepts.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD', 'accepts array must contain at least one requirement');
   }
-  if (/[\x00-\x1f\x7f]/.test(record.payTo as string)) {
+  record.accepts.forEach(validateRequirementEntry);
+
+  if (record.error !== undefined && typeof record.error !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
-      'payTo contains control characters');
+      `error must be a string, got ${typeof record.error}`);
   }
 
-  // Empty accepts is semantically invalid — client cannot match any scheme
-  if (Array.isArray(record.accepts) && (record.accepts as unknown[]).length === 0) {
-    throw new s402Error('INVALID_PAYLOAD', 'accepts array must contain at least one scheme');
-  }
-
-  // Structural check: accepts entries must be strings.
-  // We do NOT reject unknown scheme names here — the accepts array is a
-  // capability advertisement, and newer servers may include schemes this
-  // library doesn't know about yet. Clients should ignore unsupported
-  // schemes and pick one they can handle (Postel's Law).
-  const accepts = record.accepts as unknown[];
-  for (const scheme of accepts) {
-    if (typeof scheme !== 'string') {
-      throw new s402Error('INVALID_PAYLOAD',
-        `Invalid entry in accepts array: expected string, got ${typeof scheme}`);
+  if (record.extensions !== undefined) {
+    if (!isPlainObject(record.extensions)) {
+      throw new s402Error('INVALID_PAYLOAD', 'extensions must be a plain object');
     }
-  }
-
-  // Optional field validation
-  if (record.protocolFeeBps !== undefined) {
-    if (typeof record.protocolFeeBps !== 'number' || !Number.isFinite(record.protocolFeeBps) || !Number.isInteger(record.protocolFeeBps) || record.protocolFeeBps < 0 || record.protocolFeeBps > 10000) {
-      throw new s402Error('INVALID_PAYLOAD',
-        `protocolFeeBps must be an integer between 0 and 10000, got ${record.protocolFeeBps}`);
-    }
-  }
-  if (record.expiresAt !== undefined) {
-    if (typeof record.expiresAt !== 'number' || !Number.isFinite(record.expiresAt) || record.expiresAt <= 0) {
-      throw new s402Error('INVALID_PAYLOAD',
-        `expiresAt must be a positive finite number (Unix timestamp ms), got ${record.expiresAt}`);
-    }
-  }
-  if (record.protocolFeeAddress !== undefined) {
-    if (typeof record.protocolFeeAddress !== 'string' || record.protocolFeeAddress.length === 0) {
-      throw new s402Error('INVALID_PAYLOAD',
-        `protocolFeeAddress must be a non-empty string, got ${JSON.stringify(record.protocolFeeAddress)}`);
-    }
-    if (/[\x00-\x1f\x7f]/.test(record.protocolFeeAddress)) {
-      throw new s402Error('INVALID_PAYLOAD',
-        'protocolFeeAddress contains control characters');
-    }
-  }
-  if (record.facilitatorUrl !== undefined) {
-    if (typeof record.facilitatorUrl !== 'string') {
-      throw new s402Error('INVALID_PAYLOAD',
-        `facilitatorUrl must be a string, got ${typeof record.facilitatorUrl}`);
-    }
-    // Reject control characters (CRLF injection, null bytes) — defense-in-depth
-    if (/[\x00-\x1f\x7f]/.test(record.facilitatorUrl)) {
-      throw new s402Error('INVALID_PAYLOAD',
-        'facilitatorUrl contains control characters (potential header injection)');
-    }
-    // M-1: Validate URL scheme to prevent SSRF via dangerous protocols (file://, gopher://, etc.)
-    // Mirrors the same check in compat.ts fromX402Requirements — both paths now enforce equally.
-    try {
-      const url = new URL(record.facilitatorUrl);
-      if (url.protocol !== 'https:' && url.protocol !== 'http:') {
-        throw new s402Error('INVALID_PAYLOAD',
-          `facilitatorUrl must use https:// or http://, got "${url.protocol}"`);
+    const s402Ext = (record.extensions as Record<string, unknown>)[S402_EXTENSION_KEY];
+    if (s402Ext !== undefined) {
+      if (!isPlainObject(s402Ext)) {
+        throw new s402Error('INVALID_PAYLOAD', 'extensions.s402 must be a plain object');
       }
-      // Reject embedded credentials — they leak via logs, error messages, and Referrer headers.
-      // RFC 3986 §3.2.1 deprecated userinfo in HTTP(S) URIs.
-      if (url.username || url.password) {
+      // ADR-006 version negotiation: the number is here, and a version this
+      // build does not implement is refused rather than half-read.
+      if (s402Ext.version !== undefined && s402Ext.version !== S402_WIRE_VERSION) {
         throw new s402Error('INVALID_PAYLOAD',
-          'facilitatorUrl must not contain embedded credentials (user:password@)');
+          `Unsupported s402 wire version ${JSON.stringify(s402Ext.version)}. This library supports version "${S402_WIRE_VERSION}".`);
       }
-    } catch (e) {
-      if (e instanceof s402Error) throw e;
-      throw new s402Error('INVALID_PAYLOAD',
-        'facilitatorUrl is not a valid URL');
+      if (s402Ext.mandate !== undefined) validateMandateShape(s402Ext.mandate);
     }
   }
-
-  // Optional enum/boolean field validation
-  if (record.settlementMode !== undefined) {
-    if (record.settlementMode !== 'facilitator' && record.settlementMode !== 'direct') {
-      throw new s402Error('INVALID_PAYLOAD',
-        `settlementMode must be "facilitator" or "direct", got ${JSON.stringify(record.settlementMode)}`);
-    }
-  }
-  if (record.receiptRequired !== undefined) {
-    if (typeof record.receiptRequired !== 'boolean') {
-      throw new s402Error('INVALID_PAYLOAD',
-        `receiptRequired must be a boolean, got ${typeof record.receiptRequired}`);
-    }
-  }
-
-  // Sub-object structural validation
-  validateSubObjects(record);
 }
 
 /**
@@ -910,13 +1108,18 @@ export const S402_CONTENT_TYPE = 'application/s402+json' as const;
  */
 export const MAX_BODY_BYTES = 1024 * 1024;
 
-/** Encode payment requirements as JSON string (for response body) */
-export function encodeRequirementsBody(requirements: s402PaymentRequirements): string {
-  return JSON.stringify(requirements);
+/**
+ * Encode the 402 document as a JSON string (for the response body).
+ *
+ * Same envelope as the header carries. Upstream's own resource server puts the
+ * envelope in both places, and an x402 V1 client reads only the body.
+ */
+export function encodeRequirementsBody(required: s402PaymentRequired): string {
+  return JSON.stringify(toRequirementsWire(required));
 }
 
-/** Decode payment requirements from JSON string (from response body) */
-export function decodeRequirementsBody(body: string): s402PaymentRequirements {
+/** Decode the 402 document from a JSON string (from the response body) */
+export function decodeRequirementsBody(body: string): s402PaymentRequired {
   if (typeof body !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `s402 requirements body must be a string, got ${typeof body}`);
@@ -1011,10 +1214,14 @@ export function detectTransport(request: { headers: Headers }): 'header' | 'body
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Detect whether a 402 response uses s402 or x402 protocol.
+ * Detect whether a 402 response is an s402-profile 402 or a plain x402 one.
  *
- * Check: decode the `payment-required` header and look for `s402Version`.
- * If present → s402. If absent → x402 (or raw 402).
+ * Both are x402 V2 envelopes; what separates them is `extensions.s402`. That
+ * key's PRESENCE is the marker (ADR-016 rule 4) — not `s402Version`, which no
+ * longer appears on a 402 at all.
+ *
+ * Note what this does NOT decide: a plain x402 402 is still payable by an s402
+ * client. `'x402'` here means "no s402 extensions on it", never "not for us".
  */
 export function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown' {
   const paymentRequired = headers.get(S402_HEADERS.PAYMENT_REQUIRED);
@@ -1025,8 +1232,10 @@ export function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown' {
 
   try {
     const decoded = JSON.parse(fromBase64(paymentRequired));
-    if (decoded != null && typeof decoded === 'object' && 's402Version' in decoded) return 's402';
-    if (decoded != null && typeof decoded === 'object' && 'x402Version' in decoded) return 'x402';
+    if (!isPlainObject(decoded)) return 'unknown';
+    const extensions = decoded.extensions;
+    if (isPlainObject(extensions) && isPlainObject(extensions[S402_EXTENSION_KEY])) return 's402';
+    if ('x402Version' in decoded) return 'x402';
     return 'unknown';
   } catch {
     return 'unknown';
@@ -1034,12 +1243,14 @@ export function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown' {
 }
 
 /**
- * Extract s402 payment requirements from a 402 Response.
- * Returns null if the header is missing, malformed, or not s402 format.
- * For x402 responses, decode the header manually and use normalizeRequirements().
+ * Extract the 402 document from a Response.
+ * Returns null if the header is missing or malformed.
+ *
+ * Plain x402 V2 402s come back too — they are the same envelope. Only an x402
+ * V1 402 (flat requirements, `x402Version: 1`) needs `normalizeRequirements()`.
  *
  * @param response - Fetch API Response object (status should be 402)
- * @returns Parsed requirements, or null if not an s402 response
+ * @returns The parsed 402 document, or null if the header is absent/unreadable
  *
  * @example
  * ```ts
@@ -1047,14 +1258,14 @@ export function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown' {
  *
  * const res = await fetch(url);
  * if (res.status === 402) {
- *   const requirements = extractRequirementsFromResponse(res);
- *   if (requirements) {
+ *   const required = extractRequirementsFromResponse(res);
+ *   if (required) {
  *     // Build and send payment
  *   }
  * }
  * ```
  */
-export function extractRequirementsFromResponse(response: Response): s402PaymentRequirements | null {
+export function extractRequirementsFromResponse(response: Response): s402PaymentRequired | null {
   const header = response.headers.get(S402_HEADERS.PAYMENT_REQUIRED);
   if (!header) return null;
 

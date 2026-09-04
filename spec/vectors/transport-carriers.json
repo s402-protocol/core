@@ -5,27 +5,45 @@
       "type": "requirements",
       "carrier": "mcp",
       "value": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid"
+        },
         "accepts": [
-          "exact"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          {
+            "scheme": "exact",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "maxTimeoutSeconds": 60
+          }
+        ]
       }
     },
     "expected": {
       "encoded": {
         "s402/payment": {
-          "s402Version": "1",
+          "x402Version": 2,
+          "resource": {
+            "url": "https://api.example.com/paid"
+          },
           "accepts": [
-            "exact"
+            {
+              "scheme": "exact",
+              "network": "sui:mainnet",
+              "asset": "0x2::sui::SUI",
+              "amount": "1000000",
+              "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+              "maxTimeoutSeconds": 60,
+              "extra": {}
+            }
           ],
-          "network": "sui:mainnet",
-          "asset": "0x2::sui::SUI",
-          "amount": "1000000",
-          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          "extensions": {
+            "s402": {
+              "version": "2"
+            }
+          }
         }
       },
       "status": "required"
@@ -88,14 +106,20 @@
       "type": "requirements",
       "carrier": "a2a",
       "value": {
-        "s402Version": "1",
+        "x402Version": 2,
+        "resource": {
+          "url": "https://api.example.com/paid"
+        },
         "accepts": [
-          "exact"
-        ],
-        "network": "sui:mainnet",
-        "asset": "0x2::sui::SUI",
-        "amount": "1000000",
-        "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          {
+            "scheme": "exact",
+            "network": "sui:mainnet",
+            "asset": "0x2::sui::SUI",
+            "amount": "1000000",
+            "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+            "maxTimeoutSeconds": 60
+          }
+        ]
       },
       "correlationId": "task-abc-123"
     },
@@ -104,14 +128,26 @@
         "s402.payment.status": "payment-required",
         "s402.payment.correlationId": "task-abc-123",
         "s402.payment.required": {
-          "s402Version": "1",
+          "x402Version": 2,
+          "resource": {
+            "url": "https://api.example.com/paid"
+          },
           "accepts": [
-            "exact"
+            {
+              "scheme": "exact",
+              "network": "sui:mainnet",
+              "asset": "0x2::sui::SUI",
+              "amount": "1000000",
+              "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+              "maxTimeoutSeconds": 60,
+              "extra": {}
+            }
           ],
-          "network": "sui:mainnet",
-          "asset": "0x2::sui::SUI",
-          "amount": "1000000",
-          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+          "extensions": {
+            "s402": {
+              "version": "2"
+            }
+          }
         }
       },
       "status": "required",

@@ -11,15 +11,21 @@
       "maxTimeoutSeconds": 60
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xrecipient123",
-      "expiresAt": 1700000060000
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xrecipient123",
+          "maxTimeoutSeconds": 60,
+          "expiresAt": 1700000060000
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -27,6 +33,9 @@
     "description": "x402 V2 envelope (single offer) → s402",
     "input": {
       "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid"
+      },
       "accepts": [
         {
           "scheme": "exact",
@@ -38,14 +47,20 @@
       ]
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "2000000",
-      "payTo": "0xrecipient456"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "2000000",
+          "payTo": "0xrecipient456",
+          "expiresAt": 1700000060000
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -53,6 +68,9 @@
     "description": "x402 V2 envelope (multiple offers) → s402 (first offer taken)",
     "input": {
       "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid"
+      },
       "accepts": [
         {
           "scheme": "exact",
@@ -71,14 +89,28 @@
       ]
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xrecipientFirst"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xrecipientFirst",
+          "expiresAt": 1700000060000
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "USDC",
+          "amount": "500000",
+          "payTo": "0xrecipientSecond",
+          "expiresAt": 1700000060000
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -93,38 +125,55 @@
       "payTo": "0xethRecipient"
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "eip155:8453",
-      "asset": "USDC",
-      "amount": "7500000",
-      "payTo": "0xethRecipient"
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "USDC",
+          "amount": "7500000",
+          "payTo": "0xethRecipient",
+          "maxTimeoutSeconds": 60
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Native s402 passed through unchanged",
     "input": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        }
+      ]
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "expiresAt": 1700000060000
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -141,14 +190,20 @@
       "anotherRandom": 42
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xrecipient789"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xrecipient789",
+          "maxTimeoutSeconds": 60
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -164,15 +219,21 @@
       "facilitatorUrl": "https://safe-facilitator.example.com/settle"
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xrecipientUrl",
-      "facilitatorUrl": "https://safe-facilitator.example.com/settle"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xrecipientUrl",
+          "maxTimeoutSeconds": 60,
+          "facilitatorUrl": "https://safe-facilitator.example.com/settle"
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -188,14 +249,20 @@
       "payTo": "0xrecipientBoth"
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "2000000",
-      "payTo": "0xrecipientBoth"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "2000000",
+          "payTo": "0xrecipientBoth",
+          "maxTimeoutSeconds": 60
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -203,6 +270,10 @@
     "description": "x402 V2 envelope with resource metadata",
     "input": {
       "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/data",
+        "mimeType": "application/json"
+      },
       "accepts": [
         {
           "scheme": "exact",
@@ -211,21 +282,24 @@
           "amount": "3000000",
           "payTo": "0xrecipientRes"
         }
-      ],
+      ]
+    },
+    "expected": {
+      "x402Version": 2,
       "resource": {
         "url": "https://api.example.com/data",
         "mimeType": "application/json"
-      }
-    },
-    "expected": {
-      "s402Version": "1",
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "3000000",
-      "payTo": "0xrecipientRes"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "3000000",
+          "payTo": "0xrecipientRes",
+          "expiresAt": 1700000060000
+        }
+      ]
     },
     "shouldReject": false
   },
@@ -243,6 +317,29 @@
       }
     },
     "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xrecipientExt",
+          "maxTimeoutSeconds": 60,
+          "extensions": {
+            "custom": "data"
+          }
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "s402-v1: minimal flat requirements → one accepts[] entry",
+    "input": {
       "s402Version": "1",
       "accepts": [
         "exact"
@@ -250,9 +347,164 @@
       "network": "sui:mainnet",
       "asset": "0x2::sui::SUI",
       "amount": "1000000",
-      "payTo": "0xrecipientExt",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "s402-v1: accepts of scheme names expands to one entry each, exact first",
+    "input": {
+      "s402Version": "1",
+      "accepts": [
+        "prepaid",
+        "exact",
+        "stream"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        },
+        {
+          "scheme": "prepaid",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        },
+        {
+          "scheme": "stream",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "s402-v1: per-requirement fields land in the entry extra",
+    "input": {
+      "s402Version": "1",
+      "accepts": [
+        "upto"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "facilitatorUrl": "https://facilitator.example.com/settle",
+      "expiresAt": 1700000000000,
+      "protocolFeeBps": 250,
+      "protocolFeeAddress": "0xfee_collector",
+      "receiptRequired": true,
+      "settlementMode": "facilitator",
+      "upto": {
+        "maxAmount": "10000000",
+        "settlementDeadlineMs": "1700000000000"
+      },
       "extensions": {
         "custom": "data"
+      }
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
+      "accepts": [
+        {
+          "scheme": "upto",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "facilitatorUrl": "https://facilitator.example.com/settle",
+          "protocolFeeBps": 250,
+          "protocolFeeAddress": "0xfee_collector",
+          "receiptRequired": true,
+          "settlementMode": "facilitator",
+          "expiresAt": 1700000000000,
+          "upto": {
+            "maxAmount": "10000000",
+            "settlementDeadlineMs": "1700000000000"
+          },
+          "extensions": {
+            "custom": "data"
+          }
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "s402-v1: mandate is hoisted to the envelope (extensions.s402.mandate)",
+    "input": {
+      "s402Version": "1",
+      "accepts": [
+        "exact"
+      ],
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+      "mandate": {
+        "required": true,
+        "minPerTx": "100000"
+      }
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": ""
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
+      ],
+      "mandate": {
+        "required": true,
+        "minPerTx": "100000"
       }
     },
     "shouldReject": false
