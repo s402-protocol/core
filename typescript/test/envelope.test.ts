@@ -28,9 +28,10 @@ import {
   type BuildEnvelopeContext,
 } from '../src/index.js';
 
+// ONE `accepts[]` entry — the envelope binds to the single offer that was paid,
+// not to the whole 402. Wire v2 replaced `accepts: string[]` with `scheme`.
 const REQUIREMENTS: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
@@ -138,8 +139,7 @@ describe('computeTxBinding: domain-separated request→response binding', () => 
       amount: REQUIREMENTS.amount,
       asset: REQUIREMENTS.asset,
       network: REQUIREMENTS.network,
-      accepts: REQUIREMENTS.accepts,
-      s402Version: REQUIREMENTS.s402Version,
+      scheme: REQUIREMENTS.scheme,
     } as s402PaymentRequirements;
     const b = await computeTxBinding(reorderedReqs, PAYLOAD);
     expect(a).toBe(b);
@@ -353,6 +353,19 @@ describe('verifyEnvelope: client-side MUST checks', () => {
       },
       expectedSpecDigest: CTX.specDigest,
     })).rejects.toThrow(/scheme/);
+  });
+
+  // Wire v2: a requirement offers exactly ONE scheme, so the check is an
+  // equality rather than the `accepts.includes()` membership test it was.
+  it('rejects requirements that offer a different scheme than the envelope', async () => {
+    const env = await goodEnvelope();
+    await expect(verifyEnvelope(env, {
+      originalRequest: {
+        requirements: { ...REQUIREMENTS, scheme: 'prepaid' },
+        payload: PAYLOAD,
+      },
+      expectedSpecDigest: CTX.specDigest,
+    })).rejects.toThrow(/is not the scheme these requirements offer/);
   });
 
   it('rejects specDigest mismatch with DIGEST_MISMATCH', async () => {

@@ -1,10 +1,10 @@
 ---
-description: Bidirectional interop between s402 and x402. An unmodified x402 client can pay an s402 gate that sets the x402 option; s402 reads x402 payments on every gate.
+description: Bidirectional interop between s402 and x402. An unmodified x402 client pays an s402 gate with no client changes and no server options; s402 reads x402 payments on every gate.
 ---
 
 # x402 Compatibility
 
-Bidirectional interop between s402 and x402. An unmodified x402 client can pay an `s402Gate` that sets the `x402` option (via the "exact" scheme), and an s402 client can talk to an x402 server (via automatic normalization).
+Bidirectional interop between s402 and x402. An unmodified x402 client pays an `s402Gate` with **no client changes and no server options** — s402's 402 is an x402 V2 `PaymentRequired` envelope on every route (ADR-016) — and an s402 client talks to an x402 server via automatic normalization.
 
 **Audited against:** x402 `x402-foundation/x402` @ `2cc7e9a6880c08433b692666032862bcbea51187` (2026-09-04), `@x402/core` / `@x402/fetch` 2.25.0. The pin is exported as `X402_UPSTREAM_PIN` and asserted by `test/compat-x402-dialect.test.ts`; the round trip is exercised by `test/interop-x402-client.test.ts` against the real upstream client. Development moved from `coinbase/x402` (frozen at `dd927a26`) to the foundation repo in 2026-04 — check drift against the foundation.
 
@@ -45,12 +45,13 @@ Handles three formats:
 import { decodePaymentRequired } from 's402/http';
 import { normalizeRequirements } from 's402/compat/x402';
 
-// Option A: decode s402 headers directly (validates s402Version)
-const requirements = decodePaymentRequired(header);
+// Option A: decode the wire directly. This reads s402's own 402 AND a plain
+// x402 V2 one — since wire v2 they are the same envelope.
+const required = decodePaymentRequired(header);
 
-// Option B: normalize any format (s402, x402 V1, x402 V2)
-const requirements = normalizeRequirements(decodedJson);
-// Always returns s402PaymentRequirements
+// Option B: normalize any era (wire v2 / x402 V2, x402 V1 flat, s402 v1 flat)
+const required = normalizeRequirements(decodedJson);
+// Always returns s402PaymentRequired — the 402 document, not one requirement
 ```
 
 ::: warning
@@ -62,7 +63,7 @@ Do not use `JSON.parse(atob(...))` for decoding. The protocol uses Unicode-safe 
 Quick checks for protocol format.
 
 ```typescript
-function isS402(obj: Record<string, unknown>): boolean;  // has s402Version
+function isS402(obj: Record<string, unknown>): boolean;  // the RETIRED flat shape: has s402Version
 function isX402(obj: Record<string, unknown>): boolean;  // has x402Version, no s402Version
 ```
 
@@ -86,7 +87,7 @@ function fromX402Requirements(
 ): s402PaymentRequirements;
 ```
 
-- Maps `scheme` → `accepts: ['exact']`
+- Returns ONE `accepts[]` entry, with `scheme: 'exact'`
 - Handles both V1 (`maxAmountRequired`) and V2 (`amount`) wire formats
 - Preserves `extensions` field for forward compatibility
 
@@ -235,26 +236,85 @@ A payload carrying **both** version markers is s402, because s402 is the superse
 
 ## Serving x402 clients from a gate
 
-The 402 is the one leg an x402 client cannot cross on its own: s402's native `payment-required` carries `s402Version` and `accepts: ['exact']`, while x402 reads `x402Version` and `accepts: [PaymentRequirements]`. Same header, same key, different type — the two cannot share one document. So emitting x402's envelope is a **server option**:
+There is nothing to configure. s402's `payment-required` **is** an x402 V2 `PaymentRequired`
+envelope on every route, so an unmodified `@x402/fetch` client completes the whole round trip:
+it reads the 402, pays under `PAYMENT-SIGNATURE`, and decodes the receipt.
 
 ```typescript
 import { s402Gate } from 's402';
 
 const gate = s402Gate({
   server,
-  requirements,
-  x402: {
-    resource: { url: 'https://api.example.com/paid', description: 'Paid data', mimeType: 'application/json' },
-    maxTimeoutSeconds: 60,   // optional
-  },
+  requirements,   // one offer, or an array — one entry per scheme, `exact` first
+  resource: { url: 'https://api.example.com/paid', description: 'Paid data', mimeType: 'application/json' },
 });
 ```
 
-With the option set, an unmodified `@x402/fetch` client completes the round trip: it reads the 402, pays under `PAYMENT-SIGNATURE`, and decodes the receipt. Without it, the 402 stays s402-native and nothing changes for existing s402 clients.
+`resource` is required because x402's V2 envelope requires it — it is a field, not an interop
+switch. The `x402` option this page used to document is **gone**: it selected between two
+grammars, and there is only one now ([ADR-016](../adr/016-s402-402-is-an-x402-envelope.md)).
 
-What is **not** optional: every gate accepts x402 payments (`PAYMENT-SIGNATURE` V2, `X-PAYMENT` V1) and answers an x402-dialect payment with an x402-dialect receipt. Compatibility on intake is an obligation ([ADR-013](../adr/013-x402-intake-compatibility.md)); emission on the 402 is a choice ([ADR-015](../adr/015-x402-dialect-at-the-gate.md)).
+Every s402 scheme is expressible. `prepaid`, `stream`, `escrow`, `unlock` and `upto` each get
+their own `accepts[]` entry; an x402 client without a handler for one skips it, which is what
+`accepts[]` is for. The encoder sorts `exact` to the front, because x402's client pays the first
+entry it has a handler for and an `exact` entry listed third is one it walks past. s402's own per-requirement fields (`facilitatorUrl`, `expiresAt`, the fee
+fields, the per-scheme extras) ride in that entry's `extra`, and `mandate` rides in
+`extensions.s402` — so nothing is dropped to make the document readable.
 
-Only `exact`-first requirements are expressible on an x402 envelope; s402-only fields (`facilitatorUrl`, `mandate`, `expiresAt`, fees, `extensions`) do not travel on it. s402 clients hitting a gate in this mode must call `normalizeRequirements()` on the 402.
+Intake is unchanged and still unconditional: every gate accepts x402 payments
+(`PAYMENT-SIGNATURE` V2, `X-PAYMENT` V1) and answers an x402-dialect payment with an
+x402-dialect receipt ([ADR-013](../adr/013-x402-intake-compatibility.md)).
+
+## Reading the retired flat shapes
+
+Two 402 shapes are no longer emitted by anything and are still read on intake.
+
+### `fromS402V1Requirements(v1, options?)`
+
+Decodes s402's own pre-wire-v2 402 — `{ s402Version: '1', accepts: ['exact', 'prepaid'], network,
+asset, amount, payTo, … }` — into the wire-v2 document. Every field except `accepts` described the
+one offer the document made, so each expanded entry carries all of them; `accepts` becomes one
+entry per scheme, with `exact` hoisted to the front. `mandate` moves to the envelope.
+
+```typescript
+import { fromS402V1Requirements } from 's402/compat/x402';
+
+const required = fromS402V1Requirements(JSON.parse(atob(legacyHeader)), {
+  resource: { url: 'https://api.example.com/paid' },   // v1 had none; pass the URL you fetched
+});
+```
+
+### `normalizeRequirements(obj, now?)`
+
+Takes any of them — wire v2 / x402 V2 envelope, x402 V1 flat, s402 v1 flat — and returns an
+`s402PaymentRequired`. The V2 case is identity plus the `extra` projection, because that envelope
+is the native shape.
+
+### One thing every decode path adds rather than copies
+
+When a document carries **no** `extensions.s402` — a plain x402 402, from a server that has never
+heard of s402 — an offer with no `expiresAt` gets one derived from its `maxTimeoutSeconds`. Without
+it, inbound x402 traffic bypasses every S1 stale-payment guard, because those guards skip an
+undefined `expiresAt`.
+
+This runs in `decodePaymentRequired`, `decodeRequirementsBody`, the MCP and A2A decoders and
+`normalizeRequirements` alike — one helper, every entry point. `decodePaymentRequired(header, now)`
+and `decodeRequirementsBody(body, now)` take an optional clock for testing and for reproducible
+conformance vectors.
+
+Two things it does not do: it never overwrites an expiry the peer stated, and it skips offers
+naming a scheme s402 does not implement — an offer no s402 payment will be built for has nothing
+for S1 to protect, and writing to it would clobber whatever that scheme means by the same key.
+
+s402's own documents are never touched. Saying nothing about expiry is an answer, and it is ours.
+
+### `x402AcceptedFromHeaders(headers)`
+
+The requirement an x402 V2 payment says it is paying. x402 V2's `PaymentPayload` carries
+`accepted` — the FULL `PaymentRequirements` the client chose, not just its scheme name — and on a
+402 that offered several entries at several prices, that object is the only thing that says which
+one the money is for. `s402Gate` uses it to settle against the offer the payer actually took, and
+refuses when it matches none. Returns `null` for an x402 V1 payload, which has no `accepted`.
 
 ## x402 Types
 

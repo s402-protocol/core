@@ -38,13 +38,24 @@ let failures = 0;
 // ── 1. Server: charge for an endpoint ────────────────────────────────────────
 h1('1. A server asks to be paid');
 
-const requirements = {
-  s402Version: '1',
-  accepts: ['exact', 'stream'],
+// Since wire v2 a 402 IS an x402 V2 `PaymentRequired` envelope: a `resource`
+// saying what is being paid for, and one `accepts[]` entry per offered scheme.
+// `exact` goes first, because an x402 client pays the first entry it has a
+// handler for.
+const price = {
   network: 'sui:mainnet',
   asset: '0x2::sui::SUI',
   amount: '1000000', // 0.001 SUI, denominated in MIST
   payTo: '0x0000000000000000000000000000000000000000000000000000000000000001',
+};
+
+const requirements = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid', description: 'One paid call' },
+  accepts: [
+    { scheme: 'exact', ...price },
+    { scheme: 'stream', ...price },
+  ],
 };
 
 const header = encodePaymentRequired(requirements);
@@ -56,13 +67,20 @@ console.log(`  (${header.length} chars of base64 JSON — one header, no body ne
 h1('2. A client reads it, with no shared code');
 
 const decoded = decodePaymentRequired(header);
-console.log(`  wants     : ${decoded.amount} MIST of ${decoded.asset}`);
-console.log(`  on        : ${decoded.network}`);
-console.log(`  pay to    : ${decoded.payTo.slice(0, 18)}…`);
-console.log(`  will take : ${decoded.accepts.join(' or ')}`);
+const first = decoded.accepts[0];
+console.log(`  for       : ${decoded.resource.url}`);
+console.log(`  wants     : ${first.amount} MIST of ${first.asset}`);
+console.log(`  on        : ${first.network}`);
+console.log(`  pay to    : ${first.payTo.slice(0, 18)}…`);
+console.log(`  will take : ${decoded.accepts.map((a) => a.scheme).join(' or ')}`);
 
-const roundTripped = JSON.stringify(decoded) === JSON.stringify(requirements);
-roundTripped ? ok('round-trip is byte-exact') : (failures++, bad('round-trip LOST data'));
+// The decoded document says the same thing the encoder was given. It is not
+// byte-identical to the input object: `maxTimeoutSeconds` is filled in with the
+// default x402 requires on every entry, and that IS the wire.
+const reEncoded = encodePaymentRequired(decoded);
+reEncoded === header
+  ? ok('decode → re-encode is byte-exact')
+  : (failures++, bad('round-trip LOST data'));
 
 // ── 3. Compat: accept an x402 payer ──────────────────────────────────────────
 h1('3. An x402 client turns up instead');
@@ -79,8 +97,9 @@ const x402Body = {
 
 console.log(`  detected as x402 : ${isX402(x402Body)}`);
 const normalized = normalizeRequirements(x402Body);
-console.log(`  normalized       : amount=${normalized.amount} network=${normalized.network}`);
-isX402(x402Body) && normalized.amount === '10000'
+const lifted = normalized.accepts[0];
+console.log(`  normalized       : amount=${lifted.amount} network=${lifted.network}`);
+isX402(x402Body) && lifted.amount === '10000'
   ? ok('x402 V1 absorbed without the caller knowing which protocol arrived')
   : (failures++, bad('compat normalization did not behave as documented'));
 

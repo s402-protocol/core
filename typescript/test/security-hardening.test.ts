@@ -1,20 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { a2aTransport, S402_A2A_KEYS } from '../src/index.js';
 import { parseWwwAuthenticatePayment, decodeMppCredential } from '../src/compat/mpp.js';
-import { pickPayloadFields } from '../src/http.js';
-import type { s402PaymentRequirements } from '../src/index.js';
+import { pickPayloadFields, toRequirementsWire } from '../src/http.js';
+import type { s402PaymentRequired } from '../src/index.js';
 
 // Regression tests for the pre-publish security review (2026-06-28).
 // Each block pins one finding so it can never silently regress.
 
-const reqs: s402PaymentRequirements = {
-  s402Version: '1',
-  accepts: ['exact'],
-  network: 'sui:testnet',
-  asset: '0x2::sui::SUI',
-  amount: '1000000',
-  payTo: '0xabc',
+// The A2A frame carries the WIRE envelope (wire v2) — the same document the
+// `payment-required` header carries, projected through toRequirementsWire.
+const required: s402PaymentRequired = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:testnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xabc',
+  }],
 };
+const reqs = toRequirementsWire(required);
 
 const base64url = (s: string): string =>
   btoa(s).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');

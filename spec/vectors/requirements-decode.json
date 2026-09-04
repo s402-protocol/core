@@ -2,199 +2,273 @@
   {
     "description": "Decode minimal exact requirements",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCJ9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode stream scheme",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInN0cmVhbSJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJzdHJlYW0iOnsicmF0ZVBlclNlY29uZCI6IjEwMDAiLCJidWRnZXRDYXAiOiIxMDAwMDAwMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAwMDAifX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6InN0cmVhbSIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnsic3RyZWFtIjp7InJhdGVQZXJTZWNvbmQiOiIxMDAwIiwiYnVkZ2V0Q2FwIjoiMTAwMDAwMDAwIiwibWluRGVwb3NpdCI6IjEwMDAwMDAwIn19fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "stream"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "stream": {
-        "ratePerSecond": "1000",
-        "budgetCap": "100000000",
-        "minDeposit": "10000000"
-      }
+        {
+          "scheme": "stream",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "stream": {
+            "ratePerSecond": "1000",
+            "budgetCap": "100000000",
+            "minDeposit": "10000000"
+          }
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode upto scheme with estimatedAmount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwidXB0byI6eyJtYXhBbW91bnQiOiIxMDAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsInVzYWdlUmVwb3J0VXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vdXNhZ2UiLCJlc3RpbWF0ZWRBbW91bnQiOiI3NTAwMDAwIn19"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6InVwdG8iLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7InVwdG8iOnsibWF4QW1vdW50IjoiMTAwMDAwMDAiLCJzZXR0bGVtZW50RGVhZGxpbmVNcyI6IjE3MDAwMDAwMDAwMDAiLCJ1c2FnZVJlcG9ydFVybCI6Imh0dHBzOi8vYXBpLmV4YW1wbGUuY29tL3VzYWdlIiwiZXN0aW1hdGVkQW1vdW50IjoiNzUwMDAwMCJ9fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "upto"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "upto": {
-        "maxAmount": "10000000",
-        "settlementDeadlineMs": "1700000000000",
-        "usageReportUrl": "https://api.example.com/usage",
-        "estimatedAmount": "7500000"
-      }
+        {
+          "scheme": "upto",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "upto": {
+            "maxAmount": "10000000",
+            "settlementDeadlineMs": "1700000000000",
+            "usageReportUrl": "https://api.example.com/usage",
+            "estimatedAmount": "7500000"
+          }
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode upto scheme minimal",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwidXB0byI6eyJtYXhBbW91bnQiOiI1MDAwMDAwIiwic2V0dGxlbWVudERlYWRsaW5lTXMiOiIxNzAwMDAwMDAwMDAwIn19"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6InVwdG8iLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7InVwdG8iOnsibWF4QW1vdW50IjoiNTAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCJ9fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "upto"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "upto": {
-        "maxAmount": "5000000",
-        "settlementDeadlineMs": "1700000000000"
-      }
+        {
+          "scheme": "upto",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "upto": {
+            "maxAmount": "5000000",
+            "settlementDeadlineMs": "1700000000000"
+          }
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode escrow scheme",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImVzY3JvdyJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJlc2Nyb3ciOnsic2VsbGVyIjoiMHhzZWxsZXIxMjM0NTY3ODkwIiwiZGVhZGxpbmVNcyI6IjE3MDAwMDAwMDAwMDAifX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImVzY3JvdyIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnsiZXNjcm93Ijp7InNlbGxlciI6IjB4c2VsbGVyMTIzNDU2Nzg5MCIsImRlYWRsaW5lTXMiOiIxNzAwMDAwMDAwMDAwIn19fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "escrow"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "escrow": {
-        "seller": "0xseller1234567890",
-        "deadlineMs": "1700000000000"
-      }
+        {
+          "scheme": "escrow",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "escrow": {
+            "seller": "0xseller1234567890",
+            "deadlineMs": "1700000000000"
+          }
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode unlock scheme",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVubG9jayJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJ1bmxvY2siOnsicGFja2FnZUlkIjoiMHhwa2cxMjM0NTY3ODkwIiwia2V5U2VydmVycyI6W3sib2JqZWN0SWQiOiIweGtzMTExMSIsIndlaWdodCI6MX0seyJvYmplY3RJZCI6IjB4a3MyMjIyIiwid2VpZ2h0IjoxfV0sInRocmVzaG9sZCI6MiwiY29udGVudERpZ2VzdCI6InNoYTI1Ni0zcTItN3dBXzhYazVjUTBsWjJtTjZwUjdzVDl1VjB3WDF5WjJhQjNjRDQifX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6InVubG9jayIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnsidW5sb2NrIjp7InBhY2thZ2VJZCI6IjB4cGtnMTIzNDU2Nzg5MCIsImtleVNlcnZlcnMiOlt7Im9iamVjdElkIjoiMHhrczExMTEiLCJ3ZWlnaHQiOjF9LHsib2JqZWN0SWQiOiIweGtzMjIyMiIsIndlaWdodCI6MX1dLCJ0aHJlc2hvbGQiOjIsImNvbnRlbnREaWdlc3QiOiJzaGEyNTYtM3EyLTd3QV84WGs1Y1EwbFoybU42cFI3c1Q5dVYwd1gxeVoyYUIzY0Q0In19fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "unlock"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "unlock": {
-        "packageId": "0xpkg1234567890",
-        "keyServers": [
-          {
-            "objectId": "0xks1111",
-            "weight": 1
-          },
-          {
-            "objectId": "0xks2222",
-            "weight": 1
+        {
+          "scheme": "unlock",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "unlock": {
+            "packageId": "0xpkg1234567890",
+            "keyServers": [
+              {
+                "objectId": "0xks1111",
+                "weight": 1
+              },
+              {
+                "objectId": "0xks2222",
+                "weight": 1
+              }
+            ],
+            "threshold": 2,
+            "contentDigest": "sha256-3q2-7wA_8Xk5cQ0lZ2mN6pR7sT9uV0wX1yZ2aB3cD4"
           }
-        ],
-        "threshold": 2,
-        "contentDigest": "sha256-3q2-7wA_8Xk5cQ0lZ2mN6pR7sT9uV0wX1yZ2aB3cD4"
-      }
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode prepaid v0.2",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwicHJlcGFpZCI6eyJyYXRlUGVyQ2FsbCI6IjUwMDAiLCJtaW5EZXBvc2l0IjoiNTAwMDAwIiwid2l0aGRyYXdhbERlbGF5TXMiOiIzNjAwMDAwIiwicHJvdmlkZXJQdWJrZXkiOiJhMWIyYzNkNGU1ZjZhMWIyYzNkNGU1ZjZhMWIyYzNkNGU1ZjZhMWIyYzNkNGU1ZjZhMWIyYzNkNGU1ZjZhMWIyIiwiZGlzcHV0ZVdpbmRvd01zIjoiODY0MDAwMDAifX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6InByZXBhaWQiLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7InByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiI1MDAwIiwibWluRGVwb3NpdCI6IjUwMDAwMCIsIndpdGhkcmF3YWxEZWxheU1zIjoiMzYwMDAwMCIsInByb3ZpZGVyUHVia2V5IjoiYTFiMmMzZDRlNWY2YTFiMmMzZDRlNWY2YTFiMmMzZDRlNWY2YTFiMmMzZDRlNWY2YTFiMmMzZDRlNWY2YTFiMiIsImRpc3B1dGVXaW5kb3dNcyI6Ijg2NDAwMDAwIn19fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "prepaid"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "prepaid": {
-        "ratePerCall": "5000",
-        "minDeposit": "500000",
-        "withdrawalDelayMs": "3600000",
-        "providerPubkey": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
-        "disputeWindowMs": "86400000"
-      }
+        {
+          "scheme": "prepaid",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "prepaid": {
+            "ratePerCall": "5000",
+            "minDeposit": "500000",
+            "withdrawalDelayMs": "3600000",
+            "providerPubkey": "a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2",
+            "disputeWindowMs": "86400000"
+          }
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode prepaid v0.1",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwicHJlcGFpZCI6eyJyYXRlUGVyQ2FsbCI6IjUwMDAiLCJtaW5EZXBvc2l0IjoiNTAwMDAwIiwid2l0aGRyYXdhbERlbGF5TXMiOiIzNjAwMDAwIn19"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6InByZXBhaWQiLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7InByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiI1MDAwIiwibWluRGVwb3NpdCI6IjUwMDAwMCIsIndpdGhkcmF3YWxEZWxheU1zIjoiMzYwMDAwMCJ9fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "prepaid"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "prepaid": {
-        "ratePerCall": "5000",
-        "minDeposit": "500000",
-        "withdrawalDelayMs": "3600000"
-      }
+        {
+          "scheme": "prepaid",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "prepaid": {
+            "ratePerCall": "5000",
+            "minDeposit": "500000",
+            "withdrawalDelayMs": "3600000"
+          }
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode with mandate",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1hbmRhdGUiOnsicmVxdWlyZWQiOnRydWUsIm1pblBlclR4IjoiMTAwMDAwIn19"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIiwibWFuZGF0ZSI6eyJyZXF1aXJlZCI6dHJ1ZSwibWluUGVyVHgiOiIxMDAwMDAifX19fQ=="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "mandate": {
+            "required": true,
+            "minPerTx": "100000"
+          }
+        }
       ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
       "mandate": {
         "required": true,
         "minPerTx": "100000"
@@ -205,78 +279,140 @@
   {
     "description": "Decode with fees",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsInByb3RvY29sRmVlQnBzIjoyNTAsInByb3RvY29sRmVlQWRkcmVzcyI6IjB4ZmVlX2NvbGxlY3Rvcl9hZGRyZXNzXzEyMzQ1Njc4OTAifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJwcm90b2NvbEZlZUJwcyI6MjUwLCJwcm90b2NvbEZlZUFkZHJlc3MiOiIweGZlZV9jb2xsZWN0b3JfYWRkcmVzc18xMjM0NTY3ODkwIn19XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "protocolFeeBps": 250,
-      "protocolFeeAddress": "0xfee_collector_address_1234567890"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "protocolFeeBps": 250,
+          "protocolFeeAddress": "0xfee_collector_address_1234567890"
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode with facilitatorUrl",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsImZhY2lsaXRhdG9yVXJsIjoiaHR0cHM6Ly9mYWNpbGl0YXRvci5leGFtcGxlLmNvbS9zZXR0bGUifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJmYWNpbGl0YXRvclVybCI6Imh0dHBzOi8vZmFjaWxpdGF0b3IuZXhhbXBsZS5jb20vc2V0dGxlIn19XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "facilitatorUrl": "https://facilitator.example.com/settle"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "facilitatorUrl": "https://facilitator.example.com/settle"
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode with expiresAt",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsImV4cGlyZXNBdCI6MTcwMDAwMDAwMDAwMH0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJleHBpcmVzQXQiOjE3MDAwMDAwMDAwMDB9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "expiresAt": 1700000000000
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "expiresAt": 1700000000000
+        }
+      ]
     },
     "shouldReject": false
   },
   {
-    "description": "Decode with extensions",
+    "description": "Decode with per-requirement extensions",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsImV4dGVuc2lvbnMiOnsiYXVjdGlvbiI6eyJ0eXBlIjoic2VhbGVkLWJpZCIsImRlYWRsaW5lIjoxNzA4MDAwMDAwMDAwfSwiY3VzdG9tRmllbGQiOiJoZWxsbyB3b3JsZCJ9fQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJleHRlbnNpb25zIjp7ImF1Y3Rpb24iOnsidHlwZSI6InNlYWxlZC1iaWQiLCJkZWFkbGluZSI6MTcwODAwMDAwMDAwMH0sImN1c3RvbUZpZWxkIjoiaGVsbG8gd29ybGQifX19XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "extensions": {
+            "auction": {
+              "type": "sealed-bid",
+              "deadline": 1708000000000
+            },
+            "customField": "hello world"
+          }
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode with envelope-level extensions",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJvcmcuZXhhbXBsZS5kaXNjb3ZlcnkiOnsiY2F0YWxvZyI6Imh0dHBzOi8vYXBpLmV4YW1wbGUuY29tLy53ZWxsLWtub3duL3M0MDIifSwiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
       ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
       "extensions": {
-        "auction": {
-          "type": "sealed-bid",
-          "deadline": 1708000000000
-        },
-        "customField": "hello world"
+        "org.example.discovery": {
+          "catalog": "https://api.example.com/.well-known/s402"
+        }
       }
     },
     "shouldReject": false
@@ -284,147 +420,426 @@
   {
     "description": "Decode with direct settlement",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsInNldHRsZW1lbnRNb2RlIjoiZGlyZWN0In0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJzZXR0bGVtZW50TW9kZSI6ImRpcmVjdCJ9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "settlementMode": "direct"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "settlementMode": "direct"
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode with facilitator settlement",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsInNldHRsZW1lbnRNb2RlIjoiZmFjaWxpdGF0b3IiLCJmYWNpbGl0YXRvclVybCI6Imh0dHBzOi8vZmFjaWxpdGF0b3IuZXhhbXBsZS5jb20vc2V0dGxlIn0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJmYWNpbGl0YXRvclVybCI6Imh0dHBzOi8vZmFjaWxpdGF0b3IuZXhhbXBsZS5jb20vc2V0dGxlIiwic2V0dGxlbWVudE1vZGUiOiJmYWNpbGl0YXRvciJ9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "facilitatorUrl": "https://facilitator.example.com/settle",
-      "settlementMode": "facilitator"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "facilitatorUrl": "https://facilitator.example.com/settle",
+          "settlementMode": "facilitator"
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode with receipt required",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsInJlY2VpcHRSZXF1aXJlZCI6dHJ1ZX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJyZWNlaXB0UmVxdWlyZWQiOnRydWV9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "receiptRequired": true
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "receiptRequired": true
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode with multiple schemes",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0IiwicHJlcGFpZCIsInN0cmVhbSJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6e319LHsic2NoZW1lIjoicHJlcGFpZCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnsicHJlcGFpZCI6eyJyYXRlUGVyQ2FsbCI6IjUwMDAiLCJtaW5EZXBvc2l0IjoiNTAwMDAwIiwid2l0aGRyYXdhbERlbGF5TXMiOiIzNjAwMDAwIn19fSx7InNjaGVtZSI6InN0cmVhbSIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnsic3RyZWFtIjp7InJhdGVQZXJTZWNvbmQiOiIxMDAwIiwiYnVkZ2V0Q2FwIjoiMTAwMDAwMDAwIiwibWluRGVwb3NpdCI6IjEwMDAwMDAwIn19fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact",
-        "prepaid",
-        "stream"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        },
+        {
+          "scheme": "prepaid",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "prepaid": {
+            "ratePerCall": "5000",
+            "minDeposit": "500000",
+            "withdrawalDelayMs": "3600000"
+          }
+        },
+        {
+          "scheme": "stream",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "stream": {
+            "ratePerSecond": "1000",
+            "budgetCap": "100000000",
+            "minDeposit": "10000000"
+          }
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode two networks",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6e319LHsic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amount": "10000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode foreign x402 extra keys",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6eyJwYXltZW50RmxvdyI6InVwZnJvbnQiLCJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "extra": {
+            "paymentFlow": "upfront",
+            "name": "USD Coin",
+            "version": "2"
+          }
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode explicit maxTimeoutSeconds",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTAwMDAwMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjMwMCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 300
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode u64 max amount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjE4NDQ2NzQ0MDczNzA5NTUxNjE1IiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMTg0NDY3NDQwNzM3MDk1NTE2MTUiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "18446744073709551615",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "18446744073709551615",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode zero amount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCJ9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiIweDI6OnN1aTo6U1VJIiwiYW1vdW50IjoiMCIsInBheVRvIjoiMHhhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "0",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        {
+          "scheme": "exact",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "0",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60
+        }
+      ]
     },
     "shouldReject": false
   },
   {
-    "description": "Decode strips unknown top-level keys",
+    "description": "Decode a plain x402 V2 402 (no extensions.s402) — it is payable as-is",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsImluamVjdGVkRXZpbCI6InNob3VsZCBiZSBzdHJpcHBlZCIsIl9pbnRlcm5hbCI6Imhhcm1sZXNzIGJ1dCB1bmtub3duIiwieF9jdXN0b21faGVhZGVyIjo0Mn0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV19",
+      "now": 1700000000000
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://x402.example.com/paid"
+      },
       "accepts": [
-        "exact"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890"
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amount": "10000",
+          "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD Coin",
+            "version": "2"
+          },
+          "expiresAt": 1700000300000
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode an x402 402 offering a scheme s402 does not implement",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiYXV0aC1jYXB0dXJlIiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYXNzZXQiOiIweEEwYjg2OTkxYzYyMThiMzZjMWQxOUQ0YTJlOUViMGNFMzYwNmVCNDgiLCJhbW91bnQiOiIxMDAwMCIsInBheVRvIjoiMHgyMDk2OTNCYzZhZmMwQzUzMjhiQTM2RmFGMDNDNTE0RUYzMTIyODdDIiwibWF4VGltZW91dFNlY29uZHMiOjMwMCwiZXh0cmEiOnsibmFtZSI6IlVTRCBDb2luIiwidmVyc2lvbiI6IjIifX0seyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJlaXAxNTU6ODQ1MyIsImFzc2V0IjoiMHhBMGI4Njk5MWM2MjE4YjM2YzFkMTlENGEyZTlFYjBjRTM2MDZlQjQ4IiwiYW1vdW50IjoiMTAwMDAiLCJwYXlUbyI6IjB4MjA5NjkzQmM2YWZjMEM1MzI4YkEzNkZhRjAzQzUxNEVGMzEyMjg3QyIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsImV4dHJhIjp7Im5hbWUiOiJVU0QgQ29pbiIsInZlcnNpb24iOiIyIn19XX0=",
+      "now": 1700000000000
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": "https://x402.example.com/paid"
+      },
+      "accepts": [
+        {
+          "scheme": "auth-capture",
+          "network": "eip155:8453",
+          "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amount": "10000",
+          "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD Coin",
+            "version": "2"
+          }
+        },
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amount": "10000",
+          "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD Coin",
+            "version": "2"
+          },
+          "expiresAt": 1700000300000
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode strips unknown top-level envelope keys",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV0sImluamVjdGVkRXZpbCI6InNob3VsZCBiZSBzdHJpcHBlZCIsIl9pbnRlcm5hbCI6Imhhcm1sZXNzIGJ1dCB1bmtub3duIiwieF9jdXN0b21faGVhZGVyIjo0Mn0=",
+      "now": 1700000000000
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": "https://x402.example.com/paid"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amount": "10000",
+          "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD Coin",
+            "version": "2"
+          },
+          "expiresAt": 1700000300000
+        }
+      ]
+    },
+    "shouldReject": false
+  },
+  {
+    "description": "Decode strips unknown accepts[] entry keys but keeps unknown extra keys",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9LCJpbmplY3RlZEVudHJ5RmllbGQiOiJzdHJpcHBlZCJ9XX0=",
+      "now": 1700000000000
+    },
+    "expected": {
+      "x402Version": 2,
+      "resource": {
+        "url": "https://x402.example.com/paid"
+      },
+      "accepts": [
+        {
+          "scheme": "exact",
+          "network": "eip155:8453",
+          "asset": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+          "amount": "10000",
+          "payTo": "0x209693Bc6afc0C5328bA36FaF03C514EF312287C",
+          "maxTimeoutSeconds": 300,
+          "extra": {
+            "name": "USD Coin",
+            "version": "2"
+          },
+          "expiresAt": 1700000300000
+        }
+      ]
     },
     "shouldReject": false
   },
   {
     "description": "Decode strips unknown keys from sub-objects (stream)",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInN0cmVhbSJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IjB4Mjo6c3VpOjpTVUkiLCJhbW91bnQiOiIxMDAwMDAwIiwicGF5VG8iOiIweGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTAiLCJzdHJlYW0iOnsicmF0ZVBlclNlY29uZCI6IjEwMDAiLCJidWRnZXRDYXAiOiIxMDAwMDAwMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAwMDAiLCJpbmplY3RlZEZpZWxkIjoic2hvdWxkIGJlIHN0cmlwcGVkIGZyb20gc3ViLW9iamVjdCJ9fQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImRlc2NyaXB0aW9uIjoiUGFpZCBjb250ZW50IiwibWltZVR5cGUiOiJhcHBsaWNhdGlvbi9qc29uIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6InN0cmVhbSIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWk6OlNVSSIsImFtb3VudCI6IjEwMDAwMDAiLCJwYXlUbyI6IjB4YWJjZGVmMTIzNDU2Nzg5MGFiY2RlZjEyMzQ1Njc4OTBhYmNkZWYxMjM0NTY3ODkwYWJjZGVmMTIzNDU2Nzg5MCIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnsic3RyZWFtIjp7InJhdGVQZXJTZWNvbmQiOiIxMDAwIiwiYnVkZ2V0Q2FwIjoiMTAwMDAwMDAwIiwibWluRGVwb3NpdCI6IjEwMDAwMDAwIiwiaW5qZWN0ZWRGaWVsZCI6InNob3VsZCBiZSBzdHJpcHBlZCBmcm9tIHN1Yi1vYmplY3QifX19XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "expected": {
-      "s402Version": "1",
+      "x402Version": 2,
+      "resource": {
+        "url": "https://api.example.com/paid",
+        "description": "Paid content",
+        "mimeType": "application/json"
+      },
       "accepts": [
-        "stream"
-      ],
-      "network": "sui:mainnet",
-      "asset": "0x2::sui::SUI",
-      "amount": "1000000",
-      "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-      "stream": {
-        "ratePerSecond": "1000",
-        "budgetCap": "100000000",
-        "minDeposit": "10000000"
-      }
+        {
+          "scheme": "stream",
+          "network": "sui:mainnet",
+          "asset": "0x2::sui::SUI",
+          "amount": "1000000",
+          "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+          "maxTimeoutSeconds": 60,
+          "stream": {
+            "ratePerSecond": "1000",
+            "budgetCap": "100000000",
+            "minDeposit": "10000000"
+          }
+        }
+      ]
     },
     "shouldReject": false
   }

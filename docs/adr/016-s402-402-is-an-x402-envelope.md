@@ -1,7 +1,7 @@
 # ADR-016: s402's 402 is an x402 V2 envelope — a profile of x402, not a second dialect on its header
 
 **Status:** Accepted (Danny, 2026-09-04: *"yes on the envelope change"*)
-**Implementation:** not-started
+**Implementation:** shipped
 **Force:** invariant — checked by `test/interop-x402-client.test.ts` run **without** any x402 option, and by the `requirements-encode` / `requirements-decode` vectors once rewritten
 **Date:** 2026-09-04
 **Supersedes:** ADR-015 rule 3 and its `x402` gate option (ADR-015 rules 1 and 2 — unconditional intake, dialect-echo receipt — stand). Retires ADR-015 Alternative A's rejection.
@@ -135,3 +135,54 @@ happened.
 
 Whether `VISION.md` and the README's positioning move from "protocol" to "profile of x402" in the
 same major. The architecture now says profile; the prose still says protocol. Danny's call.
+
+---
+
+## Amendment, 2026-09-04 — what a foreign `accepts[]` entry is allowed to be
+
+The pre-merge review of DAN-1078 found that an entry naming a scheme s402 does
+not implement — `auth-capture`, `batch-settlement`, anything upstream ships next
+— was carried through decode **verbatim**: its `extra` unvalidated, no expiry
+derived, nothing stripped. The comment in the code called this Postel by design.
+It was, but it was never written down, so it was a silent choice at a trust
+boundary. This amendment makes it explicit.
+
+**Neither of the two obvious answers is the right one.**
+
+*Validate `extra` for every entry* would apply s402's key meanings to a bag s402
+does not own. `auth-capture` has its own `escrow` semantics; grading its `extra`
+against `s402EscrowExtra` rejects a whole menu over one dish we were never going
+to order, which is the opposite of rule 2.
+
+*Strip foreign entries* is worse. Rule 2 says a requirement an x402 client does
+not understand is one it **skips**. That rule binds us as a decoder too: a
+partially-understood menu re-presented with the unfamiliar rows deleted
+misrepresents what the origin server offered.
+
+**The decision.** The invariant is a claim about *emission* — that no header
+s402 emits carries a document upstream cannot parse — and x402 types `extra` as
+an open record, so a foreign entry's `extra` can never be what breaks it. What
+*can* break it are the x402-owned fields, on every entry, foreign or not. So:
+
+1. **Every entry's x402-owned fields are validated to upstream's own V2 schema**,
+   whatever scheme it names — CAIP-2 `network`, non-empty `asset` / `payTo` /
+   `amount`, positive `maxTimeoutSeconds`. This is what actually keeps the
+   invariant, and it is new in this change.
+2. **A foreign entry's `extra` is quarantined, not validated and not stripped.**
+   It is carried whole, nothing is lifted out of it to the top level (so a
+   `facilitatorUrl` sitting there is never handed to anything), no `expiresAt` is
+   written into it, and none of s402's per-scheme validators run on it.
+3. **`extra` for an entry naming one of s402's six schemes is validated to the
+   letter**, including `paymentFlow`, which x402 names and whose value set it
+   closes.
+
+The trust boundary the deleted whole-document validator used to hold is
+therefore held in two halves: upstream's schema over what x402 owns, s402's
+validators over what s402 owns, and an explicit no-man's-land between them that
+is readable and inert.
+
+**Consequence worth stating.** A 402 lifted out of a retired flat shape (x402 V1,
+s402 v1) may carry a non-CAIP-2 `network`, because those shapes predate the rule
+and ADR-013 obliges us to read them. Such a document decodes and **cannot be
+re-emitted** — `encodePaymentRequired` refuses it. Reading is an obligation;
+saying it yourself is not.

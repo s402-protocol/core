@@ -30,12 +30,13 @@
  */
 
 import type {
-  s402PaymentRequirements,
+  s402PaymentRequired,
   s402PaymentPayload,
   s402SettleResponse,
 } from './types.js';
 import { S402_HEADERS } from './types.js';
 import {
+  toEmittableWire,
   encodePaymentRequired,
   decodePaymentRequired,
   encodePaymentPayload,
@@ -107,9 +108,9 @@ export interface PaymentTransport<TFrame = unknown> {
   readonly carrier: 'http' | 'mcp' | 'a2a';
 
   /** Server → client: encode payment requirements (the 402 challenge). */
-  encodeRequirements(requirements: s402PaymentRequirements, ctx?: PaymentCarrierContext): TFrame;
+  encodeRequirements(requirements: s402PaymentRequired, ctx?: PaymentCarrierContext): TFrame;
   /** Client: decode an inbound requirements challenge, or `null` if the frame has none. */
-  decodeRequirements(frame: TFrame): Decoded<s402PaymentRequirements> | null;
+  decodeRequirements(frame: TFrame): Decoded<s402PaymentRequired> | null;
 
   /** Client → server: encode the signed payment payload. */
   encodePayload(payload: s402PaymentPayload, ctx?: PaymentCarrierContext): TFrame;
@@ -227,7 +228,7 @@ export const mcpTransport: PaymentTransport<McpMetaFrame> = {
   carrier: 'mcp',
 
   encodeRequirements(requirements) {
-    return metaFrame(requirements);
+    return metaFrame(toEmittableWire(requirements));
   },
   decodeRequirements(frame) {
     const raw = frame[S402_MCP_META_KEY];
@@ -353,7 +354,7 @@ export const a2aTransport: PaymentTransport<A2aMetadataFrame> = {
   carrier: 'a2a',
 
   encodeRequirements(requirements, ctx) {
-    return { ...a2aPreamble('required', ctx), [S402_A2A_KEYS.REQUIRED]: requirements };
+    return { ...a2aPreamble('required', ctx), [S402_A2A_KEYS.REQUIRED]: toEmittableWire(requirements) };
   },
   decodeRequirements(frame) {
     const raw = frame[S402_A2A_KEYS.REQUIRED];

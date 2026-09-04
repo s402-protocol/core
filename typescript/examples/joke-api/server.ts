@@ -31,15 +31,25 @@ const facilitator = new s402Facilitator();
 facilitator.register(NETWORK, mockExactFacilitatorScheme());
 server.setFacilitator(facilitator);
 
-// ── Build requirements for the /joke route ──
+// ── Build the 402 document for the /joke route ──
+//
+// Since wire v2 the 402 is an x402 V2 `PaymentRequired` envelope: one
+// `accepts[]` entry per offered scheme, under a `resource` saying what is being
+// paid for. `buildPaymentRequired` assembles it; `buildRequirements` still
+// returns ONE entry, which is what the facilitator settles against.
 
-const requirements = server.buildRequirements({
+const RESOURCE = { url: `http://localhost:${PORT}/joke`, description: 'One joke' };
+
+const required = server.buildPaymentRequired({
   schemes: ['exact'],
   price: '1000000', // 0.001 SUI
   network: NETWORK,
   payTo: PAY_TO,
   asset: '0x2::sui::SUI',
-});
+}, RESOURCE);
+
+/** The single offer a payment settles against — this route offers exactly one. */
+const requirements = required.accepts[0];
 
 const jokes = [
   'Why do programmers prefer dark mode? Because light attracts bugs.',
@@ -64,7 +74,7 @@ const httpServer = createServer(async (req, res) => {
     // No payment — send 402 with requirements
     console.log('← 402 Payment Required');
     res.writeHead(402, {
-      [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
+      [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(required),
       'content-type': 'text/plain',
     });
     res.end('Payment Required');

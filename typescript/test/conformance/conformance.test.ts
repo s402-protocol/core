@@ -35,6 +35,7 @@ import type { PaymentStatus, PaymentTransport } from '../../src/transport.js';
 
 import type {
   s402PaymentRequirements,
+  s402PaymentRequired,
   s402PaymentPayload,
   s402SettleResponse,
 } from '../../src/types.js';
@@ -67,7 +68,7 @@ describe('Conformance: requirements-encode', () => {
 
   for (const v of vectors) {
     it(v.description, () => {
-      const input = v.input as unknown as s402PaymentRequirements;
+      const input = v.input as unknown as s402PaymentRequired;
       const result = encodePaymentRequired(input);
       expect(result).toBe((v.expected as { header: string }).header);
     });
@@ -85,8 +86,10 @@ describe('Conformance: requirements-decode', () => {
 
   for (const v of vectors) {
     it(v.description, () => {
-      const header = (v.input as { header: string }).header;
-      const result = decodePaymentRequired(header);
+      // `now` is present only on vectors decoding a document with no
+      // `extensions.s402`, where `expiresAt` is derived rather than read.
+      const { header, now } = v.input as { header: string; now?: number };
+      const result = decodePaymentRequired(header, now);
       expect(result).toEqual(v.expected);
     });
   }
@@ -179,7 +182,7 @@ describe('Conformance: body-transport', () => {
       const expected = v.expected as { body: string; decoded: unknown };
 
       if (type === 'requirements') {
-        const body = encodeRequirementsBody(value as s402PaymentRequirements);
+        const body = encodeRequirementsBody(value as s402PaymentRequired);
         expect(body).toBe(expected.body);
         const decoded = decodeRequirementsBody(body);
         expect(decoded).toEqual(expected.decoded);
@@ -361,13 +364,13 @@ describe('Conformance: roundtrip', () => {
 
       // TypeScript runner: actually execute encode → decode → re-encode
       if (input.type === 'requirements' && input.transport === 'header') {
-        const encoded = encodePaymentRequired(input.value as s402PaymentRequirements);
+        const encoded = encodePaymentRequired(input.value as s402PaymentRequired);
         const decoded = decodePaymentRequired(encoded);
         const reEncoded = encodePaymentRequired(decoded);
         expect(encoded).toBe(expected.firstEncode);
         expect(reEncoded).toBe(encoded);
       } else if (input.type === 'requirements' && input.transport === 'body') {
-        const encoded = encodeRequirementsBody(input.value as s402PaymentRequirements);
+        const encoded = encodeRequirementsBody(input.value as s402PaymentRequired);
         const decoded = decodeRequirementsBody(encoded);
         const reEncoded = encodeRequirementsBody(decoded);
         expect(encoded).toBe(expected.firstEncode);
@@ -435,7 +438,7 @@ describe('Conformance: transport-carriers', () => {
       let frame: Record<string, unknown>;
       let decoded;
       if (input.type === 'requirements') {
-        frame = transport.encodeRequirements(input.value as unknown as s402PaymentRequirements, ctx);
+        frame = transport.encodeRequirements(input.value as unknown as s402PaymentRequired, ctx);
         decoded = transport.decodeRequirements(frame);
       } else if (input.type === 'payload') {
         frame = transport.encodePayload(input.value as unknown as s402PaymentPayload, ctx);

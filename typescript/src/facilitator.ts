@@ -159,14 +159,14 @@ export class s402Facilitator {
       }
     }
 
-    // Cross-check: payload scheme must be in requirements.accepts
-    if (requirements.accepts && requirements.accepts.length > 0) {
-      if (!requirements.accepts.includes(payload.scheme)) {
-        return {
-          valid: false,
-          invalidReason: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.accepts.join(', ')}]`,
-        };
-      }
+    // Cross-check: the payload's scheme must be the one THIS requirement offers.
+    // Before wire v2 a requirement carried a list; now a requirement IS one
+    // offer, and choosing among several is the caller's job (see s402Gate).
+    if (requirements.scheme && requirements.scheme !== payload.scheme) {
+      return {
+        valid: false,
+        invalidReason: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.scheme}]`,
+      };
     }
 
     // H-1: Wrap in try/catch — resolveScheme throws s402Error on unknown network/scheme
@@ -207,12 +207,12 @@ export class s402Facilitator {
       }
     }
 
-    // Cross-check: payload scheme must be in requirements.accepts
-    if (requirements.accepts && requirements.accepts.length > 0) {
-      if (!requirements.accepts.includes(payload.scheme)) {
+    // Cross-check: the payload's scheme must be the one THIS requirement offers.
+    if (requirements.scheme && requirements.scheme !== payload.scheme) {
+      {
         return {
           success: false,
-          error: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.accepts.join(', ')}]`,
+          error: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.scheme}]`,
           errorCode: 'SCHEME_NOT_SUPPORTED',
         };
       }
@@ -285,12 +285,12 @@ export class s402Facilitator {
       }
     }
 
-    // Cross-check: payload scheme must be in requirements.accepts
-    if (requirements.accepts && requirements.accepts.length > 0) {
-      if (!requirements.accepts.includes(payload.scheme)) {
+    // Cross-check: the payload's scheme must be the one THIS requirement offers.
+    if (requirements.scheme && requirements.scheme !== payload.scheme) {
+      {
         return {
           success: false,
-          error: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.accepts.join(', ')}]`,
+          error: `Scheme "${payload.scheme}" is not accepted by these requirements. Accepted: [${requirements.scheme}]`,
           errorCode: 'SCHEME_NOT_SUPPORTED',
         };
       }

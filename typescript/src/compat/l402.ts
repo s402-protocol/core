@@ -28,7 +28,6 @@
  */
 
 import type { s402PaymentRequirements } from '../types.js';
-import { S402_VERSION } from '../types.js';
 import { s402Error } from '../errors.js';
 
 // ══════════════════════════════════════════════════════════════
@@ -338,8 +337,7 @@ export function fromL402Challenge(challenge: L402Challenge): s402PaymentRequirem
   }
 
   return {
-    s402Version: S402_VERSION,
-    accepts: ['exact'],
+    scheme: 'exact',
     network: summary.network,
     asset: 'lightning:msat',
     amount: summary.amountMsat,

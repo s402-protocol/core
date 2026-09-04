@@ -2,18 +2,41 @@ import { describe, it, expect } from 'vitest';
 import { mcpTransport, S402_MCP_META_KEY, S402_VERSION } from '../src/index.js';
 import { fromX402PayloadMeta } from '../src/compat/x402.js';
 import type {
-  s402PaymentRequirements,
+  s402PaymentRequired,
   s402PaymentPayload,
   s402SettleResponse,
 } from '../src/index.js';
 
-const requirements: s402PaymentRequirements = {
-  s402Version: '1',
-  accepts: ['exact'],
-  network: 'sui:testnet',
-  asset: '0x2::sui::SUI',
-  amount: '1000000',
-  payTo: '0xabc',
+// The 402 document — wire v2 makes every 402 an x402 V2 `PaymentRequired`
+// envelope. `maxTimeoutSeconds` is named because the encoder supplies it when
+// omitted; naming it keeps the round-trip exact.
+const requirements: s402PaymentRequired = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:testnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xabc',
+    maxTimeoutSeconds: 60,
+  }],
+};
+
+/** What the `_meta` slot actually carries: the WIRE envelope, not the in-memory doc. */
+const requirementsWire = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:testnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xabc',
+    maxTimeoutSeconds: 60,
+    extra: {},
+  }],
+  extensions: { s402: { version: '2' } },
 };
 const payload: s402PaymentPayload = {
   s402Version: '1',
@@ -29,7 +52,10 @@ describe('mcpTransport — payment in the MCP `_meta` slot (ADR-011 Chunk 1a-iii
 
   it('encodes the s402 object directly under `s402/payment` (structured JSON, not base64)', () => {
     const frame = mcpTransport.encodeRequirements(requirements);
-    expect(frame[S402_MCP_META_KEY]).toEqual(requirements);
+    // The frame carries the same x402 V2 envelope the HTTP header carries — one
+    // projection, not three. s402's own per-requirement fields ride in `extra`,
+    // and the wire version rides in `extensions.s402`.
+    expect(frame[S402_MCP_META_KEY]).toEqual(requirementsWire);
     // MCP idiom check: the value is the object itself, not a base64 string.
     expect(typeof frame[S402_MCP_META_KEY]).toBe('object');
   });
@@ -72,9 +98,18 @@ describe('mcpTransport — payment in the MCP `_meta` slot (ADR-011 Chunk 1a-iii
   });
 
   it('strips unknown keys via the canonical pick* (parity with HTTP decode)', () => {
-    const frame = { [S402_MCP_META_KEY]: { ...requirements, bogusKey: 'evil' } };
+    const frame = { [S402_MCP_META_KEY]: { ...requirementsWire, bogusKey: 'evil' } };
     const decoded = mcpTransport.decodeRequirements(frame)!;
-    expect('bogusKey' in (decoded.value as Record<string, unknown>)).toBe(false);
+    expect('bogusKey' in (decoded.value as unknown as Record<string, unknown>)).toBe(false);
+    // …at the entry level too: `accepts[]` is x402's shape, not an open bag.
+    const entryFrame = {
+      [S402_MCP_META_KEY]: {
+        ...requirementsWire,
+        accepts: [{ ...requirementsWire.accepts[0], bogusEntryKey: 'evil' }],
+      },
+    };
+    const entry = mcpTransport.decodeRequirements(entryFrame)!.value.accepts[0];
+    expect('bogusEntryKey' in (entry as unknown as Record<string, unknown>)).toBe(false);
   });
 });
 

@@ -28,13 +28,30 @@ from s402 import (
 API_URL = "http://localhost:3402/joke"
 
 
-def build_mock_payment(requirements: dict) -> dict:
-    """Build a mock payment payload (matches the TS mockExactClientScheme)."""
+def pick_offer(requirements: dict) -> dict:
+    """Pick the first offer we can pay.
+
+    A wire-v2 402 is a MENU: `accepts` holds one full requirement object per
+    offered scheme, each with its own network, asset, amount and payTo. Walk it
+    and take the first scheme this client implements — an offer naming a scheme
+    we cannot pay is one we skip, not a reason to fail.
+    """
+    for offer in requirements["accepts"]:
+        if offer["scheme"] == "exact":
+            return offer
+    raise S402Error(
+        "SCHEME_NOT_SUPPORTED",
+        f"No payable offer: server offered {[o['scheme'] for o in requirements['accepts']]}",
+    )
+
+
+def build_mock_payment(offer: dict) -> dict:
+    """Build a mock payment payload for ONE offer (matches the TS mockExactClientScheme)."""
     return {
         "s402Version": "1",
-        "scheme": "exact",
+        "scheme": offer["scheme"],
         "payload": {
-            "transaction": f"mock-pay-{requirements['amount']}-to-{requirements['payTo']}",
+            "transaction": f"mock-pay-{offer['amount']}-to-{offer['payTo']}",
             "signature": "mock-signature",
         },
     }
@@ -69,12 +86,20 @@ def get_joke() -> None:
         return
 
     print("<- 402 Payment Required")
-    print(f"   Schemes: [{', '.join(requirements['accepts'])}]")
-    print(f"   Amount:  {requirements['amount']} MIST")
-    print(f"   Network: {requirements['network']}")
+    print(f"   Resource: {requirements['resource'].get('url', '')}")
+    print(f"   Schemes:  [{', '.join(o['scheme'] for o in requirements['accepts'])}]")
 
-    # 3. Build and send payment
-    payment = build_mock_payment(requirements)
+    # 3. Pick an offer we can pay, then build and send the payment
+    try:
+        offer = pick_offer(requirements)
+    except S402Error as err:
+        print(f"  {err}")
+        return
+
+    print(f"   Amount:   {offer['amount']} MIST")
+    print(f"   Network:  {offer['network']}")
+
+    payment = build_mock_payment(offer)
     payment_header = encode_payment_payload(payment)
 
     print(f"-> GET /joke + x-payment ({payment['scheme']})")

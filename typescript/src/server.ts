@@ -6,13 +6,15 @@
  */
 
 import type {
+  s402PaymentRequired,
   s402PaymentRequirements,
+  s402ResourceInfo,
   s402PaymentPayload,
   s402VerifyResponse,
   s402SettleResponse,
   s402Scheme,
 } from './types.js';
-import { S402_VERSION } from './types.js';
+
 import type { s402ServerScheme, s402RouteConfig } from './scheme.js';
 import type { s402Facilitator } from './facilitator.js';
 import { s402Error } from './errors.js';
@@ -42,56 +44,52 @@ export class s402ResourceServer {
   }
 
   /**
-   * Build payment requirements for a route.
-   * Uses the first scheme in the config's schemes array.
-   * Always includes "exact" in accepts for x402 compat.
+   * Build ONE payment requirement — a single `accepts[]` entry — for a route.
+   *
+   * Uses the first scheme in the config's `schemes` array. To emit a 402 you
+   * want {@link buildPaymentRequired}, which wraps one or more of these in the
+   * x402 V2 envelope the wire actually carries.
    *
    * @param config - Per-route payment configuration (schemes, price, network, payTo, asset)
-   * @returns Payment requirements ready to encode for the 402 response
+   * @param scheme - Override the scheme to build for (defaults to `config.schemes[0]`)
    * @throws {s402Error} `INVALID_PAYLOAD` if price is not a valid non-negative integer string
    *
    * @example
    * ```ts
-   * import { s402ResourceServer, encodePaymentRequired } from 's402';
-   *
-   * const server = new s402ResourceServer();
-   * const requirements = server.buildRequirements({
+   * const requirement = server.buildRequirements({
    *   schemes: ['exact'],
    *   price: '1000000',
    *   network: 'your-chain:mainnet',
    *   payTo: 'YOUR_ADDRESS',
    *   asset: 'NATIVE_TOKEN',
    * });
-   * res.status(402).setHeader('payment-required', encodePaymentRequired(requirements));
    * ```
    */
-  buildRequirements(config: s402RouteConfig): s402PaymentRequirements {
+  buildRequirements(config: s402RouteConfig, scheme?: s402Scheme): s402PaymentRequirements {
     // Validate price early — catch bad config before it reaches the wire
     if (!isValidAmount(config.price)) {
       throw new s402Error('INVALID_PAYLOAD',
         `Invalid price "${config.price}": must be a non-negative integer string`);
     }
 
-    const networkSchemes = this.schemes.get(config.network);
-    const primaryScheme = config.schemes[0] ?? 'exact';
-
-    // Try scheme-specific builder if available
-    const schemeImpl = networkSchemes?.get(primaryScheme);
+    const target = scheme ?? config.schemes[0] ?? 'exact';
+    const schemeImpl = this.schemes.get(config.network)?.get(target);
     if (schemeImpl) {
-      const requirements = schemeImpl.buildRequirements(config);
-      // Enforce protocol invariant: always include 'exact' for x402 compat
-      if (!requirements.accepts.includes('exact')) {
-        requirements.accepts = [...requirements.accepts, 'exact'];
-      }
-      return requirements;
+      // A scheme implementation owns its own extras; it does not get to change
+      // which scheme the entry is for, and it does not get to drop the mandate
+      // the route configured.
+      const built = schemeImpl.buildRequirements(config);
+      return {
+        ...built,
+        scheme: target,
+        mandate: built.mandate
+          ?? (config.mandate ? { required: config.mandate.required, minPerTx: config.mandate.minPerTx } : undefined),
+      };
     }
 
     // Fallback: build generic requirements
-    const accepts: s402Scheme[] = [...new Set([...config.schemes, 'exact' as const])];
-
     return {
-      s402Version: S402_VERSION,
-      accepts,
+      scheme: target,
       network: config.network,
       asset: config.asset,
       amount: config.price,
@@ -107,6 +105,40 @@ export class s402ResourceServer {
       escrow: config.escrow,
       unlock: config.unlock,
     };
+  }
+
+  /**
+   * Build the 402 document for a route: an x402 V2 `PaymentRequired` envelope
+   * with one `accepts[]` entry per offered scheme.
+   *
+   * **`exact` is always offered and always first.** x402's client pays the
+   * first entry it has a handler for, so an `exact` entry anywhere else is an
+   * entry an x402 client walks past. The old flat shape enforced the same
+   * invariant by forcing `'exact'` into `accepts`; this is where it lives now.
+   *
+   * @param config - Per-route payment configuration
+   * @param resource - What is being paid for. Required by x402's V2 envelope.
+   *
+   * @example
+   * ```ts
+   * const required = server.buildPaymentRequired(
+   *   { schemes: ['prepaid'], price: '1000000', network: 'sui:mainnet', payTo: '0x…', asset: '0x2::sui::SUI' },
+   *   { url: 'https://api.example.com/paid' },
+   * );
+   * // required.accepts.map(a => a.scheme) === ['exact', 'prepaid']
+   * ```
+   */
+  buildPaymentRequired(config: s402RouteConfig, resource: s402ResourceInfo): s402PaymentRequired {
+    const schemes: s402Scheme[] = [...new Set<s402Scheme>(['exact', ...config.schemes])];
+    const required: s402PaymentRequired = {
+      x402Version: 2,
+      resource,
+      accepts: schemes.map((scheme) => this.buildRequirements(config, scheme)),
+    };
+    if (config.mandate) {
+      required.mandate = { required: config.mandate.required, minPerTx: config.mandate.minPerTx };
+    }
+    return required;
   }
 
   /**

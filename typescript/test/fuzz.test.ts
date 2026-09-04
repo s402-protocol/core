@@ -18,9 +18,10 @@ import {
   decodePaymentPayload,
   encodeSettleResponse,
   decodeSettleResponse,
+  toRequirementsWire,
   s402Error,
   S402_VERSION,
-  type s402PaymentRequirements,
+  type s402PaymentRequired,
   type s402ExactPayload,
   type s402SettleResponse,
 } from '../src/index.js';
@@ -43,15 +44,25 @@ const suiAddress = () =>
 
 const VALID_PAY_TO = '0x' + 'a'.repeat(64);
 
-const validRequirements = () =>
+/** One `accepts[]` entry — an offer of a single scheme. */
+const validOffer = () =>
   fc.record({
-    s402Version: fc.constant(S402_VERSION as string),
-    accepts: fc.constantFrom(['exact'], ['exact', 'upto'], ['exact', 'stream'], ['exact', 'escrow'], ['exact', 'unlock', 'prepaid']),
+    scheme: fc.constantFrom('exact', 'upto', 'stream', 'escrow', 'unlock', 'prepaid'),
     network: fc.constantFrom('sui:testnet', 'sui:mainnet', 'sui:devnet'),
     asset: fc.constantFrom('0x2::sui::SUI', '0xdba::usdc::USDC'),
     amount: fc.nat({ max: 1_000_000_000_000 }).map(n => String(n)),
     payTo: suiAddress(),
-  }) as fc.Arbitrary<s402PaymentRequirements>;
+  });
+
+/** The 402 DOCUMENT — an x402 V2 `PaymentRequired` envelope (wire v2). */
+const validRequirements = () =>
+  fc.record({
+    x402Version: fc.constant(2 as const),
+    resource: fc.record({
+      url: fc.constantFrom('https://api.example.com/paid', 'https://x.test/resource'),
+    }),
+    accepts: fc.array(validOffer(), { minLength: 1, maxLength: 3 }),
+  }) as fc.Arbitrary<s402PaymentRequired>;
 
 const validExactPayload = () =>
   fc.record({
@@ -73,17 +84,35 @@ const validSettleResponse = () =>
 // 1. Roundtrip: encode → decode = identity
 // ══════════════════════════════════════════════════════════════
 
+/**
+ * The order the encoder puts offers on the wire: every `exact` first, the rest
+ * in their original relative order. A round trip preserves every FIELD; it does
+ * not promise to preserve the ORDER, because x402's client pays the first entry
+ * it can handle and `exact` has to be that entry (ADR-016 rule 2).
+ */
+function expectedOrder<T extends { scheme: string }>(accepts: readonly T[]): T[] {
+  const exact = accepts.filter((o) => o.scheme === 'exact');
+  return exact.length === 0 || exact.length === accepts.length
+    ? [...accepts]
+    : [...exact, ...accepts.filter((o) => o.scheme !== 'exact')];
+}
+
 describe('fuzz: encode → decode roundtrip', () => {
   it('requirements survive roundtrip', () => {
     fc.assert(
       fc.property(validRequirements(), (reqs) => {
         const encoded = encodePaymentRequired(reqs);
         const decoded = decodePaymentRequired(encoded);
-        expect(decoded.s402Version).toBe(reqs.s402Version);
-        expect(decoded.accepts).toEqual(reqs.accepts);
-        expect(decoded.network).toBe(reqs.network);
-        expect(decoded.amount).toBe(reqs.amount);
-        expect(decoded.payTo).toBe(reqs.payTo);
+        expect(decoded.x402Version).toBe(2);
+        expect(decoded.resource.url).toBe(reqs.resource.url);
+        expect(decoded.accepts).toHaveLength(reqs.accepts.length);
+        expectedOrder(reqs.accepts).forEach((offer, i) => {
+          expect(decoded.accepts[i].scheme).toBe(offer.scheme);
+          expect(decoded.accepts[i].network).toBe(offer.network);
+          expect(decoded.accepts[i].asset).toBe(offer.asset);
+          expect(decoded.accepts[i].amount).toBe(offer.amount);
+          expect(decoded.accepts[i].payTo).toBe(offer.payTo);
+        });
       }),
       { numRuns: 200 },
     );
@@ -118,16 +147,23 @@ describe('fuzz: encode → decode roundtrip', () => {
 // ══════════════════════════════════════════════════════════════
 
 describe('fuzz: normalizeRequirements', () => {
+  // Envelope-level keys pickRequirementsFields is allowed to emit.
+  const KNOWN_ENVELOPE = new Set(['x402Version', 'resource', 'accepts', 'error', 'extensions', 'mandate']);
+
   it('valid s402 input → valid s402 output (all required fields present)', () => {
     fc.assert(
       fc.property(validRequirements(), (reqs) => {
-        const result = normalizeRequirements(reqs as unknown as Record<string, unknown>);
-        expect(result.s402Version).toBe('1');
+        const result = normalizeRequirements(toRequirementsWire(reqs));
+        expect(result.x402Version).toBe(2);
+        expect(typeof result.resource.url).toBe('string');
         expect(result.accepts.length).toBeGreaterThan(0);
-        expect(typeof result.network).toBe('string');
-        expect(typeof result.asset).toBe('string');
-        expect(typeof result.amount).toBe('string');
-        expect(typeof result.payTo).toBe('string');
+        for (const entry of result.accepts) {
+          expect(typeof entry.scheme).toBe('string');
+          expect(typeof entry.network).toBe('string');
+          expect(typeof entry.asset).toBe('string');
+          expect(typeof entry.amount).toBe('string');
+          expect(typeof entry.payTo).toBe('string');
+        }
       }),
       { numRuns: 200 },
     );
@@ -137,21 +173,16 @@ describe('fuzz: normalizeRequirements', () => {
     fc.assert(
       fc.property(
         validRequirements(),
-        fc.dictionary(fc.string({ minLength: 1, maxLength: 20 }), fc.anything()),
+        fc.dictionary(
+          fc.string({ minLength: 1, maxLength: 20 }).filter(k => !KNOWN_ENVELOPE.has(k) && k !== 's402Version'),
+          fc.anything(),
+        ),
         (reqs, junk) => {
-          const polluted = { ...junk, ...reqs } as Record<string, unknown>;
+          const polluted = { ...junk, ...toRequirementsWire(reqs) } as Record<string, unknown>;
           const result = normalizeRequirements(polluted);
 
-          // Known s402 keys
-          const KNOWN = new Set([
-            's402Version', 'accepts', 'network', 'asset', 'amount', 'payTo',
-            'facilitatorUrl', 'mandate', 'protocolFeeBps', 'protocolFeeAddress',
-            'receiptRequired', 'settlementMode', 'expiresAt',
-            'upto', 'settlementOverrides', 'prepaid', 'stream', 'escrow', 'unlock', 'extensions',
-          ]);
-
           for (const key of Object.keys(result)) {
-            expect(KNOWN.has(key)).toBe(true);
+            expect(KNOWN_ENVELOPE.has(key)).toBe(true);
           }
         },
       ),
@@ -164,12 +195,15 @@ describe('fuzz: normalizeRequirements', () => {
       fc.property(fc.dictionary(fc.string(), fc.anything()), (obj) => {
         try {
           const result = normalizeRequirements(obj);
-          // If it didn't throw, it must have all required fields
-          expect(result.s402Version).toBe('1');
+          // If it didn't throw, it must be a well-formed envelope
+          expect(result.x402Version).toBe(2);
+          expect(typeof result.resource.url).toBe('string');
           expect(result.accepts.length).toBeGreaterThan(0);
-          expect(typeof result.network).toBe('string');
-          expect(typeof result.amount).toBe('string');
-          expect(typeof result.payTo).toBe('string');
+          for (const entry of result.accepts) {
+            expect(typeof entry.network).toBe('string');
+            expect(typeof entry.amount).toBe('string');
+            expect(typeof entry.payTo).toBe('string');
+          }
         } catch (e) {
           expect(e).toBeInstanceOf(s402Error);
         }
@@ -280,9 +314,10 @@ describe('fuzz: prototype pollution', () => {
     const result = normalizeRequirements(poisoned);
     // The result should not grant isAdmin on the prototype
     expect(({} as any).isAdmin).toBeUndefined();
-    // extensions passes through (it's a known key), but __proto__ inside extensions
-    // is a JSON value, not a prototype assignment (JSON.parse is safe for this)
-    expect(result.extensions).toBeDefined();
+    // extensions passes through (it's a known key, now per-entry), but __proto__
+    // inside extensions is a JSON value, not a prototype assignment
+    // (JSON.parse is safe for this)
+    expect(result.accepts[0].extensions).toBeDefined();
   });
 
   it('fromX402Requirements does not inherit poison from x402 input', () => {
@@ -306,6 +341,7 @@ describe('fuzz: prototype pollution', () => {
   it('fromX402Envelope does not inherit poison from envelope', () => {
     const envelope = {
       x402Version: 2,
+      resource: { url: 'https://api.example.com/paid' },
       accepts: [{
         scheme: 'exact',
         network: 'sui:testnet',
@@ -319,6 +355,9 @@ describe('fuzz: prototype pollution', () => {
 
     const result = fromX402Envelope(envelope as any);
     expect((result as any).__proto__hack).toBeUndefined();
+    // Wire v2: an unknown key on an accepts[] entry is stripped too — only the
+    // entry's `extra` bag keeps what s402 does not name.
+    expect((result.accepts[0] as any).__proto__hack).toBeUndefined();
     expect(({} as any).isAdmin).toBeUndefined();
   });
 });
@@ -363,8 +402,8 @@ describe('fuzz: detection function consistency', () => {
 
 describe('fuzz: x402 V2 envelope edge cases', () => {
   it('empty accepts array in envelope throws', () => {
-    const envelope = { x402Version: 2, accepts: [] };
-    expect(() => fromX402Envelope(envelope as any)).toThrow('empty accepts');
+    const envelope = { x402Version: 2, resource: { url: 'https://api.example.com/paid' }, accepts: [] };
+    expect(() => fromX402Envelope(envelope as any)).toThrow('accepts array must contain at least one requirement');
   });
 
   it('envelope with missing inner fields throws s402Error', () => {
@@ -384,18 +423,24 @@ describe('fuzz: x402 V2 envelope edge cases', () => {
     );
   });
 
-  it('envelope with multiple accepts picks first and validates', () => {
+  it('envelope with multiple accepts keeps every offer, in order', () => {
+    // Wire v2 no longer collapses the menu to its first dish: `accepts[]` IS
+    // the document, and the client picks the first entry it can pay.
     const envelope = {
       x402Version: 2,
+      resource: { url: 'https://api.example.com/paid' },
       accepts: [
         { scheme: 'exact', network: 'sui:testnet', asset: '0x2::sui::SUI', amount: '500', payTo: '0x1' },
-        { scheme: 'exact', network: 'sui:mainnet', asset: '0x2::sui::SUI', amount: '999', payTo: '0x2' },
+        { scheme: 'prepaid', network: 'sui:mainnet', asset: '0x2::sui::SUI', amount: '999', payTo: '0x2' },
       ],
     };
     const result = fromX402Envelope(envelope as any);
-    // Should pick the first one
-    expect(result.amount).toBe('500');
-    expect(result.network).toBe('sui:testnet');
+    expect(result.accepts).toHaveLength(2);
+    expect(result.accepts[0].scheme).toBe('exact');
+    expect(result.accepts[0].amount).toBe('500');
+    expect(result.accepts[0].network).toBe('sui:testnet');
+    expect(result.accepts[1].scheme).toBe('prepaid');
+    expect(result.accepts[1].amount).toBe('999');
   });
 });
 

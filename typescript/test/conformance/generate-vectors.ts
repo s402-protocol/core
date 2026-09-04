@@ -37,7 +37,9 @@ import {
 } from '../../src/receipts.js';
 
 import type {
+  s402PaymentRequired,
   s402PaymentRequirements,
+  s402ResourceInfo,
   s402PaymentPayload,
   s402SettleResponse,
 } from '../../src/types.js';
@@ -70,18 +72,41 @@ function toBase64(str: string): string {
 
 // ── Requirements fixtures ────────────────────────
 
-const MINIMAL_EXACT: s402PaymentRequirements = {
-  s402Version: '1',
-  accepts: ['exact'],
+/** Fixed clock for every vector whose expected value would otherwise move. */
+const COMPAT_REFERENCE_NOW = 1700000000000; // 2023-11-14T22:13:20Z
+
+const RESOURCE: s402ResourceInfo = {
+  url: 'https://api.example.com/paid',
+  description: 'Paid content',
+  mimeType: 'application/json',
+};
+
+/** Wrap one or more offers in the 402 envelope every s402 402 actually is. */
+function envelope(
+  accepts: s402PaymentRequirements | s402PaymentRequirements[],
+  extra?: Partial<Omit<s402PaymentRequired, 'x402Version' | 'accepts'>>,
+): s402PaymentRequired {
+  return {
+    x402Version: 2,
+    resource: extra?.resource ?? RESOURCE,
+    ...(extra?.error !== undefined ? { error: extra.error } : {}),
+    accepts: Array.isArray(accepts) ? accepts : [accepts],
+    ...(extra?.extensions !== undefined ? { extensions: extra.extensions } : {}),
+    ...(extra?.mandate !== undefined ? { mandate: extra.mandate } : {}),
+  };
+}
+
+const EXACT_OFFER: s402PaymentRequirements = {
+  scheme: 'exact',
   network: 'sui:mainnet',
   asset: '0x2::sui::SUI',
   amount: '1000000',
   payTo: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
 };
 
-const WITH_STREAM: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['stream'],
+const STREAM_OFFER: s402PaymentRequirements = {
+  ...EXACT_OFFER,
+  scheme: 'stream',
   stream: {
     ratePerSecond: '1000',
     budgetCap: '100000000',
@@ -89,18 +114,18 @@ const WITH_STREAM: s402PaymentRequirements = {
   },
 };
 
-const WITH_ESCROW: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['escrow'],
+const ESCROW_OFFER: s402PaymentRequirements = {
+  ...EXACT_OFFER,
+  scheme: 'escrow',
   escrow: {
     seller: '0xseller1234567890',
     deadlineMs: '1700000000000',
   },
 };
 
-const WITH_UNLOCK: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['unlock'],
+const UNLOCK_OFFER: s402PaymentRequirements = {
+  ...EXACT_OFFER,
+  scheme: 'unlock',
   unlock: {
     packageId: '0xpkg1234567890',
     keyServers: [
@@ -112,9 +137,9 @@ const WITH_UNLOCK: s402PaymentRequirements = {
   },
 };
 
-const WITH_PREPAID_V02: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['prepaid'],
+const PREPAID_V02_OFFER: s402PaymentRequirements = {
+  ...EXACT_OFFER,
+  scheme: 'prepaid',
   prepaid: {
     ratePerCall: '5000',
     minDeposit: '500000',
@@ -124,9 +149,9 @@ const WITH_PREPAID_V02: s402PaymentRequirements = {
   },
 };
 
-const WITH_PREPAID_V01: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['prepaid'],
+const PREPAID_V01_OFFER: s402PaymentRequirements = {
+  ...EXACT_OFFER,
+  scheme: 'prepaid',
   prepaid: {
     ratePerCall: '5000',
     minDeposit: '500000',
@@ -134,9 +159,9 @@ const WITH_PREPAID_V01: s402PaymentRequirements = {
   },
 };
 
-const WITH_UPTO: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['upto'],
+const UPTO_OFFER: s402PaymentRequirements = {
+  ...EXACT_OFFER,
+  scheme: 'upto',
   upto: {
     maxAmount: '10000000',
     settlementDeadlineMs: '1700000000000',
@@ -145,82 +170,112 @@ const WITH_UPTO: s402PaymentRequirements = {
   },
 };
 
-const WITH_UPTO_MINIMAL: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['upto'],
+const UPTO_MINIMAL_OFFER: s402PaymentRequirements = {
+  ...EXACT_OFFER,
+  scheme: 'upto',
   upto: {
     maxAmount: '5000000',
     settlementDeadlineMs: '1700000000000',
   },
 };
 
-const WITH_MANDATE: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  mandate: {
-    required: true,
-    minPerTx: '100000',
-  },
-};
+const MINIMAL_EXACT: s402PaymentRequired = envelope(EXACT_OFFER, { resource: { url: 'https://api.example.com/paid' } });
+const WITH_STREAM = envelope(STREAM_OFFER);
+const WITH_ESCROW = envelope(ESCROW_OFFER);
+const WITH_UNLOCK = envelope(UNLOCK_OFFER);
+const WITH_PREPAID_V02 = envelope(PREPAID_V02_OFFER);
+const WITH_PREPAID_V01 = envelope(PREPAID_V01_OFFER);
+const WITH_UPTO = envelope(UPTO_OFFER);
+const WITH_UPTO_MINIMAL = envelope(UPTO_MINIMAL_OFFER);
 
-const WITH_FEES: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
+const WITH_MANDATE = envelope(EXACT_OFFER, {
+  mandate: { required: true, minPerTx: '100000' },
+});
+
+const WITH_FEES = envelope({
+  ...EXACT_OFFER,
   protocolFeeBps: 250,
   protocolFeeAddress: '0xfee_collector_address_1234567890',
-};
+});
 
-const WITH_FACILITATOR: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
+const WITH_FACILITATOR = envelope({
+  ...EXACT_OFFER,
   facilitatorUrl: 'https://facilitator.example.com/settle',
-};
+});
 
-const WITH_EXPIRES: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  expiresAt: 1700000000000,
-};
+const WITH_EXPIRES = envelope({ ...EXACT_OFFER, expiresAt: 1700000000000 });
 
-const WITH_EXTENSIONS: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
+const WITH_EXTENSIONS = envelope({
+  ...EXACT_OFFER,
   extensions: {
     auction: { type: 'sealed-bid', deadline: 1708000000000 },
     customField: 'hello world',
   },
-};
+});
 
-const WITH_DIRECT_SETTLEMENT: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  settlementMode: 'direct',
-};
+const WITH_ENVELOPE_EXTENSIONS = envelope(EXACT_OFFER, {
+  extensions: { 'org.example.discovery': { catalog: 'https://api.example.com/.well-known/s402' } },
+});
 
-const WITH_FACILITATOR_SETTLEMENT: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
+const WITH_DIRECT_SETTLEMENT = envelope({ ...EXACT_OFFER, settlementMode: 'direct' });
+
+const WITH_FACILITATOR_SETTLEMENT = envelope({
+  ...EXACT_OFFER,
   settlementMode: 'facilitator',
   facilitatorUrl: 'https://facilitator.example.com/settle',
-};
+});
 
-const WITH_RECEIPT_REQUIRED: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  receiptRequired: true,
-};
+const WITH_RECEIPT_REQUIRED = envelope({ ...EXACT_OFFER, receiptRequired: true });
 
-const WITH_MULTIPLE_SCHEMES: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  accepts: ['exact', 'prepaid', 'stream'],
-};
+/**
+ * Several schemes on one 402 — one `accepts[]` entry each, `exact` first
+ * because an x402 client pays the first entry it can handle.
+ */
+const WITH_MULTIPLE_SCHEMES = envelope([EXACT_OFFER, PREPAID_V01_OFFER, STREAM_OFFER]);
 
-const WITH_U64_MAX: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  amount: '18446744073709551615',
-};
+/** Two networks on one 402 — the offer the flat v1 shape could not express. */
+const WITH_TWO_NETWORKS = envelope([
+  EXACT_OFFER,
+  { ...EXACT_OFFER, network: 'eip155:8453', asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', amount: '10000' },
+]);
 
-const WITH_ZERO_AMOUNT: s402PaymentRequirements = {
-  ...MINIMAL_EXACT,
-  amount: '0',
+/** An x402 requirement's own `extra` keys survive the round trip untouched. */
+const WITH_FOREIGN_EXTRA = envelope({
+  ...EXACT_OFFER,
+  extra: { paymentFlow: 'upfront', name: 'USD Coin', version: '2' },
+});
+
+/** A per-entry `maxTimeoutSeconds` other than the default. */
+const WITH_TIMEOUT = envelope({ ...EXACT_OFFER, maxTimeoutSeconds: 300 });
+
+const WITH_U64_MAX = envelope({ ...EXACT_OFFER, amount: '18446744073709551615' });
+
+const WITH_ZERO_AMOUNT = envelope({ ...EXACT_OFFER, amount: '0' });
+
+/**
+ * A PLAIN x402 V2 402 — no `extensions.s402` anywhere. This is what a server
+ * that has never heard of s402 emits, and s402 must decode it into something
+ * payable. It is written as raw wire JSON, not built by the encoder, because
+ * the point is that nothing of ours produced it.
+ */
+const PLAIN_X402_V2 = {
+  x402Version: 2,
+  resource: { url: 'https://x402.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'eip155:8453',
+    asset: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+    amount: '10000',
+    payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
+    maxTimeoutSeconds: 300,
+    extra: { name: 'USD Coin', version: '2' },
+  }],
 };
 
 // ── Generate requirements-encode.json ────────────
 
 function generateRequirementsEncode(): TestVector[] {
-  const fixtures: Array<[string, s402PaymentRequirements]> = [
+  const fixtures: Array<[string, s402PaymentRequired]> = [
     ['Minimal exact requirements', MINIMAL_EXACT],
     ['Stream scheme with extras', WITH_STREAM],
     ['Upto scheme with estimatedAmount', WITH_UPTO],
@@ -229,15 +284,19 @@ function generateRequirementsEncode(): TestVector[] {
     ['Unlock scheme with extras', WITH_UNLOCK],
     ['Prepaid v0.2 (providerPubkey + disputeWindowMs)', WITH_PREPAID_V02],
     ['Prepaid v0.1 (no providerPubkey/disputeWindowMs)', WITH_PREPAID_V01],
-    ['With mandate (required: true, minPerTx set)', WITH_MANDATE],
+    ['With mandate (envelope-level, extensions.s402.mandate)', WITH_MANDATE],
     ['With protocolFeeBps and protocolFeeAddress', WITH_FEES],
     ['With facilitatorUrl', WITH_FACILITATOR],
     ['With expiresAt', WITH_EXPIRES],
-    ['With extensions (unknown fields preserved)', WITH_EXTENSIONS],
+    ['With per-requirement extensions (extra.extensions)', WITH_EXTENSIONS],
+    ['With envelope-level extensions alongside extensions.s402', WITH_ENVELOPE_EXTENSIONS],
     ['With settlementMode: direct', WITH_DIRECT_SETTLEMENT],
     ['With settlementMode: facilitator', WITH_FACILITATOR_SETTLEMENT],
     ['With receiptRequired: true', WITH_RECEIPT_REQUIRED],
-    ['Multiple schemes in accepts array', WITH_MULTIPLE_SCHEMES],
+    ['Multiple schemes — one accepts[] entry each, exact first', WITH_MULTIPLE_SCHEMES],
+    ['Two networks on one 402', WITH_TWO_NETWORKS],
+    ["Foreign x402 extra keys pass through this entry's extra", WITH_FOREIGN_EXTRA],
+    ['Explicit maxTimeoutSeconds', WITH_TIMEOUT],
     ['Amount at u64 boundary (2^64-1)', WITH_U64_MAX],
     ['Amount of zero', WITH_ZERO_AMOUNT],
   ];
@@ -253,7 +312,7 @@ function generateRequirementsEncode(): TestVector[] {
 // ── Generate requirements-decode.json ────────────
 
 function generateRequirementsDecode(): TestVector[] {
-  const fixtures: Array<[string, s402PaymentRequirements]> = [
+  const fixtures: Array<[string, s402PaymentRequired]> = [
     ['Decode minimal exact requirements', MINIMAL_EXACT],
     ['Decode stream scheme', WITH_STREAM],
     ['Decode upto scheme with estimatedAmount', WITH_UPTO],
@@ -266,16 +325,20 @@ function generateRequirementsDecode(): TestVector[] {
     ['Decode with fees', WITH_FEES],
     ['Decode with facilitatorUrl', WITH_FACILITATOR],
     ['Decode with expiresAt', WITH_EXPIRES],
-    ['Decode with extensions', WITH_EXTENSIONS],
+    ['Decode with per-requirement extensions', WITH_EXTENSIONS],
+    ['Decode with envelope-level extensions', WITH_ENVELOPE_EXTENSIONS],
     ['Decode with direct settlement', WITH_DIRECT_SETTLEMENT],
     ['Decode with facilitator settlement', WITH_FACILITATOR_SETTLEMENT],
     ['Decode with receipt required', WITH_RECEIPT_REQUIRED],
     ['Decode with multiple schemes', WITH_MULTIPLE_SCHEMES],
+    ['Decode two networks', WITH_TWO_NETWORKS],
+    ['Decode foreign x402 extra keys', WITH_FOREIGN_EXTRA],
+    ['Decode explicit maxTimeoutSeconds', WITH_TIMEOUT],
     ['Decode u64 max amount', WITH_U64_MAX],
     ['Decode zero amount', WITH_ZERO_AMOUNT],
   ];
 
-  const results = fixtures.map(([description, input]) => {
+  const results: TestVector[] = fixtures.map(([description, input]) => {
     const header = encodePaymentRequired(input);
     const decoded = decodePaymentRequired(header);
     return {
@@ -286,30 +349,72 @@ function generateRequirementsDecode(): TestVector[] {
     };
   });
 
-  // Key-stripping vector: unknown top-level keys MUST be stripped on decode
+  // THE interop vector: a plain x402 V2 402, carrying no s402 extensions at
+  // all, decodes into requirements an s402 client can pay.
+  //
+  // ⚠️ These carry `now`. A document with no `extensions.s402` gets `expiresAt`
+  // DERIVED from `maxTimeoutSeconds` on decode (S1 stale-payment rejection has
+  // nothing to read otherwise), and a derivation off the wall clock is not a
+  // reproducible vector. Runners must pass `input.now` when it is present.
+  const plainHeader = toBase64(JSON.stringify(PLAIN_X402_V2));
+  results.push({
+    description: 'Decode a plain x402 V2 402 (no extensions.s402) — it is payable as-is',
+    input: { header: plainHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(plainHeader, COMPAT_REFERENCE_NOW),
+    shouldReject: false,
+  });
+
+  // A scheme this build cannot pay is SKIPPED by the client, never rejected by
+  // the decoder — `accepts[]` is a menu (Postel's Law).
+  const foreignScheme = {
+    ...PLAIN_X402_V2,
+    accepts: [
+      { ...PLAIN_X402_V2.accepts[0], scheme: 'auth-capture' },
+      PLAIN_X402_V2.accepts[0],
+    ],
+  };
+  const foreignHeader = toBase64(JSON.stringify(foreignScheme));
+  results.push({
+    description: 'Decode an x402 402 offering a scheme s402 does not implement',
+    input: { header: foreignHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(foreignHeader, COMPAT_REFERENCE_NOW),
+    shouldReject: false,
+  });
+
+  // Key-stripping vector: unknown envelope keys MUST be stripped on decode
   const withUnknownKeys = {
-    ...MINIMAL_EXACT,
+    ...(JSON.parse(JSON.stringify(PLAIN_X402_V2))),
     injectedEvil: 'should be stripped',
     _internal: 'harmless but unknown',
     x_custom_header: 42,
   };
   const unknownHeader = toBase64(JSON.stringify(withUnknownKeys));
   results.push({
-    description: 'Decode strips unknown top-level keys',
-    input: { header: unknownHeader },
-    expected: decodePaymentRequired(unknownHeader),
+    description: 'Decode strips unknown top-level envelope keys',
+    input: { header: unknownHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(unknownHeader, COMPAT_REFERENCE_NOW),
+    shouldReject: false,
+  });
+
+  // Key-stripping vector: unknown keys inside an accepts[] entry MUST be
+  // stripped — but unknown keys inside its `extra` MUST NOT be, because that
+  // bag is x402's and open by spec.
+  const withUnknownEntryKeys = {
+    ...(JSON.parse(JSON.stringify(PLAIN_X402_V2))),
+    accepts: [{ ...PLAIN_X402_V2.accepts[0], injectedEntryField: 'stripped' }],
+  };
+  const unknownEntryHeader = toBase64(JSON.stringify(withUnknownEntryKeys));
+  results.push({
+    description: 'Decode strips unknown accepts[] entry keys but keeps unknown extra keys',
+    input: { header: unknownEntryHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(unknownEntryHeader, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
   // Key-stripping vector: unknown sub-object keys MUST be stripped on decode
-  const withUnknownSubKeys = {
-    ...WITH_STREAM,
-    stream: {
-      ...WITH_STREAM.stream,
-      injectedField: 'should be stripped from sub-object',
-    },
-  };
-  const unknownSubHeader = toBase64(JSON.stringify(withUnknownSubKeys));
+  const streamWire = JSON.parse(JSON.stringify(JSON.parse(atob(encodePaymentRequired(WITH_STREAM)))));
+  streamWire.accepts[0].extra.stream.injectedField = 'should be stripped from sub-object';
+  const unknownSubHeader = toBase64(JSON.stringify(streamWire));
   results.push({
     description: 'Decode strips unknown keys from sub-objects (stream)',
     input: { header: unknownSubHeader },
@@ -472,6 +577,16 @@ function generatePayloadDecode(): TestVector[] {
         transaction: 'A'.repeat(1000),
         signature: 'B'.repeat(500),
       },
+    }],
+    // Since wire v2 a 402 may offer the same scheme on several networks, so the
+    // scheme name alone cannot say which offer a payment answers. `network` is
+    // the disambiguator, and a decoder that strips it hands the gate an
+    // ambiguous payment it must refuse (spec §5.1, §10.2).
+    ['Decode exact payload carrying the network disambiguator', {
+      s402Version: '1',
+      scheme: 'exact',
+      network: 'sui:mainnet',
+      payload: { transaction: 'dHhfYnl0ZXM=', signature: 'c2lnX2J5dGVz' },
     }],
   ];
 
@@ -720,8 +835,6 @@ function generateBodyTransport(): TestVector[] {
 
 // Fixed reference timestamp for deterministic vector generation.
 // Tests MUST use this same value when calling normalizeRequirements().
-const COMPAT_REFERENCE_NOW = 1700000000000; // 2023-11-14T22:13:20Z
-
 function generateCompatNormalize(): TestVector[] {
   const vectors: TestVector[] = [];
 
@@ -745,6 +858,7 @@ function generateCompatNormalize(): TestVector[] {
   // x402 V2 envelope (single offer)
   const x402V2Single = {
     x402Version: 2,
+    resource: { url: 'https://api.example.com/paid' },
     accepts: [{
       scheme: 'exact',
       network: 'sui:mainnet',
@@ -760,9 +874,10 @@ function generateCompatNormalize(): TestVector[] {
     shouldReject: false,
   });
 
-  // x402 V2 envelope (multiple offers — first taken)
+  // x402 V2 envelope (multiple offers — ALL kept; wire v2 has room for them)
   const x402V2Multi = {
     x402Version: 2,
+    resource: { url: 'https://api.example.com/paid' },
     accepts: [
       {
         scheme: 'exact',
@@ -873,6 +988,9 @@ function generateCompatNormalize(): TestVector[] {
       amount: '3000000',
       payTo: '0xrecipientRes',
     }],
+    // NOTE: this object used to declare `resource` twice — the later one won
+    // silently, so the vector always described /data. The dead first copy is
+    // removed; the generated vector is unchanged.
     resource: { url: 'https://api.example.com/data', mimeType: 'application/json' },
   };
   vectors.push({
@@ -899,9 +1017,70 @@ function generateCompatNormalize(): TestVector[] {
     shouldReject: false,
   });
 
+  // ── s402 v1 (the retired flat shape) ──────────────────────────────────────
+  //
+  // These are the intake obligation of ADR-013 applied to our OWN past: a
+  // pre-wire-v2 s402 server's 402, read by a wire-v2 client. Nothing emits
+  // these; everything must still understand them.
+
+  const s402V1Minimal = {
+    s402Version: '1',
+    accepts: ['exact'],
+    network: 'sui:mainnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+  };
+  vectors.push({
+    description: 's402-v1: minimal flat requirements → one accepts[] entry',
+    input: s402V1Minimal,
+    expected: normalizeRequirements(s402V1Minimal as Record<string, unknown>, COMPAT_REFERENCE_NOW),
+    shouldReject: false,
+  });
+
+  const s402V1MultiScheme = {
+    ...s402V1Minimal,
+    accepts: ['prepaid', 'exact', 'stream'],
+  };
+  vectors.push({
+    description: 's402-v1: accepts of scheme names expands to one entry each, exact first',
+    input: s402V1MultiScheme,
+    expected: normalizeRequirements(s402V1MultiScheme as Record<string, unknown>, COMPAT_REFERENCE_NOW),
+    shouldReject: false,
+  });
+
+  const s402V1Full = {
+    ...s402V1Minimal,
+    accepts: ['upto'],
+    facilitatorUrl: 'https://facilitator.example.com/settle',
+    expiresAt: 1700000000000,
+    protocolFeeBps: 250,
+    protocolFeeAddress: '0xfee_collector',
+    receiptRequired: true,
+    settlementMode: 'facilitator',
+    upto: { maxAmount: '10000000', settlementDeadlineMs: '1700000000000' },
+    extensions: { custom: 'data' },
+  };
+  vectors.push({
+    description: 's402-v1: per-requirement fields land in the entry extra',
+    input: s402V1Full,
+    expected: normalizeRequirements(s402V1Full as Record<string, unknown>, COMPAT_REFERENCE_NOW),
+    shouldReject: false,
+  });
+
+  const s402V1Mandate = {
+    ...s402V1Minimal,
+    mandate: { required: true, minPerTx: '100000' },
+  };
+  vectors.push({
+    description: 's402-v1: mandate is hoisted to the envelope (extensions.s402.mandate)',
+    input: s402V1Mandate,
+    expected: normalizeRequirements(s402V1Mandate as Record<string, unknown>, COMPAT_REFERENCE_NOW),
+    shouldReject: false,
+  });
+
   return vectors;
 }
-
 // ── Generate receipt-format.json ─────────────────
 
 function generateReceiptFormat(): TestVector[] {
@@ -1105,14 +1284,64 @@ function generateReceiptParse(): TestVector[] {
 
 // ── Generate validation-reject.json ──────────────
 
+/**
+ * Build a raw wire 402 header from flat fields, for rejection vectors.
+ *
+ * Routing mirrors the codec: the six x402 keys stay on the `accepts[]` entry,
+ * `mandate` goes to `extensions.s402`, and everything else drops into the
+ * entry's `extra` — which is where every one of those fields now travels.
+ */
+function wireReject(flat: Record<string, unknown>): string {
+  const entry: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = {};
+  const ext: Record<string, unknown> = { version: '2' };
+  for (const [key, value] of Object.entries(flat)) {
+    if (['scheme', 'network', 'asset', 'amount', 'payTo', 'maxTimeoutSeconds'].includes(key)) entry[key] = value;
+    else if (key === 'mandate') ext.mandate = value;
+    else extra[key] = value;
+  }
+  entry.extra = extra;
+  return toBase64(JSON.stringify({
+    x402Version: 2,
+    resource: { url: 'https://api.example.com/paid' },
+    accepts: [entry],
+    extensions: { s402: ext },
+  }));
+}
+
 function generateValidationReject(): TestVector[] {
   const vectors: TestVector[] = [];
 
   // Missing s402Version
+    // Missing x402Version — an s402 402 is an x402 V2 envelope or it is nothing
   vectors.push({
-    description: 'Rejects missing s402Version',
+    description: 'Rejects missing x402Version',
     input: { header: toBase64(JSON.stringify({
-      accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc',
+      resource: { url: 'https://api.example.com/paid' },
+      accepts: [{ scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc', extra: {} }],
+    })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // The retired s402 v1 flat shape is not decoded here — reading it is an
+  // intake obligation discharged in compat (fromS402V1Requirements).
+  vectors.push({
+    description: 'Rejects the retired s402 v1 flat shape',
+    input: { header: toBase64(JSON.stringify({
+      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+      amount: '1000', payTo: '0xabc',
+    })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // x402 V1 (flat) is likewise a compat-layer job, not a native decode
+  vectors.push({
+    description: 'Rejects x402 V1 flat requirements on the native decode path',
+    input: { header: toBase64(JSON.stringify({
+      x402Version: 1, scheme: 'exact', network: 'base-sepolia', asset: '0xUSDC',
+      maxAmountRequired: '1000', payTo: '0xabc', resource: 'https://api.example.com/paid',
     })) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
@@ -1121,13 +1350,69 @@ function generateValidationReject(): TestVector[] {
   // Missing accepts
   vectors.push({
     description: 'Rejects missing accepts array',
+    input: { header: toBase64(JSON.stringify({ x402Version: 2, resource: { url: 'https://api.example.com/paid' } })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // Empty accepts array — no offer to match
+  vectors.push({
+    description: 'Rejects empty accepts array',
+    input: { header: toBase64(JSON.stringify({ x402Version: 2, resource: { url: 'https://api.example.com/paid' }, accepts: [] })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // Missing resource — required on every x402 V2 envelope
+  vectors.push({
+    description: 'Rejects missing resource',
+    input: { header: toBase64(JSON.stringify({ x402Version: 2, accepts: [{ scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc', extra: {} }] })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // Unsupported envelope version
+  vectors.push({
+    description: 'Rejects unsupported x402Version 3',
+    input: { header: toBase64(JSON.stringify({ x402Version: 3, resource: { url: 'https://api.example.com/paid' }, accepts: [{ scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc', extra: {} }] })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // Unsupported s402 wire version inside extensions.s402 (ADR-006 negotiation)
+  vectors.push({
+    description: 'Rejects unsupported extensions.s402.version',
     input: { header: toBase64(JSON.stringify({
-      s402Version: '1', network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc',
+      x402Version: 2, resource: { url: 'https://api.example.com/paid' }, accepts: [{ scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc', extra: {} }],
+      extensions: { s402: { version: '3' } },
     })) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
 
+  // An accepts[] entry with no scheme is not an offer
+  vectors.push({
+    description: 'Rejects accepts[] entry with no scheme',
+    input: { header: toBase64(JSON.stringify({
+      x402Version: 2, resource: { url: 'https://api.example.com/paid' },
+      accepts: [{ network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc', extra: {} }],
+    })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // accepts[] holding scheme NAMES rather than requirement objects — the
+  // retired flat shape smuggled into a v2 envelope
+  vectors.push({
+    description: 'Rejects accepts[] of scheme name strings',
+    input: { header: toBase64(JSON.stringify({ x402Version: 2, resource: { url: 'https://api.example.com/paid' }, accepts: ['exact', 'prepaid'] })) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+
+  // Missing accepts
+  
   // Missing network
   vectors.push({
     description: 'Rejects missing network',
@@ -1141,9 +1426,9 @@ function generateValidationReject(): TestVector[] {
   // Missing asset
   vectors.push({
     description: 'Rejects missing asset',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', amount: '1000', payTo: '0xabc',
-    })) },
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', amount: '1000', payTo: '0xabc',
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1151,9 +1436,9 @@ function generateValidationReject(): TestVector[] {
   // Missing amount
   vectors.push({
     description: 'Rejects missing amount',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI', payTo: '0xabc',
-    })) },
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', payTo: '0xabc',
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1161,9 +1446,9 @@ function generateValidationReject(): TestVector[] {
   // Missing payTo
   vectors.push({
     description: 'Rejects missing payTo',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI', amount: '1000',
-    })) },
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', amount: '1000',
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1171,10 +1456,10 @@ function generateValidationReject(): TestVector[] {
   // Negative amount
   vectors.push({
     description: 'Rejects negative amount',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '-100', payTo: '0xabc',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1182,10 +1467,10 @@ function generateValidationReject(): TestVector[] {
   // Non-numeric amount
   vectors.push({
     description: 'Rejects non-numeric amount',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: 'not_a_number', payTo: '0xabc',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1193,10 +1478,10 @@ function generateValidationReject(): TestVector[] {
   // Leading zeros in amount
   vectors.push({
     description: 'Rejects leading zeros in amount (except "0")',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '007', payTo: '0xabc',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1204,10 +1489,10 @@ function generateValidationReject(): TestVector[] {
   // Floating point amount
   vectors.push({
     description: 'Rejects floating point amount',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1.5', payTo: '0xabc',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1215,10 +1500,10 @@ function generateValidationReject(): TestVector[] {
   // payTo with control characters
   vectors.push({
     description: 'Rejects payTo with control characters',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc\x00def',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1226,11 +1511,11 @@ function generateValidationReject(): TestVector[] {
   // protocolFeeAddress with control characters
   vectors.push({
     description: 'Rejects protocolFeeAddress with control characters',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       protocolFeeAddress: '0xfee\n\rinjection',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1238,10 +1523,10 @@ function generateValidationReject(): TestVector[] {
   // Empty payTo
   vectors.push({
     description: 'Rejects empty payTo',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1249,14 +1534,14 @@ function generateValidationReject(): TestVector[] {
   // Prepaid pairing violation (providerPubkey without disputeWindowMs)
   vectors.push({
     description: 'Rejects prepaid providerPubkey without disputeWindowMs',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['prepaid'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'prepaid', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       prepaid: {
         ratePerCall: '100', minDeposit: '10000', withdrawalDelayMs: '3600000',
         providerPubkey: 'abc123',
       },
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1264,14 +1549,14 @@ function generateValidationReject(): TestVector[] {
   // Prepaid pairing violation (disputeWindowMs without providerPubkey)
   vectors.push({
     description: 'Rejects prepaid disputeWindowMs without providerPubkey',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['prepaid'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'prepaid', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       prepaid: {
         ratePerCall: '100', minDeposit: '10000', withdrawalDelayMs: '3600000',
         disputeWindowMs: '86400000',
       },
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1279,54 +1564,27 @@ function generateValidationReject(): TestVector[] {
   // expiresAt that's negative
   vectors.push({
     description: 'Rejects negative expiresAt',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc', expiresAt: -1,
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
 
   // Empty accepts array
-  vectors.push({
-    description: 'Rejects empty accepts array',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: [], network: 'sui:mainnet', asset: 'SUI',
-      amount: '1000', payTo: '0xabc',
-    })) },
-    shouldReject: true,
-    expectedErrorCode: 'INVALID_PAYLOAD',
-  });
-
+  
   // Unsupported s402Version (string "2")
-  vectors.push({
-    description: 'Rejects unsupported s402Version "2"',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '2', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
-      amount: '1000', payTo: '0xabc',
-    })) },
-    shouldReject: true,
-    expectedErrorCode: 'INVALID_PAYLOAD',
-  });
-
+  
   // Unsupported s402Version (numeric, not string)
-  vectors.push({
-    description: 'Rejects numeric s402Version (must be string "1")',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: 1, accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
-      amount: '1000', payTo: '0xabc',
-    })) },
-    shouldReject: true,
-    expectedErrorCode: 'INVALID_PAYLOAD',
-  });
-
+  
   // protocolFeeBps exceeds 10000
   vectors.push({
     description: 'Rejects protocolFeeBps exceeding 10000',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc', protocolFeeBps: 10001,
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1334,10 +1592,10 @@ function generateValidationReject(): TestVector[] {
   // protocolFeeBps negative
   vectors.push({
     description: 'Rejects negative protocolFeeBps',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc', protocolFeeBps: -1,
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1345,10 +1603,10 @@ function generateValidationReject(): TestVector[] {
   // protocolFeeBps non-integer
   vectors.push({
     description: 'Rejects non-integer protocolFeeBps',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc', protocolFeeBps: 50.5,
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1356,14 +1614,14 @@ function generateValidationReject(): TestVector[] {
   // V2: estimatedAmount > maxAmount
   vectors.push({
     description: 'Rejects upto.estimatedAmount exceeding maxAmount',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['upto'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'upto', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       upto: {
         maxAmount: '5000000', settlementDeadlineMs: '1700000000000',
         estimatedAmount: '5000001',
       },
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1405,14 +1663,14 @@ function generateValidationReject(): TestVector[] {
   // V2: non-string estimatedAmount
   vectors.push({
     description: 'Rejects upto.estimatedAmount as number (must be string)',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['upto'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'upto', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       upto: {
         maxAmount: '5000000', settlementDeadlineMs: '1700000000000',
         estimatedAmount: 123,
       },
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1471,11 +1729,11 @@ function generateValidationReject(): TestVector[] {
   // L1: mandate.minPerTx must be valid amount
   vectors.push({
     description: 'Rejects mandate.minPerTx with leading zeros',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       mandate: { required: true, minPerTx: '007' },
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1602,10 +1860,10 @@ function generateValidationReject(): TestVector[] {
   // Control characters in network field
   vectors.push({
     description: 'Rejects network with control characters',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet\x00',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet\x00',
       asset: 'SUI', amount: '1000', payTo: '0xabc',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1613,10 +1871,10 @@ function generateValidationReject(): TestVector[] {
   // Control characters in asset field
   vectors.push({
     description: 'Rejects asset with control characters',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet',
       asset: '0x2::sui\n::SUI', amount: '1000', payTo: '0xabc',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1624,11 +1882,11 @@ function generateValidationReject(): TestVector[] {
   // Control characters in facilitatorUrl (native s402 path)
   vectors.push({
     description: 'Rejects facilitatorUrl with control characters (CRLF injection)',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['exact'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       facilitatorUrl: 'https://example.com/settle\r\nX-Injected: evil',
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1636,13 +1894,13 @@ function generateValidationReject(): TestVector[] {
   // withdrawalDelayMs below minimum (60000ms / 1 min)
   vectors.push({
     description: 'Rejects prepaid withdrawalDelayMs below 60000 (1 min minimum)',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['prepaid'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'prepaid', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       prepaid: {
         ratePerCall: '100', minDeposit: '10000', withdrawalDelayMs: '59999',
       },
-    })) },
+    }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1650,13 +1908,99 @@ function generateValidationReject(): TestVector[] {
   // withdrawalDelayMs above maximum (604800000ms / 7 days)
   vectors.push({
     description: 'Rejects prepaid withdrawalDelayMs above 604800000 (7 day maximum)',
-    input: { header: toBase64(JSON.stringify({
-      s402Version: '1', accepts: ['prepaid'], network: 'sui:mainnet', asset: 'SUI',
+    input: { header: wireReject({
+      scheme: 'prepaid', network: 'sui:mainnet', asset: 'SUI',
       amount: '1000', payTo: '0xabc',
       prepaid: {
         ratePerCall: '100', minDeposit: '10000', withdrawalDelayMs: '604800001',
       },
-    })) },
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  // ── The four places s402's validator was looser than x402 V2's own schema ──
+  //
+  // Reference: `@x402/core` 2.25.0, `typescript/packages/core/src/schemas/
+  // index.ts` — `NetworkSchemaV2` (min 3, must contain ":"), `ResourceInfoSchema`
+  // (url non-empty; serviceName 1-32 printable ASCII; tags max 5, each 1-32
+  // printable ASCII; iconUrl max 2048), `PaymentRequirementsV2Schema`
+  // (maxTimeoutSeconds positive). A 402 that fails any of these is one the
+  // pinned upstream decoder refuses, so s402 must not accept it either — in
+  // either direction.
+
+  vectors.push({
+    description: 'Rejects a network that is not CAIP-2 (x402 V2 requires ":" and 3+ characters)',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'base-sepolia', asset: 'SUI', amount: '1000', payTo: '0xabc',
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects a network shorter than 3 characters',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'a:', asset: 'SUI', amount: '1000', payTo: '0xabc',
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects maxTimeoutSeconds of 0 (x402 V2 requires a positive timeout)',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc',
+      maxTimeoutSeconds: 0,
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects an empty asset',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: '', amount: '1000', payTo: '0xabc',
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  /** A wire 402 whose ResourceInfo is the thing under test. */
+  const resourceReject = (resource: Record<string, unknown>): string => toBase64(JSON.stringify({
+    x402Version: 2,
+    resource,
+    accepts: [{
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
+      amount: '1000', payTo: '0xabc', maxTimeoutSeconds: 60, extra: {},
+    }],
+    extensions: { s402: { version: '2' } },
+  }));
+
+  vectors.push({
+    description: 'Rejects a resource.serviceName longer than 32 characters',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', serviceName: 'x'.repeat(33) }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects a resource.serviceName containing non-printable-ASCII characters',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', serviceName: 'Caf\u00e9 Paiement' }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects more than 5 resource.tags',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', tags: ['a', 'b', 'c', 'd', 'e', 'f'] }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects a resource.iconUrl longer than 2048 characters',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', iconUrl: 'https://x/' + 'y'.repeat(2100) }) },
     shouldReject: true,
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
@@ -1837,7 +2181,10 @@ function generateRoundtrip(): TestVector[] {
 function generateTransportCarriers(): TestVector[] {
   const vectors: TestVector[] = [];
 
-  const reqs = MINIMAL_EXACT;
+  // The round-tripped document, not the authored one: the codec fills in
+  // `maxTimeoutSeconds` and `extra` on the way out, so this is the value a
+  // decoder actually hands back — and what "round-trips exactly" has to mean.
+  const reqs = decodePaymentRequired(encodePaymentRequired(MINIMAL_EXACT));
   const payload: s402PaymentPayload = {
     s402Version: '1',
     scheme: 'exact',

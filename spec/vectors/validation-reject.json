@@ -1,8 +1,24 @@
 [
   {
-    "description": "Rejects missing s402Version",
+    "description": "Rejects missing x402Version",
     "input": {
-      "header": "eyJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+      "header": "eyJyZXNvdXJjZSI6eyJ1cmwiOiJodHRwczovL2FwaS5leGFtcGxlLmNvbS9wYWlkIn0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7fX1dfQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects the retired s402 v1 flat shape",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects x402 V1 flat requirements on the native decode path",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MSwic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiYmFzZS1zZXBvbGlhIiwiYXNzZXQiOiIweFVTREMiLCJtYXhBbW91bnRSZXF1aXJlZCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwicmVzb3VyY2UiOiJodHRwczovL2FwaS5leGFtcGxlLmNvbS9wYWlkIn0="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -10,7 +26,55 @@
   {
     "description": "Rejects missing accepts array",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIn0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects empty accepts array",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbXX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects missing resource",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwiZXh0cmEiOnt9fV19"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects unsupported x402Version 3",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MywicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects unsupported extensions.s402.version",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIzIn19fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects accepts[] entry with no scheme",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwiZXh0cmEiOnt9fV19"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects accepts[] of scheme name strings",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbImV4YWN0IiwicHJlcGFpZCJdfQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -26,7 +90,7 @@
   {
     "description": "Rejects missing asset",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIn0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -34,7 +98,7 @@
   {
     "description": "Rejects missing amount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwicGF5VG8iOiIweGFiYyJ9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -42,7 +106,7 @@
   {
     "description": "Rejects missing payTo",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCJ9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -50,7 +114,7 @@
   {
     "description": "Rejects negative amount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiLTEwMCIsInBheVRvIjoiMHhhYmMifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiLTEwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -58,7 +122,7 @@
   {
     "description": "Rejects non-numeric amount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50Ijoibm90X2FfbnVtYmVyIiwicGF5VG8iOiIweGFiYyJ9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50Ijoibm90X2FfbnVtYmVyIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -66,7 +130,7 @@
   {
     "description": "Rejects leading zeros in amount (except \"0\")",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMDA3IiwicGF5VG8iOiIweGFiYyJ9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMDA3IiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -74,7 +138,7 @@
   {
     "description": "Rejects floating point amount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMS41IiwicGF5VG8iOiIweGFiYyJ9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMS41IiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -82,7 +146,7 @@
   {
     "description": "Rejects payTo with control characters",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmNcdTAwMDBkZWYifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmNcdTAwMDBkZWYiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -90,7 +154,7 @@
   {
     "description": "Rejects protocolFeeAddress with control characters",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUFkZHJlc3MiOiIweGZlZVxuXHJpbmplY3Rpb24ifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6eyJwcm90b2NvbEZlZUFkZHJlc3MiOiIweGZlZVxuXHJpbmplY3Rpb24ifX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -98,7 +162,7 @@
   {
     "description": "Rejects empty payTo",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiIn0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiIiwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -106,7 +170,7 @@
   {
     "description": "Rejects prepaid providerPubkey without disputeWindowMs",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjM2MDAwMDAiLCJwcm92aWRlclB1YmtleSI6ImFiYzEyMyJ9fQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJwcmVwYWlkIiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7InByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjM2MDAwMDAiLCJwcm92aWRlclB1YmtleSI6ImFiYzEyMyJ9fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -114,7 +178,7 @@
   {
     "description": "Rejects prepaid disputeWindowMs without providerPubkey",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjM2MDAwMDAiLCJkaXNwdXRlV2luZG93TXMiOiI4NjQwMDAwMCJ9fQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJwcmVwYWlkIiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7InByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjM2MDAwMDAiLCJkaXNwdXRlV2luZG93TXMiOiI4NjQwMDAwMCJ9fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -122,31 +186,7 @@
   {
     "description": "Rejects negative expiresAt",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHBpcmVzQXQiOi0xfQ=="
-    },
-    "shouldReject": true,
-    "expectedErrorCode": "INVALID_PAYLOAD"
-  },
-  {
-    "description": "Rejects empty accepts array",
-    "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyJ9"
-    },
-    "shouldReject": true,
-    "expectedErrorCode": "INVALID_PAYLOAD"
-  },
-  {
-    "description": "Rejects unsupported s402Version \"2\"",
-    "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjIiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
-    },
-    "shouldReject": true,
-    "expectedErrorCode": "INVALID_PAYLOAD"
-  },
-  {
-    "description": "Rejects numeric s402Version (must be string \"1\")",
-    "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6MSwiYWNjZXB0cyI6WyJleGFjdCJdLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIn0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6eyJleHBpcmVzQXQiOi0xfX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -154,7 +194,7 @@
   {
     "description": "Rejects protocolFeeBps exceeding 10000",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUJwcyI6MTAwMDF9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6eyJwcm90b2NvbEZlZUJwcyI6MTAwMDF9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -162,7 +202,7 @@
   {
     "description": "Rejects negative protocolFeeBps",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUJwcyI6LTF9"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6eyJwcm90b2NvbEZlZUJwcyI6LTF9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -170,7 +210,7 @@
   {
     "description": "Rejects non-integer protocolFeeBps",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJwcm90b2NvbEZlZUJwcyI6NTAuNX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6eyJwcm90b2NvbEZlZUJwcyI6NTAuNX19XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -178,7 +218,7 @@
   {
     "description": "Rejects upto.estimatedAmount exceeding maxAmount",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInVwdG8iOnsibWF4QW1vdW50IjoiNTAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsImVzdGltYXRlZEFtb3VudCI6IjUwMDAwMDEifX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJ1cHRvIiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7InVwdG8iOnsibWF4QW1vdW50IjoiNTAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsImVzdGltYXRlZEFtb3VudCI6IjUwMDAwMDEifX19XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -204,7 +244,7 @@
   {
     "description": "Rejects upto.estimatedAmount as number (must be string)",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInVwdG8iXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInVwdG8iOnsibWF4QW1vdW50IjoiNTAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsImVzdGltYXRlZEFtb3VudCI6MTIzfX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJ1cHRvIiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7InVwdG8iOnsibWF4QW1vdW50IjoiNTAwMDAwMCIsInNldHRsZW1lbnREZWFkbGluZU1zIjoiMTcwMDAwMDAwMDAwMCIsImVzdGltYXRlZEFtb3VudCI6MTIzfX19XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -239,7 +279,7 @@
   {
     "description": "Rejects mandate.minPerTx with leading zeros",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJtYW5kYXRlIjp7InJlcXVpcmVkIjp0cnVlLCJtaW5QZXJUeCI6IjAwNyJ9fQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIiwibWFuZGF0ZSI6eyJyZXF1aXJlZCI6dHJ1ZSwibWluUGVyVHgiOiIwMDcifX19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -338,7 +378,7 @@
   {
     "description": "Rejects network with control characters",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldFx1MDAwMCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldFx1MDAwMCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -346,7 +386,7 @@
   {
     "description": "Rejects asset with control characters",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWlcbjo6U1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiMHgyOjpzdWlcbjo6U1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -354,7 +394,7 @@
   {
     "description": "Rejects facilitatorUrl with control characters (CRLF injection)",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbImV4YWN0Il0sIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJmYWNpbGl0YXRvclVybCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vc2V0dGxlXHJcblgtSW5qZWN0ZWQ6IGV2aWwifQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6eyJmYWNpbGl0YXRvclVybCI6Imh0dHBzOi8vZXhhbXBsZS5jb20vc2V0dGxlXHJcblgtSW5qZWN0ZWQ6IGV2aWwifX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -362,7 +402,7 @@
   {
     "description": "Rejects prepaid withdrawalDelayMs below 60000 (1 min minimum)",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjU5OTk5In19"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJwcmVwYWlkIiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7InByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjU5OTk5In19fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
@@ -370,7 +410,71 @@
   {
     "description": "Rejects prepaid withdrawalDelayMs above 604800000 (7 day maximum)",
     "input": {
-      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJhY2NlcHRzIjpbInByZXBhaWQiXSwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsInByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjYwNDgwMDAwMSJ9fQ=="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJwcmVwYWlkIiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsImV4dHJhIjp7InByZXBhaWQiOnsicmF0ZVBlckNhbGwiOiIxMDAiLCJtaW5EZXBvc2l0IjoiMTAwMDAiLCJ3aXRoZHJhd2FsRGVsYXlNcyI6IjYwNDgwMDAwMSJ9fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a network that is not CAIP-2 (x402 V2 requires \":\" and 3+ characters)",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJiYXNlLXNlcG9saWEiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a network shorter than 3 characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJhOiIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects maxTimeoutSeconds of 0 (x402 V2 requires a positive timeout)",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects an empty asset",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a resource.serviceName longer than 32 characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsInNlcnZpY2VOYW1lIjoieHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a resource.serviceName containing non-printable-ASCII characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsInNlcnZpY2VOYW1lIjoiQ2Fmw6kgUGFpZW1lbnQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects more than 5 resource.tags",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsInRhZ3MiOlsiYSIsImIiLCJjIiwiZCIsImUiLCJmIl19LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a resource.iconUrl longer than 2048 characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImljb25VcmwiOiJodHRwczovL3gveXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"

@@ -13,7 +13,9 @@ import {
   s402Error,
   s402Facilitator,
   S402_VERSION,
+  S402_WIRE_VERSION,
   isValidAmount,
+  type s402PaymentRequired,
   type s402PaymentRequirements,
   type s402ExactPayload,
   type s402FacilitatorScheme,
@@ -22,15 +24,64 @@ import { validateRequirementsShape, pickRequirementsFields } from '../src/http.j
 import { parseReceiptHeader } from '../src/receipts.js';
 
 const VALID_PAY_TO = '0x' + 'a'.repeat(64);
+const RESOURCE_URL = 'https://api.example.com/paid';
 
+/** One valid `accepts[]` entry, in memory — what the facilitator is handed. */
 const VALID_REQUIREMENTS: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',
   payTo: VALID_PAY_TO,
 };
+
+/** The six keys x402 owns on one `accepts[]` entry. Everything else is s402's. */
+const ENTRY_KEYS = new Set(['scheme', 'network', 'asset', 'amount', 'payTo', 'maxTimeoutSeconds']);
+
+/** Keys that belong to the envelope itself, above the `accepts[]` list. */
+const ENVELOPE_KEYS = new Set(['x402Version', 'resource', 'accepts', 'extensions', 'error']);
+
+/**
+ * Build the wire envelope a flat attack payload describes.
+ *
+ * Each attack below still targets the field it always did; wire v2 only moved
+ * where that field travels. The six x402 keys stay on `accepts[0]`; `mandate`
+ * goes to `extensions.s402.mandate`; envelope keys stay at envelope level;
+ * every s402-only field drops into `accepts[0].extra`.
+ */
+function wire(overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  const entry: Record<string, unknown> = {};
+  const extra: Record<string, unknown> = {};
+  const envelope: Record<string, unknown> = { x402Version: 2, resource: { url: RESOURCE_URL } };
+  const s402Ext: Record<string, unknown> = { version: S402_WIRE_VERSION };
+
+  for (const [key, value] of Object.entries({ ...VALID_REQUIREMENTS, ...overrides })) {
+    if (ENTRY_KEYS.has(key)) entry[key] = value;
+    else if (key === 'mandate') s402Ext.mandate = value;
+    else if (ENVELOPE_KEYS.has(key)) envelope[key] = value;
+    else extra[key] = value;
+  }
+
+  if (Object.keys(extra).length > 0) entry.extra = extra;
+  if (!('accepts' in envelope)) envelope.accepts = [entry];
+  if (envelope.extensions === undefined) envelope.extensions = { s402: s402Ext };
+  return envelope;
+}
+
+/** Validate the envelope a flat attack payload describes. */
+function wireValidate(overrides: Record<string, unknown> = {}): void {
+  validateRequirementsShape(wire(overrides));
+}
+
+/** The same fixture as an in-memory 402 document, for the encode → decode paths. */
+function doc(overrides: Partial<s402PaymentRequirements> = {}, envelope: Partial<s402PaymentRequired> = {}): s402PaymentRequired {
+  return {
+    x402Version: 2,
+    resource: { url: RESOURCE_URL },
+    accepts: [{ ...VALID_REQUIREMENTS, ...overrides }],
+    ...envelope,
+  };
+}
 
 const VALID_PAYLOAD: s402ExactPayload = {
   s402Version: S402_VERSION,
@@ -53,7 +104,7 @@ function createMockScheme(): s402FacilitatorScheme {
 describe('adversarial: header injection via control characters', () => {
   // Control characters in identifier fields can enable HTTP header injection (CRLF)
   // or log injection (null bytes). s402 blocks ALL control chars in:
-  // network, asset, payTo, facilitatorUrl, protocolFeeAddress
+  // scheme, network, asset, payTo, facilitatorUrl, protocolFeeAddress
 
   const CONTROL_CHARS = [
     ['\x00', 'null byte'],
@@ -66,45 +117,33 @@ describe('adversarial: header injection via control characters', () => {
   ] as const;
 
   for (const [char, label] of CONTROL_CHARS) {
+    it(`rejects ${label} in scheme`, () => {
+      expect(() => wireValidate({ scheme: `exact${char}` })).toThrow('control characters');
+    });
+
     it(`rejects ${label} in network`, () => {
-      expect(() => validateRequirementsShape({
-        ...VALID_REQUIREMENTS,
-        network: `sui${char}:testnet`,
-      })).toThrow('control characters');
+      expect(() => wireValidate({ network: `sui${char}:testnet` })).toThrow('control characters');
     });
 
     it(`rejects ${label} in asset`, () => {
-      expect(() => validateRequirementsShape({
-        ...VALID_REQUIREMENTS,
-        asset: `0x2::sui${char}::SUI`,
-      })).toThrow('control characters');
+      expect(() => wireValidate({ asset: `0x2::sui${char}::SUI` })).toThrow('control characters');
     });
 
     it(`rejects ${label} in payTo`, () => {
-      expect(() => validateRequirementsShape({
-        ...VALID_REQUIREMENTS,
-        payTo: `0xabc${char}def`,
-      })).toThrow('control characters');
+      expect(() => wireValidate({ payTo: `0xabc${char}def` })).toThrow('control characters');
     });
 
     it(`rejects ${label} in facilitatorUrl`, () => {
-      expect(() => validateRequirementsShape({
-        ...VALID_REQUIREMENTS,
-        facilitatorUrl: `https://evil.com${char}/path`,
-      })).toThrow('control characters');
+      expect(() => wireValidate({ facilitatorUrl: `https://evil.com${char}/path` })).toThrow('control characters');
     });
 
     it(`rejects ${label} in protocolFeeAddress`, () => {
-      expect(() => validateRequirementsShape({
-        ...VALID_REQUIREMENTS,
-        protocolFeeAddress: `0xfee${char}addr`,
-      })).toThrow('control characters');
+      expect(() => wireValidate({ protocolFeeAddress: `0xfee${char}addr` })).toThrow('control characters');
     });
   }
 
   it('rejects CRLF injection attempt in facilitatorUrl', () => {
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
+    expect(() => wireValidate({
       facilitatorUrl: 'https://evil.com\r\nX-Injected: true\r\nX-Attack: works',
     })).toThrow('control characters');
   });
@@ -165,25 +204,28 @@ describe('adversarial: TOCTOU — expiry between verify and settle', () => {
 
 describe('adversarial: prototype pollution', () => {
   it('__proto__.isAdmin = true does not affect Object prototype', () => {
-    const poisoned = {
-      ...VALID_REQUIREMENTS,
+    const poisoned = doc({}, {
       extensions: {
         __proto__: { isAdmin: true },
       },
-    };
+    });
 
     // JSON.parse is safe for __proto__ — it creates a data property, not a prototype mutation.
     // But we verify it here explicitly.
-    const encoded = encodePaymentRequired(poisoned as s402PaymentRequirements);
+    const encoded = encodePaymentRequired(poisoned);
     decodePaymentRequired(encoded);
 
     expect(({} as Record<string, unknown>).isAdmin).toBeUndefined();
     expect(Object.prototype.hasOwnProperty.call({}, 'isAdmin')).toBe(false);
   });
 
-  it('__proto__ at top level is stripped by pickRequirementsFields', () => {
+  it('__proto__ at envelope level is stripped by pickRequirementsFields', () => {
+    // Pointed at the ENVELOPE, which still strips. An entry's `extra` no longer
+    // does — x402 owns that bag and an unknown key there is kept verbatim — so
+    // an allowlist assertion aimed at `extra` would now be asserting the
+    // opposite of the design (ADR-016 §Postel).
     const poisoned = {
-      ...VALID_REQUIREMENTS,
+      ...wire(),
       __proto__hack: { evil: true },
       constructor: 'overwritten',
     };
@@ -194,14 +236,24 @@ describe('adversarial: prototype pollution', () => {
     expect(typeof clean.constructor).toBe('function');
   });
 
+  it('__proto__ inside an accepts[] entry is stripped by pickRequirementsFields', () => {
+    const poisoned = wire({
+      accepts: [{ ...VALID_REQUIREMENTS, __proto__hack: { evil: true }, constructor: 'overwritten' }],
+    });
+
+    const clean = pickRequirementsFields(poisoned);
+    const entry = clean.accepts[0] as unknown as Record<string, unknown>;
+    expect(entry.__proto__hack).toBeUndefined();
+    expect(typeof (clean.accepts[0] as object).constructor).toBe('function');
+  });
+
   it('nested __proto__ in sub-objects does not escape', () => {
-    const poisoned = {
-      ...VALID_REQUIREMENTS,
+    const poisoned = wire({
       mandate: {
         required: true,
         __proto__: { isAdmin: true },
       },
-    };
+    });
 
     validateRequirementsShape(poisoned);
     expect(({} as Record<string, unknown>).isAdmin).toBeUndefined();
@@ -215,33 +267,21 @@ describe('adversarial: prototype pollution', () => {
 describe('adversarial: amount format validation (S7: chain-agnostic — format only, no magnitude bounds)', () => {
   it('accepts amount exceeding u64 max — magnitude bounds belong in chain adapters', () => {
     // Wire format validates format only. 23-digit integer is a valid non-negative integer string.
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
-      amount: '99999999999999999999999', // 23 digits — valid format
-    })).not.toThrow();
+    expect(() => wireValidate({ amount: '99999999999999999999999' })).not.toThrow(); // 23 digits
   });
 
   it('accepts amount at u64 max + 1 — needed for u256 chains (EVM)', () => {
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
-      amount: '18446744073709551616', // u64 max + 1 — valid for EVM
-    })).not.toThrow();
+    expect(() => wireValidate({ amount: '18446744073709551616' })).not.toThrow(); // u64 max + 1
   });
 
   it('accepts amount at exactly u64 max', () => {
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
-      amount: '18446744073709551615', // u64 max
-    })).not.toThrow();
+    expect(() => wireValidate({ amount: '18446744073709551615' })).not.toThrow();
   });
 
   it('accepts 100-digit number — valid non-negative integer string', () => {
     // EVM u256 max is 78 digits. Even larger amounts are valid format.
     // Chain adapters enforce their own magnitude bounds.
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
-      amount: '1' + '0'.repeat(99), // 10^99 — valid format
-    })).not.toThrow();
+    expect(() => wireValidate({ amount: '1' + '0'.repeat(99) })).not.toThrow(); // 10^99
   });
 });
 
@@ -264,18 +304,15 @@ describe('adversarial: unicode normalization', () => {
     expect(nfc).not.toBe(nfd);
 
     // s402 treats them as different — no normalization
-    const reqs1 = { ...VALID_REQUIREMENTS, network: `sui:${nfc}` };
-    const reqs2 = { ...VALID_REQUIREMENTS, network: `sui:${nfd}` };
-
-    const encoded1 = encodePaymentRequired(reqs1 as s402PaymentRequirements);
-    const encoded2 = encodePaymentRequired(reqs2 as s402PaymentRequirements);
+    const encoded1 = encodePaymentRequired(doc({ network: `sui:${nfc}` }));
+    const encoded2 = encodePaymentRequired(doc({ network: `sui:${nfd}` }));
 
     expect(encoded1).not.toBe(encoded2);
 
     const decoded1 = decodePaymentRequired(encoded1);
     const decoded2 = decodePaymentRequired(encoded2);
 
-    expect(decoded1.network).not.toBe(decoded2.network);
+    expect(decoded1.accepts[0].network).not.toBe(decoded2.accepts[0].network);
   });
 });
 
@@ -375,35 +412,39 @@ describe('adversarial: facilitator starvation', () => {
 
 describe('adversarial: empty accepts array', () => {
   it('validateRequirementsShape rejects empty accepts', () => {
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
-      accepts: [],
-    })).toThrow('at least one scheme');
+    expect(() => wireValidate({ accepts: [] })).toThrow('at least one requirement');
   });
 
-  it('client gets SCHEME_NOT_SUPPORTED, not index-out-of-bounds', () => {
-    // Even if someone constructs requirements with empty accepts,
-    // the facilitator should fail gracefully
+  it('facilitator gives a graceful scheme mismatch, not index-out-of-bounds', async () => {
+    // The cross-check is now `requirements.scheme !== payload.scheme` — one
+    // entry offers one scheme, so there is no list to index into and no empty
+    // list to fall off the end of. A mismatch is answered, not thrown.
     const f = new s402Facilitator();
     f.register('sui:testnet', createMockScheme());
 
-    // Empty accepts: the payload scheme check is skipped when accepts is empty
-    // (requirements.accepts.length > 0 is false), so it falls through to
-    // resolveScheme, which succeeds for exact on sui:testnet.
-    // This is actually correct behavior — empty accepts means "any scheme is fine".
+    const result = await f.process(VALID_PAYLOAD, { ...VALID_REQUIREMENTS, scheme: 'escrow' });
+
+    expect(result.success).toBe(false);
+    expect(result.errorCode).toBe('SCHEME_NOT_SUPPORTED');
+    expect(result.error).toContain('is not accepted by these requirements');
+  });
+
+  it('a requirement naming no scheme at all still resolves, it does not crash', async () => {
+    // The v1 reading of an empty accepts list — "any scheme is fine" — survives
+    // as a requirement with no `scheme`: the cross-check is skipped and
+    // resolveScheme decides.
+    const f = new s402Facilitator();
+    f.register('sui:testnet', createMockScheme());
+
+    const { scheme: _omitted, ...noScheme } = VALID_REQUIREMENTS;
+    const result = await f.process(VALID_PAYLOAD, noScheme as s402PaymentRequirements);
+
+    expect(result.success).toBe(true);
   });
 
   it('decode path rejects empty accepts before it reaches the client', () => {
-    const bad = {
-      s402Version: '1',
-      accepts: [],
-      network: 'sui:testnet',
-      asset: '0x2::sui::SUI',
-      amount: '1000',
-      payTo: VALID_PAY_TO,
-    };
-    const encoded = btoa(JSON.stringify(bad));
-    expect(() => decodePaymentRequired(encoded)).toThrow('at least one scheme');
+    const encoded = btoa(JSON.stringify(wire({ accepts: [] })));
+    expect(() => decodePaymentRequired(encoded)).toThrow('at least one requirement');
   });
 });
 
@@ -454,12 +495,18 @@ describe('adversarial: receipt header parsing', () => {
 
 // ══════════════════════════════════════════════════════════════
 // ATK-10: Unknown key stripping (allowlist enforcement)
+//
+// Wire v2 draws the allowlist at three levels — the envelope, an `accepts[]`
+// entry, and `resource`. It deliberately stops at an entry's `extra`, which
+// x402 owns and keeps open; that exemption is asserted here too, so a future
+// allowlist creeping into `extra` fails loudly instead of silently eating an
+// upstream field.
 // ══════════════════════════════════════════════════════════════
 
 describe('adversarial: unknown key stripping', () => {
-  it('strips all unknown top-level keys', () => {
+  it('strips all unknown envelope-level keys', () => {
     const poisoned = {
-      ...VALID_REQUIREMENTS,
+      ...wire(),
       malicious: 'injected',
       isAdmin: true,
       __proto__hack: 'pwned',
@@ -474,9 +521,45 @@ describe('adversarial: unknown key stripping', () => {
     expect((clean as unknown as Record<string, unknown>).role).toBeUndefined();
   });
 
+  it('strips unknown keys from inside an accepts[] entry', () => {
+    const poisoned = wire({
+      accepts: [{ ...VALID_REQUIREMENTS, malicious: 'injected', isAdmin: true, role: 'superuser' }],
+    });
+
+    const entry = pickRequirementsFields(poisoned).accepts[0] as unknown as Record<string, unknown>;
+
+    expect(entry.scheme).toBe('exact');
+    expect(entry.malicious).toBeUndefined();
+    expect(entry.isAdmin).toBeUndefined();
+    expect(entry.role).toBeUndefined();
+  });
+
+  it('strips unknown keys from resource', () => {
+    const poisoned = wire({ resource: { url: RESOURCE_URL, malicious: 'injected' } });
+
+    const resource = pickRequirementsFields(poisoned).resource as unknown as Record<string, unknown>;
+
+    expect(resource.url).toBe(RESOURCE_URL);
+    expect(resource.malicious).toBeUndefined();
+  });
+
+  it('KEEPS unknown keys inside an entry extra — x402 owns that bag', () => {
+    // The one place the allowlist deliberately does not apply. x402's `extra`
+    // is an open bag by spec (`paymentFlow`, the EIP-712 `name`/`version`), and
+    // dropping a key we do not recognise there is how the next upstream field
+    // goes missing without erroring.
+    const poisoned = wire({
+      accepts: [{ ...VALID_REQUIREMENTS, extra: { paymentFlow: 'authorize-capture', name: 'USDC' } }],
+    });
+
+    const extra = pickRequirementsFields(poisoned).accepts[0].extra as Record<string, unknown>;
+
+    expect(extra.paymentFlow).toBe('authorize-capture');
+    expect(extra.name).toBe('USDC');
+  });
+
   it('strips unknown keys from sub-objects (mandate, stream, etc.)', () => {
-    const poisoned = {
-      ...VALID_REQUIREMENTS,
+    const poisoned = wire({
       mandate: {
         required: true,
         malicious: 'injected',
@@ -488,11 +571,11 @@ describe('adversarial: unknown key stripping', () => {
         minDeposit: '1000',
         evil: 'payload',
       },
-    };
+    });
 
-    const clean = pickRequirementsFields(poisoned as unknown as Record<string, unknown>);
+    const clean = pickRequirementsFields(poisoned);
     const mandate = clean.mandate as unknown as Record<string, unknown>;
-    const stream = clean.stream as unknown as Record<string, unknown>;
+    const stream = clean.accepts[0].stream as unknown as Record<string, unknown>;
 
     expect(mandate.required).toBe(true);
     expect(mandate.malicious).toBeUndefined();
@@ -502,15 +585,16 @@ describe('adversarial: unknown key stripping', () => {
     expect(stream.evil).toBeUndefined();
   });
 
-  it('preserves extensions (opaque pass-through)', () => {
-    const reqs = {
-      ...VALID_REQUIREMENTS,
-      extensions: { custom: 'data', nested: { deep: true } },
-    };
+  it('preserves extensions at both levels (opaque pass-through)', () => {
+    const reqs = wire({
+      extensions: { custom: 'data', nested: { deep: true }, s402: { version: S402_WIRE_VERSION } },
+      accepts: [{ ...VALID_REQUIREMENTS, extra: { extensions: { perEntry: 'data' } } }],
+    });
 
-    const clean = pickRequirementsFields(reqs as Record<string, unknown>);
+    const clean = pickRequirementsFields(reqs);
     expect((clean.extensions as Record<string, unknown>).custom).toBe('data');
     expect((clean.extensions as Record<string, unknown>).nested).toEqual({ deep: true });
+    expect(clean.accepts[0].extensions).toEqual({ perEntry: 'data' });
   });
 });
 
@@ -530,24 +614,15 @@ describe('adversarial: SSRF via facilitatorUrl', () => {
 
   for (const url of SSRF_URLS) {
     it(`rejects SSRF URL: ${url.slice(0, 40)}...`, () => {
-      expect(() => validateRequirementsShape({
-        ...VALID_REQUIREMENTS,
-        facilitatorUrl: url,
-      })).toThrow(s402Error);
+      expect(() => wireValidate({ facilitatorUrl: url })).toThrow(s402Error);
     });
   }
 
   it('accepts valid https URL', () => {
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
-      facilitatorUrl: 'https://facilitator.example.com/v1/settle',
-    })).not.toThrow();
+    expect(() => wireValidate({ facilitatorUrl: 'https://facilitator.example.com/v1/settle' })).not.toThrow();
   });
 
   it('accepts valid http URL (for dev/testing)', () => {
-    expect(() => validateRequirementsShape({
-      ...VALID_REQUIREMENTS,
-      facilitatorUrl: 'http://localhost:3000/settle',
-    })).not.toThrow();
+    expect(() => wireValidate({ facilitatorUrl: 'http://localhost:3000/settle' })).not.toThrow();
   });
 });

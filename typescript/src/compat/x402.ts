@@ -9,10 +9,23 @@
  * s402-only fields (mandate, stream, escrow, unlock extensions) are stripped.
  */
 
-import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload, s402SettleResponse } from '../types.js';
-import { S402_VERSION } from '../types.js';
+import type {
+  s402PaymentRequired,
+  s402PaymentRequirements,
+  s402Scheme,
+  s402ExactPayload,
+  s402PaymentPayload,
+  s402SettleResponse,
+} from '../types.js';
+import { S402_VERSION, S402_DEFAULT_MAX_TIMEOUT_SECONDS } from '../types.js';
 import { s402Error } from '../errors.js';
-import { isValidAmount, validateRequirementsShape, pickRequirementsFields } from '../http.js';
+import {
+  isValidAmount,
+  validateRequirementsShape,
+  pickRequirementsFields,
+  toRequirementsWire,
+  fromS402V1Requirements,
+} from '../http.js';
 
 // ══════════════════════════════════════════════════════════════
 // Upstream pin — the x402 HEAD this layer was last audited against
@@ -202,12 +215,12 @@ export function fromX402Requirements(x402: x402PaymentRequirements, now?: number
     : undefined;
 
   return {
-    s402Version: S402_VERSION,
-    accepts: ['exact'],
+    scheme: 'exact',
     network: x402.network,
     asset: x402.asset,
     amount,
     payTo: x402.payTo,
+    maxTimeoutSeconds: x402.maxTimeoutSeconds,
     facilitatorUrl: x402.facilitatorUrl,
     expiresAt,
     extensions: x402.extensions,
@@ -398,6 +411,13 @@ export function encodeX402V2Envelope(envelope: x402V2PaymentRequired): string {
  * ```
  */
 export function fromX402PayloadHeaders(headers: Headers): s402PaymentPayload | null {
+  const decoded = readX402PayloadHeader(headers);
+  if (decoded == null) return null;
+  return fromX402Payload(decoded as unknown as x402PaymentPayload);
+}
+
+/** Read, size-check and parse the x402 payload header. `null` when absent. */
+function readX402PayloadHeader(headers: Headers): Record<string, unknown> | null {
   let raw: string | null = null;
   for (const name of X402_PAYLOAD_HEADERS) {
     // Truthiness, not presence — matching x402's own server, which reads
@@ -422,7 +442,28 @@ export function fromX402PayloadHeaders(headers: Headers): s402PaymentPayload | n
   if (decoded == null || typeof decoded !== 'object' || Array.isArray(decoded)) {
     throw new s402Error('INVALID_PAYLOAD', 'x402 payment payload must be a JSON object');
   }
-  return fromX402Payload(decoded as x402PaymentPayload);
+  return decoded as Record<string, unknown>;
+}
+
+/**
+ * The requirement an x402 V2 payment says it is paying.
+ *
+ * x402 V2's `PaymentPayload` carries `accepted` — the FULL `PaymentRequirements`
+ * the client chose, not just its scheme name. On a 402 that offered several
+ * entries, that object is the only thing that says which one the money is for,
+ * and the entries differ in price. Reading the scheme alone and taking the
+ * first match settles the payment against the wrong amount.
+ *
+ * Returns `null` for an x402 V1 payload (no `accepted`) or no payment header.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` if the header is present but unreadable.
+ */
+export function x402AcceptedFromHeaders(headers: Headers): Record<string, unknown> | null {
+  const decoded = readX402PayloadHeader(headers);
+  const accepted = decoded?.accepted;
+  return accepted != null && typeof accepted === 'object' && !Array.isArray(accepted)
+    ? accepted as Record<string, unknown>
+    : null;
 }
 
 /**
@@ -819,66 +860,66 @@ export interface x402V2PaymentRequired {
 }
 
 /**
- * Convert outbound s402 requirements to x402 V2 wire format.
+ * Convert one s402 requirement to the x402 V2 `PaymentRequirements` it is.
  *
- * Differs from {@link toX402Requirements} (V1 emitter):
- *   - Does NOT emit `x402Version` (lives on envelope in V2)
- *   - Does NOT emit `maxAmountRequired` or `resource`/`description`
- *   - Emits required `extra: Record<string, unknown>` (defaults to `{}`)
- *   - `maxTimeoutSeconds` is REQUIRED in output (defaults to 60s)
+ * Since wire v2 this is a **projection, not a translation** — the s402
+ * requirement already IS an x402 V2 requirement, with s402's own fields living
+ * in `extra`. `encodePaymentRequired` does exactly this on the way to the
+ * header; this function is here for callers assembling an x402 document by
+ * hand.
  *
- * **Scheme constraint:** Only translates `s402.accepts === ['exact']` to x402
- * `'exact'`. Other s402 schemes (upto, prepaid, stream, escrow, unlock) do NOT
- * have direct x402 wire-format equivalents; this function throws rather than
- * silently downgrade them. Use a Sui-native s402 path or extend this function
- * with explicit per-scheme mapping if you need non-exact emission.
+ * Every s402 scheme is expressible. The old exact-only constraint is gone: a
+ * requirement naming `prepaid` is a well-formed x402 requirement that an x402
+ * client without a `prepaid` handler skips, which is what `accepts[]` is for.
  *
- * **EVM EIP-3009 callers:** The default `extra: {}` is wire-shape-correct but
- * not signing-correct for real EVM tokens. To sign a real Permit2 authorization,
+ * **EVM EIP-3009 callers:** the default `extra` is wire-shape-correct but not
+ * signing-correct for real EVM tokens. To sign a real Permit2 authorization,
  * `extra` must include `name` (token name) and `version` (token version) for
- * the EIP-712 domain. Pass these via `options.extra` when emitting requirements
- * a real EVM facilitator will attempt to verify.
- *
- * Use this when emitting to consumers of x402 v2.x SDKs (the current upstream).
- * V1 emission via {@link toX402Requirements} remains supported for legacy
- * facilitators.
- *
- * @throws {s402Error} `INVALID_PAYLOAD` if `s402.accepts` does not include 'exact'
- *   as the first entry.
+ * the EIP-712 domain. Pass these via `options.extra`.
  */
 export function toX402V2Requirements(
   s402: s402PaymentRequirements,
   options?: { maxTimeoutSeconds?: number; extra?: Record<string, unknown> },
 ): x402V2PaymentRequirements {
-  if (!s402.accepts || s402.accepts.length === 0 || s402.accepts[0] !== 'exact') {
-    throw new s402Error('INVALID_PAYLOAD',
-      `toX402V2Requirements only translates s402.accepts[0] === 'exact'; got ${JSON.stringify(s402.accepts)}. ` +
-      `Other s402 schemes (upto, prepaid, stream, escrow, unlock) have no direct x402 wire-format equivalent.`);
-  }
-  return {
-    scheme: 'exact',
-    network: s402.network,
-    asset: s402.asset,
-    amount: s402.amount,
-    payTo: s402.payTo,
-    maxTimeoutSeconds: options?.maxTimeoutSeconds ?? 60,
-    extra: options?.extra ?? {},
-  };
+  const wire = toRequirementsWire({
+    x402Version: 2,
+    resource: { url: '' },
+    accepts: [applyOfferOverrides(s402, options)],
+  }) as { accepts: x402V2PaymentRequirements[] };
+  return wire.accepts[0];
 }
 
 /**
- * Wrap an s402 requirement in an x402 V2 `PaymentRequired` envelope. The
- * envelope hoists `x402Version` and `resource` (ResourceInfo) above the
- * per-requirement layer.
+ * Apply the caller's per-envelope overrides to ONE offer, without mutating it.
  *
- * @param s402 - The s402 requirement to lift into V2 format.
+ * `extra` merges over whatever the offer already carried; `maxTimeoutSeconds`
+ * replaces. Kept as one function so the entry path and the envelope path cannot
+ * drift — an override that lands on `toX402V2Envelope` and not on
+ * `toX402V2Requirements` is a difference nobody would see until the wire.
+ */
+function applyOfferOverrides(
+  offer: s402PaymentRequirements,
+  options?: { maxTimeoutSeconds?: number; extra?: Record<string, unknown> },
+): s402PaymentRequirements {
+  if (!options?.extra && options?.maxTimeoutSeconds === undefined) return offer;
+  const out: s402PaymentRequirements = { ...offer };
+  if (options.extra) out.extra = { ...(offer.extra ?? {}), ...options.extra };
+  if (options.maxTimeoutSeconds !== undefined) out.maxTimeoutSeconds = options.maxTimeoutSeconds;
+  return out;
+}
+
+/**
+ * Wrap s402 requirements in an x402 V2 `PaymentRequired` envelope.
+ *
+ * @param s402 - One requirement, or the list of offers. `exact` is NOT reordered
+ *   here: the caller owns the order, and `s402ResourceServer.buildPaymentRequired`
+ *   is what puts `exact` first.
  * @param resource - ResourceInfo describing the resource being paid for.
- *   REQUIRED in V2 envelopes per upstream spec.
- * @param options - Optional overrides for timeout, extra fields, and
- *   envelope-level extensions.
+ *   REQUIRED in V2 envelopes per the upstream spec; a non-empty `url` is
+ *   enforced on emission.
  */
 export function toX402V2Envelope(
-  s402: s402PaymentRequirements,
+  s402: s402PaymentRequirements | s402PaymentRequirements[],
   resource: x402V2ResourceInfo,
   options?: {
     maxTimeoutSeconds?: number;
@@ -891,18 +932,23 @@ export function toX402V2Envelope(
     throw new s402Error('INVALID_PAYLOAD',
       'x402 V2 envelope requires a non-empty resource.url (ResourceInfo.url is mandatory per the x402 V2 spec)');
   }
-  const req = toX402V2Requirements(s402, {
-    maxTimeoutSeconds: options?.maxTimeoutSeconds,
-    extra: options?.extra,
-  });
-  const envelope: x402V2PaymentRequired = {
+  const offers = (Array.isArray(s402) ? s402 : [s402]).map((offer) => applyOfferOverrides(offer, options));
+  const required: s402PaymentRequired = {
     x402Version: 2,
     resource,
-    accepts: [req],
+    accepts: offers,
   };
-  if (options?.extensions) envelope.extensions = options.extensions;
-  if (options?.error) envelope.error = options.error;
-  return envelope;
+  if (options?.extensions) required.extensions = options.extensions;
+  if (options?.error) required.error = options.error;
+
+  // ONE projection, the same one `encodePaymentRequired` uses. Building the
+  // envelope field by field here is how the mandate went missing: it lives in
+  // `extensions.s402`, which only the whole-document projection writes, so a
+  // per-offer assembly published a route with the spending authorization
+  // silently removed. Byte-equality with the header encoder is the test.
+  const wire = toRequirementsWire(required);
+  validateRequirementsShape(wire, { emitting: true });
+  return wire as unknown as x402V2PaymentRequired;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -910,7 +956,10 @@ export function toX402V2Envelope(
 // ══════════════════════════════════════════════════════════════
 
 /**
- * Check if a decoded JSON object is s402 format.
+ * Check if a decoded JSON object is the retired s402 v1 flat shape.
+ *
+ * `s402Version` no longer appears on any 402 s402 emits. Its presence means the
+ * document was written by a pre-wire-v2 server — see {@link fromS402V1Requirements}.
  */
 export function isS402(obj: Record<string, unknown>): boolean {
   return 's402Version' in obj;
@@ -925,84 +974,99 @@ export function isX402(obj: Record<string, unknown>): boolean {
 
 /**
  * Check if a decoded JSON object is an x402 V2 envelope (has `accepts` array).
- * V2 envelopes wrap requirements in an `accepts` array instead of flat fields.
+ * This is also the shape s402 itself emits since wire v2.
  */
 export function isX402Envelope(obj: Record<string, unknown>): boolean {
   return 'x402Version' in obj && Array.isArray(obj.accepts) && !('s402Version' in obj);
 }
 
 /**
- * Convert an x402 V2 envelope to s402 format.
- * Picks the first requirement from the `accepts` array.
- * Copies `x402Version` from the envelope onto the requirement for downstream processing.
+ * Decode an x402 V2 `PaymentRequired` envelope.
+ *
+ * Since wire v2 this is the NATIVE shape, so the conversion is identity plus
+ * the `extra` projection — see {@link normalizeRequirements}, which this
+ * delegates to for everything except the V1-flat case.
  */
-export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope, now?: number): s402PaymentRequirements {
-  if (!envelope.accepts || envelope.accepts.length === 0) {
-    throw new s402Error('INVALID_PAYLOAD', 'x402 V2 envelope has empty accepts array');
-  }
-  // Pick the first requirement and attach x402Version from the envelope
-  const req: x402PaymentRequirements = {
-    ...envelope.accepts[0],
-    x402Version: envelope.x402Version,
-  };
-  // Validate the inner requirement — the V1 flat path does this via normalizeRequirements,
-  // but the V2 envelope path was missing this check.
-  validateX402Shape(req as unknown as Record<string, unknown>);
-  return fromX402Requirements(req, now);
+export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope, now?: number): s402PaymentRequired {
+  return normalizeRequirements(envelope as unknown as Record<string, unknown>, now);
 }
 
 /**
- * Auto-detect and normalize: if x402, convert to s402. If already s402, validate and pass through.
- * Handles x402 V1 (flat), x402 V2 (envelope with accepts array), and s402 formats.
- * Validates required fields to catch malformed/malicious payloads at the trust boundary.
+ * Decode the RETIRED s402 v1 flat requirements shape into a wire-v2 402.
  *
- * Returns a clean object with only known s402 fields — unknown top-level keys are stripped.
+ * Re-exported from `http.ts`, where it lives so the native decode path can
+ * reach it without `http.ts` importing this module back. `s402/compat/x402` is
+ * the documented home and stays the documented home.
+ */
+export { fromS402V1Requirements } from '../http.js';
+
+/**
+ * Auto-detect and normalize any 402 document into s402's wire-v2 shape.
  *
- * @param obj - Raw decoded JSON (could be s402, x402 V1, or x402 V2 envelope)
- * @returns Validated s402PaymentRequirements
+ * This is the NATIVE decode path, not a translation layer: an x402 V2 envelope
+ * is what s402 emits, so that case is identity plus the `extra` projection. The
+ * conversions left are the two retired flat shapes — x402 V1 and s402 v1.
+ *
+ * ⚠️ One thing is added rather than copied. When a document carries no
+ * `extensions.s402` — a plain x402 402, from a server that has never heard of
+ * s402 — an entry with no `expiresAt` gets one derived from its
+ * `maxTimeoutSeconds`. Without it, inbound x402 traffic would bypass all three
+ * S1 (stale payment rejection) layers, because the facilitator's expiry guards
+ * skip an undefined `expiresAt`. s402's own documents are never touched: they
+ * say what they mean about expiry, including by saying nothing.
+ *
+ * @param obj - Raw decoded JSON (s402 wire v2 / x402 V2, x402 V1, or s402 v1)
+ * @param now - Clock for the derivation above. Defaults to `Date.now()`.
+ * @returns A validated 402 document
  * @throws {s402Error} `INVALID_PAYLOAD` if the format is unrecognized or malformed
  *
  * @example
  * ```ts
  * import { normalizeRequirements } from 's402/compat/x402';
  *
- * // Works with any format — auto-detects s402 vs x402
- * const rawJson = JSON.parse(atob(header));
- * const requirements = normalizeRequirements(rawJson);
- * // Always returns s402PaymentRequirements regardless of input format
+ * const raw = JSON.parse(atob(header));
+ * const required = normalizeRequirements(raw);   // any era, one shape out
  * ```
  */
 export function normalizeRequirements(
   obj: Record<string, unknown>,
   now?: number,
-): s402PaymentRequirements {
+): s402PaymentRequired {
   if (obj == null || typeof obj !== 'object' || Array.isArray(obj)) {
     throw new s402Error('INVALID_PAYLOAD',
       `Payment requirements must be a plain object, got ${obj === null ? 'null' : Array.isArray(obj) ? 'array' : typeof obj}`);
   }
+
+  // s402 v1 flat — the retired shape. ADR-013: we read it, we never write it.
   if (isS402(obj)) {
-    // Delegate to the canonical validator in http.ts — single source of truth.
-    validateRequirementsShape(obj);
-    return pickRequirementsFields(obj);
+    return fromS402V1Requirements(obj);
   }
-  // x402 V2 envelope: { x402Version, accepts: [{scheme, network, ...}, ...] }
+
+  // x402 V2 envelope — and s402's own wire v2, which is the same document.
+  // `pickRequirementsFields` is the whole decode, foreign-expiry derivation
+  // included; there is one copy of that rule and it is on the decode path, so
+  // every entry point gets it (http.ts `applyForeignExpiry`).
   if (isX402Envelope(obj)) {
-    const result = fromX402Envelope(obj as unknown as x402PaymentRequiredEnvelope, now);
-    // Validate the normalized output with the same checks as native s402 decode
-    // (payTo format, control chars, u64 bounds) — prevents weaker x402 validation
-    // from producing an s402PaymentRequirements that would fail native validation.
-    const record = result as unknown as Record<string, unknown>;
-    validateRequirementsShape(record);
-    return pickRequirementsFields(record);
+    validateRequirementsShape(obj);
+    return pickRequirementsFields(obj, now);
   }
+
   // x402 V1 flat: { x402Version, scheme, network, amount/maxAmountRequired, ... }
   if (isX402(obj)) {
     validateX402Shape(obj);
-    const result = fromX402Requirements(obj as unknown as x402PaymentRequirements, now);
-    const record = result as unknown as Record<string, unknown>;
-    validateRequirementsShape(record);
-    return pickRequirementsFields(record);
+    const entry = fromX402Requirements(obj as unknown as x402PaymentRequirements, now);
+    const v1 = obj as unknown as x402PaymentRequirements;
+    const required: s402PaymentRequired = {
+      x402Version: 2,
+      // V1 carried resource metadata on the requirement itself; V2 hoists it.
+      resource: { url: v1.resource ?? '', ...(v1.description ? { description: v1.description } : {}) },
+      accepts: [entry],
+    };
+    const wire = toRequirementsWire(required) as Record<string, unknown>;
+    validateRequirementsShape(wire, { liftedFromLegacy: true });
+    return pickRequirementsFields(wire);
   }
+
   throw new s402Error('INVALID_PAYLOAD', 'Unrecognized payment requirements format: missing s402Version or x402Version');
 }
 

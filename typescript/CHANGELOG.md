@@ -9,14 +9,128 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- A payment payload may carry `network`, naming which `accepts[]` entry it answers, and every
+  decoder now keeps it. Since wire v2 a 402 can offer the same scheme on several networks, so the
+  scheme name alone cannot identify the offer — and the specification had told decoders to strip
+  the field, which made a conformant peer or proxy hand the gate a payment it had to refuse as
+  ambiguous. Specification §5.1 and §10.2, the Python decoder, and a new conformance vector now
+  agree with what the TypeScript client already sent.
+
+### Fixed
+
+- The MCP and A2A carriers hold an outgoing 402 to the same schema the HTTP encoders do. They
+  projected the document and skipped the check, so a 402 with a non-CAIP-2 network or an empty
+  `resource.url` encoded cleanly on either carrier and was then refused by that carrier's own
+  decoder.
+
+### Changed
+
+- **BREAKING (npm major, s402 wire v2): the `payment-required` header now carries an x402 V2
+  `PaymentRequired` envelope on every route.** An unmodified x402 client (`@x402/fetch`,
+  `x402Client` 2.25.0) pays an `s402Gate` with **zero client changes and zero server options** —
+  the sentence the README has made since April, now with nothing to qualify it. The 402 looks like
+  this on the wire:
+
+  ```json
+  {
+    "x402Version": 2,
+    "resource": { "url": "https://api.example.com/paid" },
+    "accepts": [
+      { "scheme": "exact", "network": "sui:mainnet", "asset": "0x2::sui::SUI",
+        "amount": "1000000", "payTo": "0x…", "maxTimeoutSeconds": 60,
+        "extra": { "facilitatorUrl": "https://…", "expiresAt": 1700000000000 } }
+    ],
+    "extensions": { "s402": { "version": "2" } }
+  }
+  ```
+
+  What moved where, and why it is where it is:
+  - **One `accepts[]` entry per offered scheme**, each a complete requirement — its own network,
+    asset, amount and price. One 402 can now offer `exact` on Sui and `exact` on Base, which the
+    old shape could not say at all. `exact` is listed first whenever it is offered, because an
+    x402 client pays the first entry it has a handler for.
+  - **s402's per-requirement fields ride in that entry's `extra`** — `facilitatorUrl`,
+    `expiresAt`, the fee fields, `receiptRequired`, `settlementMode`, `settlementOverrides`, the
+    per-scheme extras and the per-requirement `extensions` bag — keyed exactly as before. In
+    memory they still sit at the top level of `s402PaymentRequirements`; the codec does the
+    projection, so scheme and facilitator code reads what it always read.
+  - **s402's envelope-level fields ride in `extensions.s402`** — `{ version: '2', mandate? }`.
+    The *presence* of that key is what makes a 402 an s402-profile 402. `detectProtocol()` reads
+    it instead of `s402Version`.
+  - **A plain x402 402 with no `extensions.s402` decodes and is payable.** Unknown scheme names
+    are skipped by the client, never refused by the decoder, and unknown keys inside an entry's
+    `extra` are preserved — that bag is x402's and open by its own spec.
+
+  Decision and reasoning: `docs/adr/016-s402-402-is-an-x402-envelope.md`.
+
+- **`s402PaymentRequirements` is now one offer, not a list.** `accepts: s402Scheme[]` is replaced
+  by `scheme: s402SchemeName`, and the new `s402PaymentRequired` is the document that holds the
+  list. Everything that consumes a single requirement — client schemes, server schemes, the
+  facilitator — is unchanged in shape.
+- **`resource` is a required `s402Gate` option**, and `requirements` may now be one offer or an
+  array of them. x402's envelope requires a `ResourceInfo`; this is that field, not an interop
+  switch. `.check()` additionally returns `required` (the whole document) alongside the single
+  offer the payment matched.
+- **`decodePaymentRequired`, `decodeRequirementsBody`, `extractRequirementsFromResponse` and
+  `normalizeRequirements` return `s402PaymentRequired`**; `encodePaymentRequired` and
+  `encodeRequirementsBody` take it. `validateRequirementsShape` and `pickRequirementsFields`
+  operate on the wire envelope, and their error messages name the entry (`accepts[0]: …`).
+- **`s402Client.createPayment()` accepts the whole 402 document** and pays the first `accepts[]`
+  entry it has a registered scheme for on that entry's network. A single offer still works.
+- **`s402ResourceServer.buildRequirements()` returns one entry**; the new
+  `buildPaymentRequired(config, resource)` returns the envelope, with one entry per scheme,
+  `exact` first, and the mandate hoisted. The old "always include `exact` in `accepts`" invariant
+  lives there now.
+- **`toX402V2Requirements` / `toX402V2Envelope` are projections, not translations**, and no longer
+  throw for non-`exact` schemes — every s402 scheme is expressible on an x402 envelope now.
+  `toX402V2Envelope` accepts an array of offers.
+- **MCP `_meta` and A2A `metadata` carry the same wire envelope the header does**, through one
+  shared projection rather than three.
+- The conformance vectors were regenerated against the envelope: 195 vectors across 14 files
+  (`requirements-encode` 23, `requirements-decode` 28, `validation-reject` 59,
+  `compat-normalize` 14).
+
+- **A 402 is checked against x402's own schema before it is published.** Both encoders now refuse
+  to emit a document the pinned `@x402/core` cannot parse, so a route that would have served an
+  unreadable 402 fails at the gate instead. Newly refused: an empty or missing `resource.url`, a
+  `network` that is not CAIP-2, a `maxTimeoutSeconds` of zero, an empty `asset`, a `serviceName`
+  over 32 printable-ASCII characters, more than five `tags`, and an `iconUrl` over 2048
+  characters. The same bounds apply on decode, except `resource.url`, which a peer may leave
+  empty and which only emission requires. A 402 lifted out of a retired flat shape may carry a
+  non-CAIP-2 network — those shapes predate the rule — and can be read but not re-emitted.
+- **`s402Gate` requires an `exact` offer on every route**, checked when the gate is built (or when
+  a `requirements` function runs). On the retired wire the builder added `exact` unconditionally;
+  without this a hand-built offer list produced a 402 no unmodified x402 client can pay.
+- **A payment payload may carry `network`**, naming the `accepts[]` entry it pays;
+  `s402Client.createPayment` fills it in. The field is optional and existing payloads are
+  unaffected. A route offering `exact` on two networks — the configuration the upgrade guide
+  recommends — could not otherwise be paid by a native client at all.
+
+### Added
+
+- **`fromS402V1Requirements()`** in `s402/compat/x402` reads s402's OWN retired flat 402 —
+  `{ s402Version: '1', accepts: ['exact', 'prepaid'], … }` — and expands it to one `accepts[]`
+  entry per scheme with `exact` hoisted first. Understanding what a peer said is an obligation;
+  saying it is not (ADR-013). Nothing emits v1.
+- `normalizeRequirements()` gained one behavior it did not have: when a document carries no
+  `extensions.s402` — a 402 from a server that has never heard of s402 — an entry with no
+  `expiresAt` gets one derived from its `maxTimeoutSeconds`. Without it, inbound x402 traffic
+  bypassed every S1 stale-payment guard, because those guards skip an undefined `expiresAt`.
+  s402's own documents are never touched.
+- `s402PaymentRequired`, `s402ResourceInfo`, `s402SchemeName`, `S402_WIRE_VERSION`,
+  `S402_DEFAULT_MAX_TIMEOUT_SECONDS` and `toRequirementsWire` are exported.
+- Conformance vectors for the cases wire v2 makes possible: two networks on one 402, an x402
+  scheme s402 does not implement, foreign `extra` keys surviving a round trip, and a plain x402
+  V2 402 decoding into something payable.
+
 - **An unmodified x402 client can now pay an `s402Gate`, and there is a test that proves it against
   the real upstream packages.** `test/interop-x402-client.test.ts` runs `@x402/fetch`'s
   `wrapFetchWithPayment` over an `x402Client` (2.25.0, the version published from x402 @
   `2cc7e9a6`) against the gate in-process and asserts paid content, one handler run, and a receipt
   upstream's own decoder reads. Three pieces made it pass:
-  - `s402Gate({ x402: { resource } })` emits the 402 as an x402 V2 `PaymentRequired` envelope
-    (header and body). Opt-in, because s402's native 402 and x402's use the same `accepts` key
-    with different types on the same header — no one document satisfies both decoders.
+  - The 402 is emitted as an x402 V2 `PaymentRequired` envelope (header and body). This shipped
+    first as an opt-in `x402: { resource }` gate option; **wire v2, above, made it the only 402
+    grammar and removed the option before either was released.**
   - The gate reads x402 V2's `PAYMENT-SIGNATURE` and V1's `X-PAYMENT` unconditionally, through
     `fromX402PayloadHeaders`, and remembers which dialect the payment arrived in (`dialect` on the
     `.check()` result).
@@ -96,7 +210,111 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   EVM-only users wanting `exact` should use x402, and that s402 is a wire format rather than a
   payments product.
 
+- **`settlement_pending` is understood on intake, and it is never read as a failure.** x402 #3083
+  specified a non-terminal settle outcome — the transaction was broadcast, the wait for its
+  confirmation failed — and upstream now ships it in the reference resource server. Reading it as
+  a failure is the retry that pays twice, which is why upstream's own server re-settles the *same*
+  broadcast rather than building a new payload. `fromX402SettleResponse()` and
+  `fromX402SettleResponseHeaders()` classify an x402 settle result as `settled | pending | failed`
+  and mark both `settled` and `pending` as not retryable — the same answer for different reasons:
+  one has been paid, the other may have been. `pending` survives even when the transaction hash is
+  missing, which x402 forbids; a server violating its own spec leaves us unable to *name* the
+  transaction, which is not the same as it not existing.
+
+- **The `exact` scheme's payment flow is readable.** x402 #3240 / #3267 gave `exact` an `upfront`
+  flow (settle → resource → respond) signalled by `accepts[].extra.paymentFlow`. `exact` is the
+  only scheme s402 accepts inbound, so the scheme the entire interop claim rests on acquired a
+  second mode — and the intake type had no `extra` field at all, so the mode was not merely unread
+  but unreadable. `extra` is now on the intake type and `x402PaymentFlowOf()` reports the flow,
+  with an absent value meaning `authorization` because that is what the spec says absence means. An
+  unrecognized flow throws rather than defaulting: the guess a client wants least is the one that
+  says "you have not been charged." Emission is unchanged and was already correct.
+
+- **ADR-013 records where compatibility stops.** Understanding what x402 says on intake and saying
+  it on s402's own wire are different decisions, and the second belongs to ADR-007. The record
+  states the boundary as an absence — nothing in `compat/` may collapse a pending onto
+  `success: false` — and notes that ADR-007 already defines `s402EnvelopePending` while `gate.ts`
+  still emits the legacy flat shape, so the emission question is half-answered rather than
+  unexamined. `s402SettleResponse` is untouched.
+
+- **21 new tests** across `test/compat-mpp.test.ts` (8, alternate credential header) and
+  `test/compat-x402-settlement.test.ts` (13, settlement classification and payment flow). Every one
+  was watched failing before the code that makes it pass was written.
+
+- **Every ADR now records whether it was actually built.** All twelve carry an `Implementation:`
+  field (`shipped` · `in-progress` · `not-started` · `upheld`), each determined against the code
+  rather than the prose. `Status: Accepted` only ever meant *decided* — so a decision that shipped
+  and one that was ratified and quietly never built were indistinguishable on the page. The
+  conceived-to-shipped ratio is now countable: **7 of 12 shipped.** Two findings fell straight out
+  of the exercise: ADR-004's extensions framework ships as the `s402/extensions` subpath while its
+  `Status` still reads *Proposed*, and ADR-010's S16 turns out to be half-built — version binding
+  is enforced in the envelope, its scheme-digest half blocked on ADR-006.
+- **A regression test that fails when a documented vector count drifts from reality**
+  (`test/spec-doc-counts.test.ts`). It counts `spec/vectors/` and compares against every
+  `"<N> vectors across <M> files"` claim in `README.md` and `docs/specification.md`, and it
+  refuses to pass vacuously: if the wording changes so no claim is found, the test fails rather
+  than silently verifying nothing. Counts written into prose are derived values maintained by
+  hand, and three independent wrong numbers in one repo is what that looks like after a while.
+- **The README now says who s402 is for and who it is not for.** Deciding whether s402 fits
+  was previously left to the reader to infer from feature tables; it now says plainly that
+  EVM-only users wanting `exact` should use x402, and that s402 is a wire format rather than a
+  payments product.
+
+### Removed
+
+- **The `x402` gate option is gone.** It selected between two 402 grammars; there is one now, so
+  the choice it offered no longer exists. Replace `x402: { resource }` with `resource`. Its
+  `maxTimeoutSeconds` and `extra` move onto the requirement itself; its `extensions` becomes the
+  gate's `extensions`.
+- **`s402ServiceEntry.accepts` is renamed `schemes`.** It was a list of scheme NAMES sitting one
+  type away from an `accepts` that now means a list of requirement OBJECTS — the exact ambiguity
+  ADR-016 removed from the header. Its sibling `s402Discovery` already called it `schemes`.
+- **The flat 402 shape is gone from the wire and from the types**: no `s402Version` on a 402, no
+  `accepts` of scheme-name strings, no `mandate` or `extensions` at the top level of a requirement.
+  `s402Version` is unchanged on payment payloads and settlement responses — those legs did not move.
+
 ### Fixed
+
+- **A payment could be settled against an offer it did not make.** When a 402 offered several
+  entries, the gate matched the payment on its scheme NAME and fell back to the first entry when
+  nothing matched — so a client paying the $5 offer on a route that also lists a $1 one was
+  charged against whichever was listed first, and a payment naming a price nobody offered was
+  charged anyway. An x402 V2 payment carries `accepted`, the full requirement the client chose;
+  the gate now matches on all five economic fields (scheme, network, asset, amount, payTo) and
+  **refuses** when nothing matches instead of falling back. A native payment names the network it
+  paid on (see the `network` field below), and is refused as ambiguous only when two offers that
+  are genuinely different contracts remain.
+- **`s402ResourceServer.buildRequirements()` silently dropped `config.mandate`.** Every route that
+  configured an AP2 mandate emitted a 402 with no mandate on it and nothing said so. `mandate` is
+  a field on the requirement again — that is where a facilitator and a scheme implementation read
+  it, since both are handed one offer and never see the envelope. On the wire it still travels
+  once, at `extensions.s402.mandate`, and the encoder now refuses two entries that disagree about
+  it rather than publishing one of the two answers.
+- **A plain x402 402 decoded through `decodePaymentRequired` had no expiry.** The derivation of
+  `expiresAt` from `maxTimeoutSeconds` — the thing that keeps S1 stale-payment rejection working
+  for a peer that has never heard of s402 — lived only in `normalizeRequirements`, while the docs
+  named `decodePaymentRequired` as the path for exactly those 402s. It now runs on every decode
+  path from one shared helper. `decodePaymentRequired` and `decodeRequirementsBody` take an
+  optional clock so the derivation is testable and the conformance vectors stay reproducible.
+- **One unreadable offer could make a whole 402 unreadable.** s402's fail-hard validators for
+  `escrow` / `upto` / `expiresAt` and the rest ran on every entry's `extra`, including entries
+  naming schemes s402 does not implement. An x402 `auth-capture` offer using an `escrow` key in
+  its own shape would take down the `exact` offer beside it. Those validators now run only on
+  entries whose scheme is one of s402's six; a foreign entry's `extra` is carried through whole,
+  and nothing is lifted out of it.
+- **A mandate written with its fields in a different order read as a conflict.** The
+  agreement check between two offers compared serialized JSON, so `{ required, minPerTx }` and
+  `{ minPerTx, required }` — the same mandate — refused the 402. Comparison is field-wise now, and
+  the check runs at `s402Gate()` construction for a static `requirements` array rather than on
+  every 402: an operator who misconfigures it learns once, at boot, not once per request. The
+  encode-time check remains for a dynamic `requirements` function, which cannot be inspected until
+  it runs.
+- **`s402Gate` accepted an empty `requirements` array**, emitted a 402 with `"accepts": []` that no
+  decoder — including its own — will read, and then handed `undefined` to `verify`. It is refused
+  at gate construction now, and at resolve time for a dynamic `requirements` function.
+- **`exact` is sorted to the front of `accepts[]` by the encoder** rather than left to each
+  caller. x402's client pays the first entry it has a handler for, so an `exact` entry listed
+  third is one an x402 client walks past. ADR-016 stated the rule; stating it was not enforcing it.
 
 - **The README's headline compatibility sentence was false on the first leg of the round trip.**
   "An x402 client can talk to an s402 server with zero modifications" had stood since April with
@@ -206,6 +424,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requirements (`JSON.parse('')` on the empty value), leaving the client nothing to retry against.
   Both sites now use a truthiness check, matching x402's own server (`getHeader('payment-signature')
   || getHeader('x-payment')`).
+
+
+- **A 402 assembled by hand published routes with the spending authorization removed.**
+  `toX402V2Envelope` built its `accepts[]` offer by offer, and a mandate lives in
+  `extensions.s402` — which only the whole-document projection writes — so it was silently
+  dropped, and s402's own decoder then read the result as a foreign x402 402 and stamped a 60s
+  expiry the server never set. It goes through the same projection the header encoder uses, and
+  the two are asserted byte-identical.
+- **A checksummed address or a re-serialized amount was refused as a different contract.** An x402
+  V2 payment whose `accepted` carried the same offer with `payTo` checksummed differently, or
+  `amount` as a number, came back `SCHEME_NOT_SUPPORTED`. Identifiers now compare
+  case-insensitively and amounts numerically. An `accepted` truncated to `{ scheme, network }` —
+  which is all upstream's type promises — matches the route; one that states a price matching
+  nothing still fails.
+- **An `exact` offer whose `extra.paymentFlow` this build cannot name is refused again.** The
+  check existed on the retired flat path and did not survive the move, so an `auth-capture` flow
+  was carried through and paid as plain `exact`. A foreign scheme's own flow is still not graded.
+- **A `maxTimeoutSeconds` of zero produced an offer with no expiry at all**, which walks past every
+  stale-payment guard — the one outcome the derivation exists to prevent. Zero is now refused on
+  the wire, and a zero reaching `applyForeignExpiry` directly derives an already-expired offer.
+- **A 402 in the retired flat shape read as "no payment required".** `detectProtocol` returned
+  `unknown` for it — the same answer as a response with no `payment-required` header — and
+  `extractRequirementsFromResponse` returned `null`, so during a rolling upgrade a client neither
+  paid nor errored. Both read it now, in TypeScript and in Python.
+- **A route's mandate never reached the facilitator.** `s402Gate`'s `mandate` option was written
+  onto the envelope only, and a scheme is handed one offer and never sees the envelope — so a
+  mandate-required route verified as mandate-free. The gate now copies it down the way the decode
+  side always has, onto copies rather than the caller's own objects.
+- **`pnpm demo` crashed on its first line**, and `demo-api`, `mcp-demo`, the joke-api example and
+  `@sweefi/server` did not compile against wire v2. None of it was visible because
+  `typescript/tsconfig.json` included only `src`; `test` and `examples` are in it now, which is
+  the fix for the class rather than the instances.
 
 ## [0.8.0] - 2026-06-28
 

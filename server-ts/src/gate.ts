@@ -15,12 +15,15 @@
  */
 
 import type {
+  s402PaymentRequired,
   s402PaymentRequirements,
+  s402ResourceInfo,
   s402PaymentPayload,
   s402SettleResponse,
 } from 's402';
 import {
   encodePaymentRequired,
+  encodeRequirementsBody,
   decodePaymentPayload,
   encodeSettleResponse,
   S402_HEADERS,
@@ -45,6 +48,12 @@ export interface S402GateOptions {
   requirements:
     | s402PaymentRequirements
     | ((request: Request) => s402PaymentRequirements | Promise<s402PaymentRequirements>);
+
+  /**
+   * What is being paid for. **Required**, because s402's 402 is an x402 V2
+   * `PaymentRequired` envelope on every route and x402 requires it (ADR-016).
+   */
+  resource: s402ResourceInfo;
 
   /**
    * Optional custom 402 response builder. Defaults to JSON body with `payment-required`
@@ -107,7 +116,7 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
  * @example Hono
  * ```ts
  * import { s402Gate } from '@sweefi/server';
- * const gate = s402Gate({ server, requirements });
+ * const gate = s402Gate({ server, requirements, resource: { url: 'https://api.example.com/paid' } });
  *
  * app.get('/api/paid', (c) =>
  *   gate(async () => Response.json({ data: 'hello, paid world' }))(c.req.raw),
@@ -116,7 +125,7 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
  *
  * @example Next.js App Router
  * ```ts
- * export const GET = s402Gate({ server, requirements })(async () =>
+ * export const GET = s402Gate({ server, requirements, resource })(async () =>
  *   Response.json({ data: 'paid content' }),
  * );
  * ```
@@ -124,7 +133,7 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
  * @example Bun / Cloudflare Workers / Deno
  * ```ts
  * Bun.serve({
- *   fetch: s402Gate({ server, requirements })(async () => Response.json({ ok: true })),
+ *   fetch: s402Gate({ server, requirements, resource })(async () => Response.json({ ok: true })),
  * });
  * ```
  */
@@ -233,15 +242,14 @@ async function build402(
   const custom = await options.on402?.(request, requirements);
   if (custom) return withHygiene(custom);
 
+  const required = toRequired(options, requirements);
+  // The body is the SAME projected wire the header carries, not the in-memory
+  // shape. `JSON.stringify` published `mandate` and the other s402 fields at the
+  // top of the entry, where nothing reads them, while the header carried them
+  // projected into `extra` and `extensions.s402` — one response, two documents,
+  // disagreeing about what the route requires.
   return new Response(
-    JSON.stringify({
-      error: 'Payment Required',
-      s402Version: requirements.s402Version,
-      accepts: requirements.accepts,
-      network: requirements.network,
-      amount: requirements.amount,
-      asset: requirements.asset,
-    }),
+    encodeRequirementsBody(required),
     {
       status: 402,
       headers: {
@@ -249,10 +257,28 @@ async function build402(
         'cache-control': 'no-store',
         'x-content-type-options': 'nosniff',
         'access-control-expose-headers': CORS_EXPOSE,
-        [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
+        [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(required),
       },
     },
   );
+}
+
+/**
+ * Wrap one requirement in the x402 V2 `PaymentRequired` envelope the wire
+ * carries. Since wire v2 there is no flat 402 shape and no option to select
+ * one, so a 402 body that is a hand-written summary of the requirement is a
+ * document no x402 client can read (ADR-016).
+ */
+function toRequired(
+  options: S402GateOptions,
+  requirements: s402PaymentRequirements,
+): s402PaymentRequired {
+  return {
+    x402Version: 2,
+    resource: options.resource,
+    error: 'Payment Required',
+    accepts: [requirements],
+  };
 }
 
 async function buildError(

@@ -307,8 +307,7 @@ describe('fromMppChargeChallenge', () => {
 
   it('translates a Tempo Charge into s402 exact requirements', () => {
     const req = fromMppChargeChallenge(baseChallenge);
-    expect(req.s402Version).toBe('1');
-    expect(req.accepts).toEqual(['exact']);
+    expect(req.scheme).toBe('exact');
     expect(req.network).toBe('tempo:42431');
     expect(req.asset).toBe('0x20c0000000000000000000000000000000000000');
     expect(req.amount).toBe('1000000');

@@ -60,7 +60,12 @@ class TestRequirementsDecode:
 
     @pytest.mark.parametrize("vector", vectors, ids=[v["description"] for v in vectors])
     def test_decode(self, vector: dict) -> None:
-        result = decode_payment_required(vector["input"]["header"])
+        # `now` is present only on vectors decoding a document with no
+        # extensions.s402, where expiresAt is derived from maxTimeoutSeconds.
+        # Runners must pass it, or the expectation is not reproducible.
+        result = decode_payment_required(
+            vector["input"]["header"], vector["input"].get("now")
+        )
         assert result == vector["expected"]
 
 
@@ -292,3 +297,42 @@ class TestRoundtrip:
         assert re_encoded == expected["reEncode"]
         assert expected["identical"] is True
         assert encoded == re_encoded
+
+
+# ── ADR-016 rework, item 8: the retired v1 flat 402 is still ours ──────────
+#
+# Mirrors `test/adr016-findings.test.ts` in the TypeScript implementation. A
+# client that returns "unknown" for a v1 402 cannot tell a server mid-upgrade
+# from a route that wants no payment, so it neither pays nor errors.
+
+def _v1_header() -> str:
+    return base64.b64encode(json.dumps({
+        "s402Version": "1",
+        "accepts": ["exact"],
+        "network": "sui:mainnet",
+        "asset": "0x2::sui::SUI",
+        "amount": "1000",
+        "payTo": "0xabc",
+    }).encode()).decode()
+
+
+def test_detect_protocol_calls_a_v1_flat_402_s402():
+    from s402.http import detect_protocol
+    assert detect_protocol({"payment-required": _v1_header()}) == "s402"
+
+
+def test_detect_protocol_still_says_unknown_without_a_header():
+    from s402.http import detect_protocol
+    assert detect_protocol({}) == "unknown"
+    assert detect_protocol({"payment-required": "not base64 at all"}) == "unknown"
+
+
+def test_detect_protocol_calls_a_plain_x402_envelope_x402():
+    from s402.http import detect_protocol
+    header = base64.b64encode(json.dumps({
+        "x402Version": 2,
+        "resource": {"url": "https://api.example.com/paid"},
+        "accepts": [{"scheme": "exact", "network": "sui:mainnet", "asset": "SUI",
+                     "amount": "1000", "payTo": "0xabc", "maxTimeoutSeconds": 60, "extra": {}}],
+    }).encode()).decode()
+    assert detect_protocol({"payment-required": header}) == "x402"

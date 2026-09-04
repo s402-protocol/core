@@ -32,15 +32,25 @@ const client = new s402Client()
 
 ### `createPayment(requirements)`
 
-Build a payment payload for the given requirements. Auto-selects the best scheme — the first scheme in the server's `accepts` array that the client has a registered implementation for.
+Build a payment payload. Pass the whole 402 document and the client picks the
+**first `accepts[]` entry it has a registered scheme for on that entry's own
+network**. Entries naming a scheme or a network this client cannot pay are
+skipped, not refused — one 402 may legitimately offer `exact` on Sui and
+something else somewhere else. Pass a single requirement instead to pay exactly
+that one.
 
 ```typescript
 async createPayment(
-  requirements: s402PaymentRequirements,
+  input: s402PaymentRequired | s402PaymentRequirements,
 ): Promise<s402PaymentPayload>;
 ```
 
-Accepts typed `s402PaymentRequirements`. For x402 input, normalize first via `normalizeRequirements()` from `s402/compat/x402`.
+A plain x402 V2 402 decodes into the same document, so it works here too. Only
+the two retired flat shapes need `normalizeRequirements()` from
+`s402/compat/x402` first.
+
+The returned payload carries `network`, naming the entry it paid, so a gate
+offering the same scheme on two networks can tell them apart.
 
 **Throws:**
 - `NETWORK_MISMATCH` — no schemes registered for the requirements' network
@@ -49,9 +59,9 @@ Accepts typed `s402PaymentRequirements`. For x402 input, normalize first via `no
 **Example:**
 
 ```typescript
-const requirements = decodePaymentRequired(header);
-const payment = await client.createPayment(requirements);
-// payment.scheme will be the best match from requirements.accepts
+const required = decodePaymentRequired(header);
+const payment = await client.createPayment(required);
+// payment.scheme and payment.network name the accepts[] entry it chose
 ```
 
 ### `supports(network, scheme)`
@@ -86,7 +96,9 @@ setFacilitator(facilitator: s402Facilitator): this;
 
 ### `buildRequirements(config)`
 
-Build payment requirements for a route from a config object.
+Build **one** `accepts[]` entry — a single offer — for a route. To emit a 402 you
+want [`buildPaymentRequired()`](#buildpaymentrequired-config-resource), which
+wraps one or more of these in the envelope the wire carries.
 
 ```typescript
 buildRequirements(config: s402RouteConfig): s402PaymentRequirements;
@@ -100,13 +112,38 @@ If a registered scheme has a custom builder, it is used. Otherwise, a generic re
 const server = new s402ResourceServer();
 server.setFacilitator(facilitator);
 
-const requirements = server.buildRequirements({
+// ONE accepts[] entry — the scheme is `config.schemes[0]` unless you override it.
+const requirement = server.buildRequirements({
   schemes: ['exact', 'prepaid'],
   price: '1000000',
   network: 'sui:mainnet',
   payTo: '0xrecipient...',
 });
-// requirements.accepts = ['exact', 'prepaid']
+// requirement.scheme === 'exact'
+```
+
+### `buildPaymentRequired(config, resource)`
+
+Build the 402 **document** for a route: the x402 V2 envelope, with one
+`accepts[]` entry per offered scheme. This is what you hand to
+`encodePaymentRequired()`.
+
+```typescript
+buildPaymentRequired(
+  config: s402RouteConfig,
+  resource: s402ResourceInfo,
+): s402PaymentRequired;
+```
+
+**`exact` is always offered and always first**, because an x402 client pays the
+first entry it has a handler for.
+
+```typescript
+const required = server.buildPaymentRequired(
+  { schemes: ['prepaid'], price: '1000000', network: 'sui:mainnet', payTo: '0x…', asset: '0x2::sui::SUI' },
+  { url: 'https://api.example.com/paid' },
+);
+// required.accepts.map((a) => a.scheme) === ['exact', 'prepaid']
 ```
 
 ### `verify(payload, requirements)`

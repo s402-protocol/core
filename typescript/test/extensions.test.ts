@@ -17,8 +17,7 @@ import {
 // ── Test fixtures ──────────────────────────────────
 
 const REQUIREMENTS: s402PaymentRequirements = {
-  s402Version: S402_VERSION,
-  accepts: ['exact'],
+  scheme: 'exact',
   network: 'sui:testnet',
   asset: '0x2::sui::SUI',
   amount: '1000000000',

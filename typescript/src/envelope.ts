@@ -387,16 +387,17 @@ export async function verifyEnvelope(
     now = Date.now,
   } = options;
 
-  // 1. Scheme match — envelope.scheme must equal the payload's scheme AND be
-  // in the requirements.accepts list (requirements carries a list of accepted
-  // schemes; the payload picks one).
+  // 1. Scheme match — envelope.scheme must equal BOTH the payload's scheme and
+  // the one scheme these requirements offer. (Before wire v2 the requirement
+  // carried a list; the 402 envelope's `accepts[]` is where a list lives now.)
   if (envelope.scheme !== originalRequest.payload.scheme) {
     throw new s402Error('INVALID_PAYLOAD',
       `envelope.scheme "${envelope.scheme}" does not match payload scheme "${originalRequest.payload.scheme}"`);
   }
-  if (!originalRequest.requirements.accepts.includes(envelope.scheme)) {
+  if (originalRequest.requirements.scheme !== envelope.scheme) {
     throw new s402Error('SCHEME_NOT_SUPPORTED',
-      `envelope.scheme "${envelope.scheme}" is not in requirements.accepts`);
+      `envelope.scheme "${envelope.scheme}" is not the scheme these requirements offer ` +
+      `("${originalRequest.requirements.scheme}")`);
   }
   // 2. Spec-digest match
   if (envelope.specDigest !== expectedSpecDigest) {
