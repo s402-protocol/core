@@ -46,6 +46,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   typechecks against the current source, and it has a README with the verified route (`/api/joke`,
   not `/api/data`), the decoded 402 body, and an explicit statement that its facilitator is a mock
   that settles nothing.
+- **`settlement_pending` is understood on intake, and it is never read as a failure.** x402 #3083
+  specified a non-terminal settle outcome — the transaction was broadcast, the wait for its
+  confirmation failed — and upstream now ships it in the reference resource server. Reading it as
+  a failure is the retry that pays twice, which is why upstream's own server re-settles the *same*
+  broadcast rather than building a new payload. `fromX402SettleResponse()` and
+  `fromX402SettleResponseHeaders()` classify an x402 settle result as `settled | pending | failed`
+  and mark both `settled` and `pending` as not retryable — the same answer for different reasons:
+  one has been paid, the other may have been. `pending` survives even when the transaction hash is
+  missing, which x402 forbids; a server violating its own spec leaves us unable to *name* the
+  transaction, which is not the same as it not existing.
+
+- **The `exact` scheme's payment flow is readable.** x402 #3240 / #3267 gave `exact` an `upfront`
+  flow (settle → resource → respond) signalled by `accepts[].extra.paymentFlow`. `exact` is the
+  only scheme s402 accepts inbound, so the scheme the entire interop claim rests on acquired a
+  second mode — and the intake type had no `extra` field at all, so the mode was not merely unread
+  but unreadable. `extra` is now on the intake type and `x402PaymentFlowOf()` reports the flow,
+  with an absent value meaning `authorization` because that is what the spec says absence means. An
+  unrecognized flow throws rather than defaulting: the guess a client wants least is the one that
+  says "you have not been charged." Emission is unchanged and was already correct.
+
+- **ADR-013 records where compatibility stops.** Understanding what x402 says on intake and saying
+  it on s402's own wire are different decisions, and the second belongs to ADR-007. The record
+  states the boundary as an absence — nothing in `compat/` may collapse a pending onto
+  `success: false` — and notes that ADR-007 already defines `s402EnvelopePending` while `gate.ts`
+  still emits the legacy flat shape, so the emission question is half-answered rather than
+  unexamined. `s402SettleResponse` is untouched.
+
+- **21 new tests** across `test/compat-mpp.test.ts` (8, alternate credential header) and
+  `test/compat-x402-settlement.test.ts` (13, settlement classification and payment flow). Every one
+  was watched failing before the code that makes it pass was written.
+
+- **Every ADR now records whether it was actually built.** All twelve carry an `Implementation:`
+  field (`shipped` · `in-progress` · `not-started` · `upheld`), each determined against the code
+  rather than the prose. `Status: Accepted` only ever meant *decided* — so a decision that shipped
+  and one that was ratified and quietly never built were indistinguishable on the page. The
+  conceived-to-shipped ratio is now countable: **7 of 12 shipped.** Two findings fell straight out
+  of the exercise: ADR-004's extensions framework ships as the `s402/extensions` subpath while its
+  `Status` still reads *Proposed*, and ADR-010's S16 turns out to be half-built — version binding
+  is enforced in the envelope, its scheme-digest half blocked on ADR-006.
+- **A regression test that fails when a documented vector count drifts from reality**
+  (`test/spec-doc-counts.test.ts`). It counts `spec/vectors/` and compares against every
+  `"<N> vectors across <M> files"` claim in `README.md` and `docs/specification.md`, and it
+  refuses to pass vacuously: if the wording changes so no claim is found, the test fails rather
+  than silently verifying nothing. Counts written into prose are derived values maintained by
+  hand, and three independent wrong numbers in one repo is what that looks like after a while.
+- **The README now says who s402 is for and who it is not for.** Deciding whether s402 fits
+  was previously left to the reader to infer from feature tables; it now says plainly that
+  EVM-only users wanting `exact` should use x402, and that s402 is a wire format rather than a
+  payments product.
 
 ### Fixed
 
@@ -157,58 +206,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   requirements (`JSON.parse('')` on the empty value), leaving the client nothing to retry against.
   Both sites now use a truthiness check, matching x402's own server (`getHeader('payment-signature')
   || getHeader('x-payment')`).
-
-### Added
-
-- **`settlement_pending` is understood on intake, and it is never read as a failure.** x402 #3083
-  specified a non-terminal settle outcome — the transaction was broadcast, the wait for its
-  confirmation failed — and upstream now ships it in the reference resource server. Reading it as
-  a failure is the retry that pays twice, which is why upstream's own server re-settles the *same*
-  broadcast rather than building a new payload. `fromX402SettleResponse()` and
-  `fromX402SettleResponseHeaders()` classify an x402 settle result as `settled | pending | failed`
-  and mark both `settled` and `pending` as not retryable — the same answer for different reasons:
-  one has been paid, the other may have been. `pending` survives even when the transaction hash is
-  missing, which x402 forbids; a server violating its own spec leaves us unable to *name* the
-  transaction, which is not the same as it not existing.
-
-- **The `exact` scheme's payment flow is readable.** x402 #3240 / #3267 gave `exact` an `upfront`
-  flow (settle → resource → respond) signalled by `accepts[].extra.paymentFlow`. `exact` is the
-  only scheme s402 accepts inbound, so the scheme the entire interop claim rests on acquired a
-  second mode — and the intake type had no `extra` field at all, so the mode was not merely unread
-  but unreadable. `extra` is now on the intake type and `x402PaymentFlowOf()` reports the flow,
-  with an absent value meaning `authorization` because that is what the spec says absence means. An
-  unrecognized flow throws rather than defaulting: the guess a client wants least is the one that
-  says "you have not been charged." Emission is unchanged and was already correct.
-
-- **ADR-013 records where compatibility stops.** Understanding what x402 says on intake and saying
-  it on s402's own wire are different decisions, and the second belongs to ADR-007. The record
-  states the boundary as an absence — nothing in `compat/` may collapse a pending onto
-  `success: false` — and notes that ADR-007 already defines `s402EnvelopePending` while `gate.ts`
-  still emits the legacy flat shape, so the emission question is half-answered rather than
-  unexamined. `s402SettleResponse` is untouched.
-
-- **21 new tests** across `test/compat-mpp.test.ts` (8, alternate credential header) and
-  `test/compat-x402-settlement.test.ts` (13, settlement classification and payment flow). Every one
-  was watched failing before the code that makes it pass was written.
-
-- **Every ADR now records whether it was actually built.** All twelve carry an `Implementation:`
-  field (`shipped` · `in-progress` · `not-started` · `upheld`), each determined against the code
-  rather than the prose. `Status: Accepted` only ever meant *decided* — so a decision that shipped
-  and one that was ratified and quietly never built were indistinguishable on the page. The
-  conceived-to-shipped ratio is now countable: **7 of 12 shipped.** Two findings fell straight out
-  of the exercise: ADR-004's extensions framework ships as the `s402/extensions` subpath while its
-  `Status` still reads *Proposed*, and ADR-010's S16 turns out to be half-built — version binding
-  is enforced in the envelope, its scheme-digest half blocked on ADR-006.
-- **A regression test that fails when a documented vector count drifts from reality**
-  (`test/spec-doc-counts.test.ts`). It counts `spec/vectors/` and compares against every
-  `"<N> vectors across <M> files"` claim in `README.md` and `docs/specification.md`, and it
-  refuses to pass vacuously: if the wording changes so no claim is found, the test fails rather
-  than silently verifying nothing. Counts written into prose are derived values maintained by
-  hand, and three independent wrong numbers in one repo is what that looks like after a while.
-- **The README now says who s402 is for and who it is not for.** Deciding whether s402 fits
-  was previously left to the reader to infer from feature tables; it now says plainly that
-  EVM-only users wanting `exact` should use x402, and that s402 is a wire format rather than a
-  payments product.
 
 ## [0.8.0] - 2026-06-28
 
