@@ -92,11 +92,11 @@ s402 uses the same HTTP headers as x402:
 
 | Header | Direction | Content |
 |--------|-----------|---------|
-| `payment-required` | Server → Client | Base64-encoded JSON requirements |
+| `payment-required` | Server → Client | Base64-encoded x402 V2 `PaymentRequired` envelope |
 | `x-payment` | Client → Server | Base64-encoded JSON payload |
 | `payment-response` | Server → Client | Base64-encoded JSON settle result |
 
-The presence of `s402Version` in the decoded JSON distinguishes s402 from x402. The `normalizeRequirements()` function handles auto-detection.
+The 402 document is x402 V2's, so nothing distinguishes an s402 402 from a plain x402 one except `extensions.s402` — and a 402 without it is still payable. `detectProtocol()` reports which you have; `normalizeRequirements()` also reads the two retired flat shapes (x402 V1, s402 wire v1).
 
 ## Transport Abstraction
 
@@ -167,5 +167,5 @@ The vectors live in `test/conformance/vectors/` in the repository. They are gene
 
 - **`extensions` field** on requirements allows arbitrary data without breaking parsers
 - **`accepts` array** lets servers advertise multiple schemes, and clients pick the best one
-- **Version field** (`s402Version: '1'`) enables future protocol evolution
+- **Version fields** (`extensions.s402.version` on the 402, `s402Version` on payloads) enable future protocol evolution
 - **Sub-path exports** (`s402/types`, `s402/http`, `s402/errors`, `s402/compat/x402`) let consumers import only what they need

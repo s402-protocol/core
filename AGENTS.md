@@ -8,11 +8,11 @@
 
 ```
 s402-protocol/core
-├── spec/vectors/          — 167 conformance test vectors (THE protocol spec, language-agnostic) <!-- corrected 2026-07-02: was 132; count verified on disk + v0.8.0 changelog -->
+├── spec/vectors/          — 187 conformance test vectors (THE protocol spec, language-agnostic) <!-- corrected 2026-07-02: was 132; count verified on disk + v0.8.0 changelog -->
 ├── docs/                  — VitePress docs site (s402-protocol.org) + wire format specification
 ├── typescript/            — TypeScript reference implementation (npm: s402)
 │   ├── src/               — 19 source files (incl. 3 compat), zero runtime deps <!-- corrected 2026-07-19: was 11, then 16; count verified on disk -->
-│   ├── test/              — 1,098 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-07-02: was 736; per v0.8.0 CHANGELOG -->
+│   ├── test/              — 1,256 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-09-04: was 1,098; wire v2 (DAN-1078) -->
 │   └── examples/          — Runnable joke-api demo
 ├── python/                — Python implementation (pip: s402)
 │   ├── src/s402/          — 5 source files, zero runtime deps
@@ -35,7 +35,7 @@ typescript/src/
   server.ts       — s402ResourceServer class (requirements builder)
   facilitator.ts  — s402Facilitator class (verify + settle dispatch)
   http.ts         — Base64 encode/decode for HTTP headers + canonical validators
-  compat.ts       — Optional x402 migration aid (opt-in, not ambient)
+  compat/x402.ts  — x402 payload/receipt dialect bridging + the retired flat 402 shapes
   errors.ts       — Typed error codes with recovery hints
   receipts.ts     — Signed usage receipt header format/parse
   test-utils.ts   — Mock schemes for integration testing
@@ -47,7 +47,16 @@ typescript/src/
 - **Chain-agnostic (S7).** No chain-specific address formats, amount bounds, or imports in `src/`. Sui validation → `@sweefi/sui`. Solana validation → `@sweefi/solana`. See S7 invariant below.
 - **ESM only.** No CommonJS.
 - **Types are the product.** Most consumers import types only. Keep the type surface clean and well-documented.
-- **x402 compat is opt-in.** The `s402/compat` subpath provides x402 V1/V2 normalization as a migration aid. The core protocol (`client.ts`, `http.ts`) has no x402 dependency.
+- **The 402 is x402's document; the compat subpath is for the RETIRED shapes.** Since wire v2
+  (ADR-016) `payment-required` carries an x402 V2 `PaymentRequired` envelope on every route, so
+  `http.ts` encodes and decodes x402's shape natively and needs no compat call. `s402/compat/x402`
+  covers what is no longer emitted — x402 V1 flat, s402's own pre-v2 flat 402
+  (`fromS402V1Requirements`) — plus payload/receipt dialect bridging. The core still has no runtime
+  x402 dependency.
+- **Where a field travels is the design.** s402's per-requirement fields ride in each `accepts[]`
+  entry's `extra`; its envelope-level fields ride in `extensions.s402`. In memory they sit flat on
+  `s402PaymentRequirements` / `s402PaymentRequired`; `http.ts` does the projection. Do not add an
+  s402 key to the top level of an entry or of the envelope — those levels are x402's.
 
 ## Commands
 
@@ -55,7 +64,7 @@ typescript/src/
 # TypeScript (run from typescript/)
 cd typescript
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (1,098 across 28 files, incl. 167-vector conformance)
+pnpm run test       # Run tests (1,256 across 32 files, incl. 187-vector conformance)
 pnpm run typecheck  # tsc --noEmit
 
 # Python (run from python/)
@@ -66,7 +75,7 @@ pytest              # Run conformance tests (154 vectors — the 12 codec files;
 
 ## Conformance test suite
 
-`spec/vectors/` contains 167 machine-readable JSON test vectors across 14 files. <!-- corrected 2026-07-02: was "132 across 12" --> These are the **product** — both the TypeScript and Python implementations read from this single directory. Cross-language implementors (Go, Rust) use these same vectors to verify s402 conformance.
+`spec/vectors/` contains 187 machine-readable JSON test vectors across 14 files. <!-- corrected 2026-07-02: was "132 across 12" --> These are the **product** — both the TypeScript and Python implementations read from this single directory. Cross-language implementors (Go, Rust) use these same vectors to verify s402 conformance.
 
 - **Generator**: `npx tsx test/conformance/generate-vectors.ts` — regenerate after any encode/decode changes
 - **TS Runner**: `typescript/test/conformance/conformance.test.ts`
@@ -195,8 +204,8 @@ Three independent validation boundaries, each validates without trusting the pre
 
 | Boundary | Location | Defense |
 |----------|----------|---------|
-| Wire decode | `http.ts` `decodePaymentRequired()` | Base64 → JSON → shape validation → allowlist key stripping |
-| Client intake | `client.ts` `createPayment()` | Accepts typed `s402PaymentRequirements` only. For x402 input, caller must use `normalizeRequirements()` from `s402/compat` first. |
+| Wire decode | `http.ts` `decodePaymentRequired()` | Base64 → JSON → envelope shape validation → allowlist key stripping at envelope, `accepts[]` entry and `resource` levels. An entry's `extra` is deliberately NOT stripped — that bag is x402's and open by its spec. |
+| Client intake | `client.ts` `createPayment()` | Accepts a typed `s402PaymentRequired` document or one `s402PaymentRequirements` entry. An x402 V2 402 is already that document; only the retired flat shapes need `normalizeRequirements()` from `s402/compat/x402`. |
 | Facilitator process | `facilitator.ts` `process()` | Type defense on expiresAt → expiration guard → verify → latency guard → settle |
 
 The canonical validators (`validateRequirementsShape`, `pickRequirementsFields`) live in `http.ts`. The compat layer imports from `http.ts` — no duplicated validation code.

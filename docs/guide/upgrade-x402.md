@@ -10,8 +10,8 @@ This guide is for x402 server maintainers, x402 client maintainers, and AI codin
 
 ## TL;DR
 
-- s402 reads x402 V1 **and** V2 payments on every gate, and emits x402 V2's 402 with one gate option
-- Your x402 `exact` flow keeps working — no client changes required, one server option (`x402: { resource }`)
+- s402 reads x402 V1 **and** V2 payments on every gate, and its 402 **is** an x402 V2 `PaymentRequired` envelope on every route
+- Your x402 `exact` flow keeps working — **zero client changes and zero server options**
 - Audited against x402 @ `2cc7e9a6` (2026-09-04); the pin lives in code as `X402_UPSTREAM_PIN`
 - You gain on-chain NFT receipts, atomic PTB settlement on Sui, and typed errors with `retryable` + `suggestedAction`
 - If you want them, five additional schemes are available: Upto, Prepaid, Escrow, Stream, Unlock
@@ -22,29 +22,30 @@ The transport: HTTP 402, base64-encoded JSON in headers. The header *names* are 
 
 | Leg | x402 V1 | x402 V2 | s402 native | `s402Gate` accepts |
 |-----|---------|---------|-------------|--------------------|
-| 402 → client | JSON body (`x402Version: 1`) | `PAYMENT-REQUIRED` | `payment-required` | emits s402 native; emits the x402 V2 envelope with the `x402` option |
+| 402 → client | JSON body (`x402Version: 1`) | `PAYMENT-REQUIRED` | `payment-required` | emits the x402 V2 envelope, always |
 | payment → server | `X-PAYMENT` | `PAYMENT-SIGNATURE` | `x-payment` | all three, always |
 | receipt → client | `X-PAYMENT-RESPONSE` | `PAYMENT-RESPONSE` | `payment-response` | answers in the dialect the payment arrived in |
 
 *(Header names verified against `specs/transports-v1/http.md` and `specs/transports-v2/http.md` at x402 @ `2cc7e9a6`.)*
 
-An x402 client sending an `exact` payment to an `s402Gate` is accepted with **zero client changes**. For that client to also *read the 402* it needs the gate to speak x402's envelope — one server option, below. The round trip is proven against the unmodified upstream `@x402/fetch` in `typescript/test/interop-x402-client.test.ts`.
+An x402 client sending an `exact` payment to an `s402Gate` is accepted with **zero client changes**, and it can read the 402 too, because that 402 is x402's own document. The round trip is proven against the unmodified upstream `@x402/fetch` in `typescript/test/interop-x402-client.test.ts`.
 
 ## Drop-in migration (server)
 
-For `exact`-scheme traffic, the payload an x402 client signs is the same payload an s402 facilitator verifies. If you have an x402 server today using the `exact` scheme, your existing x402 clients work against an `s402Gate` with **zero client changes and one server option**:
+For `exact`-scheme traffic, the payload an x402 client signs is the same payload an s402 facilitator verifies. If you have an x402 server today using the `exact` scheme, your existing x402 clients work against an `s402Gate` with **zero client changes and zero server options**:
 
 ```typescript
 const gate = s402Gate({
   server,
   requirements,
-  x402: { resource: { url: 'https://api.example.com/paid', mimeType: 'application/json' } },
+  // Required, because x402's V2 envelope requires it — not an interop switch.
+  resource: { url: 'https://api.example.com/paid', mimeType: 'application/json' },
 });
 ```
 
-That option makes the 402 an x402 V2 `PaymentRequired` envelope. Payment intake and the receipt need nothing: the gate reads `PAYMENT-SIGNATURE` and `X-PAYMENT` unconditionally and answers an x402 payment with an x402-shaped `PAYMENT-RESPONSE`. Why the 402 half is opt-in — the two protocols use the same `accepts` key for different things on the same header — is [ADR-015](../adr/015-x402-dialect-at-the-gate.md).
+All three legs need nothing further: the 402 is an x402 V2 `PaymentRequired` envelope, the gate reads `PAYMENT-SIGNATURE` and `X-PAYMENT` unconditionally, and it answers an x402 payment with an x402-shaped `PAYMENT-RESPONSE`. Why there is only one grammar — s402 is a *profile* of x402, not a rival wire format — is [ADR-016](../adr/016-s402-402-is-an-x402-envelope.md).
 
-If you are wiring headers by hand instead of using the gate, the same pieces are exported from `s402/compat/x402`: `toX402V2Envelope` + `encodeX402V2Envelope` for the 402, `fromX402PayloadHeaders` for intake, `toX402SettleResponse` + `encodeX402SettleResponse` for the receipt.
+If you are wiring headers by hand instead of using the gate, `encodePaymentRequired` already emits the envelope; `s402/compat/x402` adds `fromX402PayloadHeaders` for intake and `toX402SettleResponse` + `encodeX402SettleResponse` for the receipt.
 
 ```typescript
 import {
@@ -92,15 +93,21 @@ async function handlePaidRequest(req: Request): Promise<Response> {
 }
 ```
 
-For **x402 V2 requirements** (the envelope format with `accepts: [{...}, ...]`), use the compat layer to normalize them into s402 shape:
+**x402 V2 requirements need no conversion at all** — that envelope is s402's own document, so
+`decodePaymentRequired` reads it directly. The compat layer is for the two RETIRED flat shapes,
+x402 V1 and s402's own pre-v2 402:
 
 ```typescript
-import { normalizeRequirements } from 's402/compat/x402';
+import { normalizeRequirements, fromS402V1Requirements } from 's402/compat/x402';
 
-// Auto-detects s402 vs x402 V1 flat vs x402 V2 envelope.
-const requirements = normalizeRequirements(JSON.parse(atob(headerFromUpstream)));
-// Always returns s402PaymentRequirements — call server.process() as normal.
+// Auto-detects: wire v2 / x402 V2 envelope, x402 V1 flat, or s402 v1 flat.
+const required = normalizeRequirements(JSON.parse(atob(headerFromUpstream)));
+// Always returns s402PaymentRequired — pick an offer and call server.process().
+await server.process(payload, required.accepts[0]);
 ```
+
+`fromS402V1Requirements()` is the same job for s402's own past: a v1 `accepts: ['exact','prepaid']`
+becomes one `accepts[]` entry per scheme, `exact` first. Nothing emits v1.
 
 That's the migration. Your existing clients continue to work.
 
@@ -140,7 +147,7 @@ x402 expresses one payment pattern: one call, one payment. s402 has six. Staying
 
 ### Do my x402 clients still work?
 
-Yes. s402 servers read x402 V1 `x-payment` headers natively. For x402 V2, use the compat layer.
+Yes — and since wire v2 they can read the 402 as well, with no option set. s402 servers read x402 V1 `X-PAYMENT` and V2 `PAYMENT-SIGNATURE` payloads on every gate.
 
 ### Do I have to switch chains?
 
@@ -152,7 +159,7 @@ No. You can speak both simultaneously. Use `detectProtocol()` on incoming payloa
 
 ### What about x402 V2's multi-chain support?
 
-The x402 V2 compat layer handles V2 inputs. See [`s402/compat/x402`](/api/compat) for the full API.
+V2 *is* s402's wire now — a V2 envelope decodes natively, multi-chain offers included: one 402 can offer `exact` on Sui and `exact` on Base as two `accepts[]` entries. See [`s402/compat/x402`](/api/compat) for what compat still covers.
 
 ### Is there gas sponsorship?
 

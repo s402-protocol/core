@@ -6,7 +6,7 @@ description: One-shot HTTP 402 payment on Sui. One signed PTB per request, fully
 
 One-shot payment. The client builds a signed transfer PTB, the facilitator verifies and broadcasts it atomically. One transaction per request.
 
-**This is the x402-compatible baseline.** An x402 client can talk to an s402 server using this scheme with zero modifications.
+**This is the x402-compatible baseline.** An x402 client talks to an s402 server using this scheme with zero modifications — no client changes and no server options, because s402's 402 is an x402 V2 `PaymentRequired` envelope on every route ([ADR-016](/adr/016-s402-402-is-an-x402-envelope)).
 
 ## When to Use
 

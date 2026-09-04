@@ -1,7 +1,7 @@
 # ADR-016: s402's 402 is an x402 V2 envelope — a profile of x402, not a second dialect on its header
 
 **Status:** Accepted (Danny, 2026-09-04: *"yes on the envelope change"*)
-**Implementation:** not-started
+**Implementation:** shipped
 **Force:** invariant — checked by `test/interop-x402-client.test.ts` run **without** any x402 option, and by the `requirements-encode` / `requirements-decode` vectors once rewritten
 **Date:** 2026-09-04
 **Supersedes:** ADR-015 rule 3 and its `x402` gate option (ADR-015 rules 1 and 2 — unconditional intake, dialect-echo receipt — stand). Retires ADR-015 Alternative A's rejection.

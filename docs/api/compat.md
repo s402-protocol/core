@@ -218,26 +218,63 @@ s402's own fields are kept alongside; x402 decoders ignore unknown keys. The rev
 
 ## Serving x402 clients from a gate
 
-The 402 is the one leg an x402 client cannot cross on its own: s402's native `payment-required` carries `s402Version` and `accepts: ['exact']`, while x402 reads `x402Version` and `accepts: [PaymentRequirements]`. Same header, same key, different type — the two cannot share one document. So emitting x402's envelope is a **server option**:
+There is nothing to configure. s402's `payment-required` **is** an x402 V2 `PaymentRequired`
+envelope on every route, so an unmodified `@x402/fetch` client completes the whole round trip:
+it reads the 402, pays under `PAYMENT-SIGNATURE`, and decodes the receipt.
 
 ```typescript
 import { s402Gate } from 's402';
 
 const gate = s402Gate({
   server,
-  requirements,
-  x402: {
-    resource: { url: 'https://api.example.com/paid', description: 'Paid data', mimeType: 'application/json' },
-    maxTimeoutSeconds: 60,   // optional
-  },
+  requirements,   // one offer, or an array — one entry per scheme, `exact` first
+  resource: { url: 'https://api.example.com/paid', description: 'Paid data', mimeType: 'application/json' },
 });
 ```
 
-With the option set, an unmodified `@x402/fetch` client completes the round trip: it reads the 402, pays under `PAYMENT-SIGNATURE`, and decodes the receipt. Without it, the 402 stays s402-native and nothing changes for existing s402 clients.
+`resource` is required because x402's V2 envelope requires it — it is a field, not an interop
+switch. The `x402` option this page used to document is **gone**: it selected between two
+grammars, and there is only one now ([ADR-016](../adr/016-s402-402-is-an-x402-envelope.md)).
 
-What is **not** optional: every gate accepts x402 payments (`PAYMENT-SIGNATURE` V2, `X-PAYMENT` V1) and answers an x402-dialect payment with an x402-dialect receipt. Compatibility on intake is an obligation ([ADR-013](../adr/013-x402-intake-compatibility.md)); emission on the 402 is a choice ([ADR-015](../adr/015-x402-dialect-at-the-gate.md)).
+Every s402 scheme is expressible. `prepaid`, `stream`, `escrow`, `unlock` and `upto` each get
+their own `accepts[]` entry; an x402 client without a handler for one skips it, which is what
+`accepts[]` is for. s402's own per-requirement fields (`facilitatorUrl`, `expiresAt`, the fee
+fields, the per-scheme extras) ride in that entry's `extra`, and `mandate` rides in
+`extensions.s402` — so nothing is dropped to make the document readable.
 
-Only `exact`-first requirements are expressible on an x402 envelope; s402-only fields (`facilitatorUrl`, `mandate`, `expiresAt`, fees, `extensions`) do not travel on it. s402 clients hitting a gate in this mode must call `normalizeRequirements()` on the 402.
+Intake is unchanged and still unconditional: every gate accepts x402 payments
+(`PAYMENT-SIGNATURE` V2, `X-PAYMENT` V1) and answers an x402-dialect payment with an
+x402-dialect receipt ([ADR-013](../adr/013-x402-intake-compatibility.md)).
+
+## Reading the retired flat shapes
+
+Two 402 shapes are no longer emitted by anything and are still read on intake.
+
+### `fromS402V1Requirements(v1, options?)`
+
+Decodes s402's own pre-wire-v2 402 — `{ s402Version: '1', accepts: ['exact', 'prepaid'], network,
+asset, amount, payTo, … }` — into the wire-v2 document. Every field except `accepts` described the
+one offer the document made, so each expanded entry carries all of them; `accepts` becomes one
+entry per scheme, with `exact` hoisted to the front. `mandate` moves to the envelope.
+
+```typescript
+import { fromS402V1Requirements } from 's402/compat/x402';
+
+const required = fromS402V1Requirements(JSON.parse(atob(legacyHeader)), {
+  resource: { url: 'https://api.example.com/paid' },   // v1 had none; pass the URL you fetched
+});
+```
+
+### `normalizeRequirements(obj, now?)`
+
+Takes any of them — wire v2 / x402 V2 envelope, x402 V1 flat, s402 v1 flat — and returns an
+`s402PaymentRequired`. The V2 case is identity plus the `extra` projection, because that envelope
+is the native shape.
+
+One thing is added rather than copied: when a document carries **no** `extensions.s402` — a plain
+x402 402 from a server that has never heard of s402 — an entry with no `expiresAt` gets one derived
+from its `maxTimeoutSeconds`. Without it, inbound x402 traffic would bypass every S1 stale-payment
+guard, because those guards skip an undefined `expiresAt`. s402's own documents are never touched.
 
 ## x402 Types
 

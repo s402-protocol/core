@@ -99,3 +99,52 @@ a lint/test) so the next agent never repeats it. Read after `AGENTS.md` +
 **Fix:** `test/interop-x402-client.test.ts` runs the real upstream client end to end (the strongest available encoding — it fails the day upstream drifts). `X402_UPSTREAM_PIN` dates the claim in code. The prose everywhere now says what the test proves: zero client changes, one server option. ADR-015 records why the 402 half is opt-in.
 
 **For future agents:** any sentence of the form "X works with Y unmodified" is a test, not a fact, until a real X is run against a real Y in CI — install the real X as a pinned devDependency and drive it; never re-implement X's client to prove X's client works. And put a sha next to every compatibility claim, because a claim without a date cannot be found stale.
+
+---
+
+## [2026-09-04] — A type's "do not touch" list and its dependency graph are different documents
+
+**Mistake:** DAN-1078's packet named `envelope.ts`, `compat/mpp.ts` and `compat/l402.ts` as
+DO-NOT-TOUCH (another ticket was editing `mpp.ts`), and in the same breath required removing
+`accepts` from `s402PaymentRequirements`. All three read or construct that field. The two
+instructions could not both be obeyed: with the field gone the package does not compile, so
+"do not touch" would have meant "do not ship." Four lines in three protected files had to change
+(`accepts: ['exact']` → `scheme: 'exact'` twice, and one `accepts.includes()` cross-check).
+
+**Why it happened:** the exclusion list was written from *authorship* — who else is editing what —
+and the change was scoped from the *wire format*. Neither view shows the compile graph. A field on
+a widely-shared type is not a local edit no matter how small its diff, and `grep -rn '\.accepts'`
+would have surfaced the conflict in one command before the ticket was cut.
+
+**Fix:** the four lines were changed, and each is called out in the delivery report as a
+conflict-risk hunk for whoever holds the concurrent `mpp.ts` ticket. This entry.
+
+**For future agents:** before accepting a DO-NOT-TOUCH list on a task that removes or renames a
+field on a shared type, grep for every consumer of that field and compare the two sets. If they
+intersect, say so before writing code — the intersection is either a packet defect or a hidden
+second ticket, and finding out at the typecheck is the expensive way.
+
+---
+
+## [2026-09-04] — A trust-boundary whitelist inside someone else's extension bag is a rejection you do not own
+
+**Mistake:** wire v2 moved s402's per-requirement fields into each `accepts[]` entry's `extra`, and
+the sub-object validator was carried down with them unchanged — including its `mandate` check. But
+`mandate` had moved the *other* way, up to `extensions.s402`. The result: a foreign x402 402
+carrying an unrelated `extra.mandate` key was rejected outright with
+`mandate.required must be a boolean`, for a key at an address s402 does not own. An otherwise
+payable 402 would have failed on a name collision.
+
+**Why it happened:** two fields moved in the same change, in opposite directions, and the validator
+list was copied rather than re-derived. The file argues two comments above that `extra` is x402's
+bag and open by spec; the validator immediately below it disagreed, and nothing made them meet.
+
+**Fix:** `mandate` removed from `validateSubObjects`, with a comment at the deletion saying why the
+absence is deliberate; two regression tests in `test/http.test.ts` — a foreign `extra.mandate`
+passes through untouched, and the mandate that IS ours still fails validation at
+`extensions.s402.mandate`.
+
+**For future agents:** validation belongs at the address that owns the key. When you move a field
+between levels, move its validator with it and re-derive the list at the destination — a carried-over
+whitelist inside a bag defined by someone else's spec turns their forward compatibility into your
+rejection.

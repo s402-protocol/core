@@ -108,7 +108,7 @@ Client                    Server                  Facilitator
   |<-- 200 + data -----------|                         |
 ```
 
-This is the x402-compatible baseline. An **unmodified x402 client** (`@x402/fetch`, `x402Client`) gets paid content from an `s402Gate` with **zero client changes and one server option**, `x402: { resource }` — the gate then emits x402's 402 envelope, accepts x402's `PAYMENT-SIGNATURE`, and answers with a receipt x402's decoder reads. Proven in `typescript/test/interop-x402-client.test.ts` against the real upstream packages. Payment *intake* needs no option at all: an x402 payload is accepted by every gate. See [ADR-015](./docs/adr/015-x402-dialect-at-the-gate.md) for why the 402 half is opt-in.
+This is the x402-compatible baseline. An **unmodified x402 client** (`@x402/fetch`, `x402Client`) gets paid content from an `s402Gate` with **zero client changes and zero server options** — s402's `payment-required` is an x402 V2 `PaymentRequired` envelope on every route, the gate accepts x402's `PAYMENT-SIGNATURE`, and it answers with a receipt x402's decoder reads. Proven in `typescript/test/interop-x402-client.test.ts` against the real upstream packages. See [ADR-016](./docs/adr/016-s402-402-is-an-x402-envelope.md): s402 is a profile of x402, not a second dialect on its header.
 
 ### Prepaid (v0.1)
 
@@ -174,6 +174,7 @@ Use cases: AI inference sessions, video streaming, real-time data feeds.
 
 ```typescript
 import type {
+  s402PaymentRequired,
   s402PaymentRequirements,
   s402PaymentPayload,
   s402SettleResponse,
@@ -191,25 +192,55 @@ import {
   detectProtocol,
 } from 's402';
 
-// Server: build 402 response
-const requirements: s402PaymentRequirements = {
-  s402Version: '1',
-  accepts: ['exact', 'stream'],
-  network: 'sui:mainnet',
-  asset: '0x2::sui::SUI',
-  amount: '1000000', // 0.001 SUI in MIST
-  payTo: '0x0000000000000000000000000000000000000000000000000000000000000001',
+// Server: build the 402. One `accepts[]` entry per offered scheme, exact first.
+const required: s402PaymentRequired = {
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/data', mimeType: 'application/json' },
+  accepts: [
+    {
+      scheme: 'exact',
+      network: 'sui:mainnet',
+      asset: '0x2::sui::SUI',
+      amount: '1000000', // 0.001 SUI in MIST
+      payTo: '0x0000000000000000000000000000000000000000000000000000000000000001',
+    },
+    {
+      scheme: 'stream',
+      network: 'sui:mainnet',
+      asset: '0x2::sui::SUI',
+      amount: '1000000',
+      payTo: '0x0000000000000000000000000000000000000000000000000000000000000001',
+      stream: { ratePerSecond: '1000', budgetCap: '100000000', minDeposit: '10000000' },
+    },
+  ],
 };
 
 response.status = 402;
-response.headers.set('payment-required', encodePaymentRequired(requirements));
+response.headers.set('payment-required', encodePaymentRequired(required));
 
-// Client: read 402 response
+// …which puts this on the wire — an x402 V2 PaymentRequired, verbatim:
+// {
+//   "x402Version": 2,
+//   "resource": { "url": "https://api.example.com/data", "mimeType": "application/json" },
+//   "accepts": [
+//     { "scheme": "exact", "network": "sui:mainnet", "asset": "0x2::sui::SUI",
+//       "amount": "1000000", "payTo": "0x00…01", "maxTimeoutSeconds": 60, "extra": {} },
+//     { "scheme": "stream", …, "extra": { "stream": { "ratePerSecond": "1000", … } } }
+//   ],
+//   "extensions": { "s402": { "version": "2" } }
+// }
+
+// Client: read the 402 response
 const header = response.headers.get('payment-required')!;
 const reqs = decodePaymentRequired(header);
-console.log(reqs.accepts); // ['exact', 'stream']
-console.log(reqs.amount);  // '1000000'
+console.log(reqs.accepts.map((a) => a.scheme)); // ['exact', 'stream']
+console.log(reqs.accepts[0].amount);            // '1000000'
 ```
+
+Everything s402 adds to a single offer — `facilitatorUrl`, `expiresAt`, the fee fields, the
+per-scheme extras — rides inside that entry's `extra`, and everything it adds to the whole 402
+rides in `extensions.s402`. In memory the fields sit at the top level, exactly as before; the
+codec does the projection. That is what makes one document readable by both decoders.
 
 ### x402 compat (opt-in)
 
@@ -229,7 +260,8 @@ const requirements = normalizeRequirements(rawJsonObject);
 const x402Reqs = toX402Requirements(requirements);
 ```
 
-Serving **x402 clients** from an s402 route is a gate option, not a compat call:
+Serving **x402 clients** takes no compat call and no option at all — every `s402Gate` already
+emits x402's envelope:
 
 ```typescript
 import { s402Gate } from 's402';
@@ -237,11 +269,14 @@ import { s402Gate } from 's402';
 const gate = s402Gate({
   server,
   requirements,
-  // Emit the 402 as an x402 V2 PaymentRequired envelope so an unmodified
-  // @x402/fetch client can read it. Intake of x402 payments is always on.
-  x402: { resource: { url: 'https://api.example.com/paid', mimeType: 'application/json' } },
+  // Required: x402's V2 envelope carries a ResourceInfo, so s402's does too.
+  resource: { url: 'https://api.example.com/paid', mimeType: 'application/json' },
 });
 ```
+
+What the compat layer is still for: reading the two RETIRED flat shapes. `fromS402V1Requirements()`
+decodes s402's own pre-v2 402; `normalizeRequirements()` takes any of them and returns the wire-v2
+document.
 
 The compat layer records the upstream commit it was audited against as `X402_UPSTREAM_PIN`
 (`s402/compat/x402`). If that sha is old, the claim is old.
@@ -319,17 +354,19 @@ The reference Sui implementation of the schemes is available in [`@sweefi/sui`](
 
 ## Wire Format
 
-s402 uses the same HTTP headers as x402 V1:
+s402's 402 leg **is** x402 V2's `PaymentRequired`. The other two legs use x402 V1's header names:
 
 | Header | Direction | Content |
 |--------|-----------|---------|
-| `payment-required` | Server -> Client | Base64-encoded `s402PaymentRequirements` JSON |
+| `payment-required` | Server -> Client | Base64-encoded x402 V2 `PaymentRequired` envelope (`s402PaymentRequired`) |
 | `x-payment` | Client -> Server | Base64-encoded `s402PaymentPayload` JSON |
 | `payment-response` | Server -> Client | Base64-encoded `s402SettleResponse` JSON |
 
 > **Note:** x402 V2 renamed the client payment header to `payment-signature`. s402 uses `x-payment` (matching x402 V1). All header names are lowercase per HTTP/2 (RFC 9113 §8.2.1). x402 V2 servers accept both headers, so s402 clients work with both versions. If your server needs to accept x402 V2 clients, also check `payment-signature`.
 
-The presence of `s402Version` in the decoded JSON distinguishes s402 from x402. Clients and servers can auto-detect the protocol using `detectProtocol()`.
+The 402 leg is x402 V2's document, so nothing distinguishes an s402 402 from an x402 one except
+`extensions.s402` — and its absence is not a problem to solve: a plain x402 402 decodes and is
+payable. `detectProtocol()` reports which of the two you are looking at.
 
 ## Discovery
 
@@ -354,9 +391,8 @@ Servers can advertise s402 support at `/.well-known/s402.json`:
 **Requirements expiration.** Servers SHOULD set `expiresAt` on payment requirements to prevent replay of stale 402 responses. The facilitator rejects expired requirements before processing.
 
 ```typescript
-const requirements: s402PaymentRequirements = {
-  s402Version: '1',
-  accepts: ['exact'],
+const offer: s402PaymentRequirements = {
+  scheme: 'exact',
   network: 'sui:mainnet',
   asset: '0x2::sui::SUI',
   amount: '1000000',
@@ -379,7 +415,7 @@ const requirements: s402PaymentRequirements = {
 
 ## Conformance Testing
 
-s402 ships machine-readable JSON test vectors for cross-language conformance — 167 vectors across 14 files. If you're implementing s402 in Go, Python, Rust, or any other language, use these vectors to verify your implementation matches the spec.
+s402 ships machine-readable JSON test vectors for cross-language conformance — 187 vectors across 14 files. If you're implementing s402 in Go, Python, Rust, or any other language, use these vectors to verify your implementation matches the spec.
 
 ```bash
 # From the npm package

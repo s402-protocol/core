@@ -132,13 +132,13 @@ This is only possible because of Sui's architecture:
 
 This is the most common question. The answer is architectural:
 
-1. **x402's type system assumes one scheme.** x402's `PaymentRequirements` has a single `scheme` field. s402 has an `accepts` array because the server needs to advertise *multiple* schemes — "I accept exact payments, prepaid deposits, or streams."
+1. **The Sui work is the hard part, and it has no home upstream.** x402's `accepts[]` array already carries several offers, one requirement object each — s402 uses exactly that, one entry per scheme. What a Sui adapter would still lack is the policy layer, the `unlock` scheme, and the conformance vectors.
 
 2. **x402's verification model doesn't support PTBs.** x402 separates verify and settle into two distinct operations with a temporal gap. Sui's PTBs can atomically verify and settle in one transaction. Wrapping PTBs in x402's two-step model throws away Sui's biggest advantage.
 
 3. **x402 has no concept of ongoing payment relationships.** Streams, prepaid balances, and escrows are stateful — they exist on-chain beyond a single request/response. x402's model is stateless per-request.
 
-4. **Compatibility is already solved.** s402's `exact` scheme *is* x402's `exact`. An unmodified x402 client can pay an `s402Gate` that sets the `x402` option — zero client changes, one server option, proven against the real `@x402/fetch` in `test/interop-x402-client.test.ts`. The `s402/compat/x402` layer handles format normalization in both directions. Building a "Sui adapter for x402" would give you less capability, not more.
+4. **Compatibility is already solved.** s402's `exact` scheme *is* x402's `exact`, and s402's 402 *is* x402's `PaymentRequired` envelope. An unmodified x402 client pays an `s402Gate` with **zero client changes and zero server options**, proven against the real `@x402/fetch` in `test/interop-x402-client.test.ts`. s402 is a profile of x402 — the Sui binding, the policy layer, `unlock`, and the vectors — not a rival wire format.
 
 ### The ecosystem vision
 

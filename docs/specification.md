@@ -8,7 +8,7 @@ description: s402 Wire Format Specification v1 — the formal, field-by-field de
 
 This document defines the s402 wire format — the exact encoding, field definitions, validation rules, and error semantics for the s402 HTTP 402 payment protocol. It is the authoritative reference for any implementation in any language.
 
-The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (167 vectors across 14 files).
+The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (187 vectors across 14 files).
 
 ## 1. Terminology
 
@@ -42,7 +42,7 @@ Phase 3: Delivery
   Client  <── 200 + payment-response ──────  Server
 ```
 
-The presence of `s402Version` in the decoded requirements JSON distinguishes s402 from x402 and other 402 protocols.
+The 402 leg is an x402 V2 `PaymentRequired` envelope. What distinguishes an **s402-profile** 402 from a plain x402 one is the presence of `extensions.s402` — and a 402 without it is still payable by an s402 client.
 
 ## 3. Transport
 
@@ -52,11 +52,11 @@ s402 uses three HTTP headers. All header names are lowercase per [RFC 9113 §8.2
 
 | Header | Direction | Content |
 |--------|-----------|---------|
-| `payment-required` | Server → Client | Base64-encoded Payment Requirements JSON |
+| `payment-required` | Server → Client | Base64-encoded x402 V2 `PaymentRequired` envelope |
 | `x-payment` | Client → Server | Base64-encoded Payment Payload JSON |
 | `payment-response` | Server → Client | Base64-encoded Settlement Response JSON |
 
-These header names are identical to x402 V1 for wire compatibility.
+These header names are identical to x402 V1 for wire compatibility. The 402 *document* is x402 V2's, so an unmodified x402 V2 client reads it as well.
 
 ### 3.2 Encoding
 
@@ -93,47 +93,92 @@ To detect which transport a request uses, check:
 
 ### 3.5 Protocol Detection
 
-To determine whether a 402 response uses s402 or x402:
+To determine whether a 402 response is an s402-profile 402 or a plain x402 one:
 
 1. Read the `payment-required` header
 2. Base64 decode and JSON parse
-3. If the decoded object contains `s402Version` → **s402**
-4. If it contains `x402Version` → **x402**
+3. If the decoded object contains `extensions.s402` → **s402**
+4. Otherwise, if it contains `x402Version` → **x402**
 5. Otherwise → **unknown**
+
+This names the presence of s402's extensions, never "not for us": both are x402 V2 envelopes, and
+an s402 client pays either.
 
 ## 4. Payment Requirements
 
-The Payment Requirements object is sent by the Resource Server in the `payment-required` header of a 402 response. It describes what payment the server accepts.
+The 402 document is an **x402 V2 `PaymentRequired` envelope**, sent by the Resource Server in the
+`payment-required` header (and body) of a 402 response.
 
-### 4.1 Required Fields
+```json
+{
+  "x402Version": 2,
+  "error": "Payment Required",
+  "resource": { "url": "https://api.example.com/data", "mimeType": "application/json" },
+  "accepts": [
+    { "scheme": "exact", "network": "sui:mainnet", "asset": "0x2::sui::SUI",
+      "amount": "1000000", "payTo": "0x00…01", "maxTimeoutSeconds": 60, "extra": {} }
+  ],
+  "extensions": { "s402": { "version": "2" } }
+}
+```
+
+Three levels, and which level a field sits at is the whole design:
+
+- **the envelope** — x402's, byte-compatible with its decoder
+- **each `accepts[]` entry** — one offered scheme, x402's `PaymentRequirements`
+- **`extra` and `extensions.s402`** — everything s402 adds, in the slots x402 leaves for it
+
+### 4.1 Envelope Fields
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| `x402Version` | number | Yes | MUST be `2` | Envelope version. |
+| `resource` | object | Yes | MUST carry a string `url` | What is being paid for. Also `description`, `mimeType`, `serviceName`, `tags`, `iconUrl`. |
+| `accepts` | object[] | Yes | Non-empty. Each entry per §4.2. | One entry per offered scheme. `exact` MUST be listed first whenever it is offered — an x402 client pays the first entry it has a handler for. |
+| `error` | string | No | — | Human-readable reason, surfaced by x402 clients. |
+| `extensions` | object | No | Opaque bag | Envelope-level extensions. s402's own live under the `s402` key; see §4.1.1. |
+
+#### 4.1.1 `extensions.s402`
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| `version` | string | No | If present, MUST be `"2"` | s402 wire version. Its presence marks the 402 as an s402-profile 402. |
+| `mandate` | object | No | See §4.5. | AP2 mandate requirements. Envelope-level: a mandate authorizes the AGENT, not one price line, so it cannot differ per entry. |
+
+A 402 carrying no `extensions.s402` is a plain x402 402. Implementations MUST decode it and MUST
+NOT treat its absence as an error.
+
+### 4.2 `accepts[]` Entry Fields
+
+Each entry is an x402 V2 `PaymentRequirements`.
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| `scheme` | string | Yes | Non-empty. No control characters. | The single scheme this entry offers. Implementations MUST NOT reject an unrecognized scheme name — a client SKIPS an offer it cannot pay. |
+| `network` | string | Yes | Non-empty. No control characters. | Network identifier. RECOMMENDED format: CAIP-2 (e.g., `"sui:mainnet"`, `"eip155:8453"`). |
+| `asset` | string | Yes | Non-empty. No control characters. | Asset/coin type identifier. Chain-specific, opaque to s402. |
+| `amount` | string | Yes | Canonical non-negative integer. See §4.3. | Payment amount in base units. |
+| `payTo` | string | Yes | Non-empty. No control characters. | Recipient address. Chain-specific, opaque to s402. |
+| `maxTimeoutSeconds` | number | No | Non-negative finite number. | Seconds the facilitator will wait before rejecting. Emitters SHOULD always send it; `60` is the default when a requirement does not name one. |
+| `extra` | object | No | Opaque bag | Scheme-specific requirement fields. s402's own are listed in §4.2.1. Keys s402 does not name MUST be preserved on decode — this bag is x402's and open by specification. |
+
+#### 4.2.1 s402 fields inside an entry's `extra`
 
 | Field | Type | Constraints | Description |
 |-------|------|-------------|-------------|
-| `s402Version` | string | MUST be `"1"` | Protocol version. Distinguishes s402 from x402. |
-| `accepts` | string[] | Non-empty array. Each entry MUST be a string. | Payment schemes the server accepts. SHOULD include `"exact"` for x402 compatibility. |
-| `network` | string | Non-empty. No control characters (U+0000–U+001F, U+007F). | Network identifier. RECOMMENDED format: CAIP-2 style (e.g., `"sui:mainnet"`, `"eip155:8453"`, `"solana:mainnet-beta"`). |
-| `asset` | string | Non-empty. No control characters. | Asset/coin type identifier. Format is chain-specific and opaque to s402 (e.g., `"0x2::sui::SUI"`, `"0xA0b8..."` for ERC-20). |
-| `amount` | string | Canonical non-negative integer. See §4.3. | Payment amount in base units. |
-| `payTo` | string | Non-empty. No control characters. | Recipient address. Format is chain-specific and opaque to s402. |
-
-### 4.2 Optional Fields
-
-| Field | Type | Constraints | Description |
-|-------|------|-------------|-------------|
-| `facilitatorUrl` | string | Valid URL. Protocol MUST be `https:` or `http:`. No control characters. | URL of the Facilitator service. Omit for direct settlement. |
+| `facilitatorUrl` | string | Valid URL. Protocol MUST be `https:` or `http:`. No control characters. No embedded credentials. | URL of the Facilitator service. Omit for direct settlement. |
 | `expiresAt` | number | Positive finite number. | Unix timestamp in milliseconds. Facilitators MUST reject requirements after this time. |
 | `protocolFeeBps` | number | Integer, 0–10000. | Protocol fee in basis points. Advisory only — the authoritative fee is set by the Facilitator's on-chain config. |
 | `protocolFeeAddress` | string | Non-empty. No control characters. | Address that receives the protocol fee. Advisory only. |
 | `receiptRequired` | boolean | — | Whether the server requires an on-chain receipt. |
 | `settlementMode` | string | `"facilitator"` or `"direct"` | Settlement mode preference. |
-| `mandate` | object | See §4.5. | AP2 mandate requirements. |
-| `upto` | object | See §4.6. | Upto-specific parameters. Present when `accepts` includes `"upto"`. |
-| `settlementOverrides` | object | See §4.6. | Settlement overrides for upto scheme (server provides actual amount). |
-| `stream` | object | See §4.7. | Stream-specific parameters. Present when `accepts` includes `"stream"`. |
-| `escrow` | object | See §4.8. | Escrow-specific parameters. Present when `accepts` includes `"escrow"`. |
-| `unlock` | object | See §4.9. | Unlock-specific parameters. Present when `accepts` includes `"unlock"`. |
-| `prepaid` | object | See §4.10. | Prepaid-specific parameters. Present when `accepts` includes `"prepaid"`. |
-| `extensions` | object | Opaque key-value bag. | Forward-compatible extensibility. Consumers MUST treat extension values as untrusted input. See §4.10. |
+| `upto` | object | See §4.6. | Upto-specific parameters. Present when `scheme` is `"upto"`. |
+| `settlementOverrides` | object | See §4.6. | Settlement overrides for the upto scheme. |
+| `stream` | object | See §4.7. | Stream-specific parameters. Present when `scheme` is `"stream"`. |
+| `escrow` | object | See §4.8. | Escrow-specific parameters. Present when `scheme` is `"escrow"`. |
+| `unlock` | object | See §4.9. | Unlock-specific parameters. Present when `scheme` is `"unlock"`. |
+| `prepaid` | object | See §4.10. | Prepaid-specific parameters. Present when `scheme` is `"prepaid"`. |
+| `extensions` | object | Opaque bag | Per-requirement forward-compatible extensibility. Consumers MUST treat extension values as untrusted input. |
 
 ### 4.3 Amount Format
 
@@ -156,6 +201,7 @@ The wire format does not enforce chain-specific magnitude limits (e.g., u64 for 
 
 The following fields MUST NOT contain ASCII control characters (U+0000–U+001F) or the DEL character (U+007F):
 
+- `scheme`
 - `network`
 - `asset`
 - `payTo`
@@ -422,11 +468,21 @@ Servers MAY advertise s402 support at `/.well-known/s402.json`:
 
 All three decode functions (requirements, payload, settlement response) MUST strip unknown top-level keys from decoded objects. Only the keys listed in this specification SHOULD survive decoding.
 
+**One deliberate exception**: an `accepts[]` entry's `extra` is x402's bag and open by
+specification, so unknown keys inside it MUST be preserved. A whitelist there is where the next
+upstream field (`paymentFlow`, the EIP-712 `name` / `version`) goes missing without erroring.
+
 This is a defense-in-depth measure at the HTTP trust boundary — it prevents untrusted fields from propagating into application logic.
 
 ### 10.1 Known Requirements Keys
 
-`s402Version`, `accepts`, `network`, `asset`, `amount`, `payTo`, `facilitatorUrl`, `mandate`, `protocolFeeBps`, `protocolFeeAddress`, `receiptRequired`, `settlementMode`, `expiresAt`, `upto`, `stream`, `escrow`, `unlock`, `prepaid`, `settlementOverrides`, `extensions`
+Envelope: `x402Version`, `resource`, `error`, `accepts`, `extensions`
+
+`resource`: `url`, `description`, `mimeType`, `serviceName`, `tags`, `iconUrl`
+
+Each `accepts[]` entry: `scheme`, `network`, `asset`, `amount`, `payTo`, `maxTimeoutSeconds`, `extra`
+
+s402 keys lifted out of an entry's `extra`: `facilitatorUrl`, `protocolFeeBps`, `protocolFeeAddress`, `receiptRequired`, `settlementMode`, `expiresAt`, `upto`, `settlementOverrides`, `prepaid`, `stream`, `escrow`, `unlock`, `extensions` — any OTHER key in `extra` is preserved verbatim.
 
 Sub-object known keys:
 
@@ -455,7 +511,7 @@ Inner payload keys per scheme:
 
 ## 11. x402 Compatibility
 
-s402 is wire-compatible with Coinbase's x402 V1 protocol on the `exact` scheme.
+s402 is a **profile of x402**: the 402 leg is x402 V2's own document, and the payment and receipt legs share x402 V1's header names.
 
 ### 11.1 Header Names
 
@@ -465,16 +521,26 @@ x402 V2 renamed the client header to `payment-signature`. Servers that need to a
 
 ### 11.2 Protocol Discrimination
 
-The `s402Version` field in the decoded JSON distinguishes s402 from x402. x402 uses `x402Version` (an integer) instead.
+Both are x402 V2 envelopes carrying `x402Version: 2`. `extensions.s402` is what marks the s402
+profile, and its absence is not a reason to refuse a 402.
 
-### 11.3 Conversion
+### 11.3 Retired shapes (intake only)
+
+Two flat 402 shapes are no longer emitted by anything and MUST still be readable on intake:
+x402 V1 (`x402Version: 1` with the requirement fields at the top level), and **s402 wire v1**
+(`s402Version: "1"` with `accepts` as an array of scheme NAMES). A v1 `accepts` list expands to one
+`accepts[]` entry per scheme, each carrying the document's shared network, asset, amount, payTo and
+per-requirement fields, with `exact` hoisted to the front.
+
+### 11.4 Conversion
 
 Implementations MAY provide bidirectional conversion between x402 and s402 formats:
 
-- **x402 → s402**: Map x402's `scheme` to s402's `accepts` array. Use `amount` (V2) or `maxAmountRequired` (V1) for the amount field.
-- **s402 → x402**: Only the `exact` scheme has an x402 equivalent. Other schemes (stream, escrow, unlock, prepaid) are s402-only.
+- **x402 V2 → s402**: no conversion. That envelope is s402's own document; lift the s402 keys out of each entry's `extra` and read `extensions.s402`.
+- **x402 V1 → s402**: wrap the flat requirement as a single `accepts[]` entry under a V2 envelope. Use `amount` (V2) or `maxAmountRequired` (V1) for the amount field.
+- **s402 → x402**: every s402 scheme is expressible, one `accepts[]` entry each. An x402 client without a handler for `prepaid` or `unlock` skips that entry — which is what `accepts[]` is for.
 
-Conversion MUST validate the `facilitatorUrl` field using the same protocol-only check (§4.2) to prevent SSRF via dangerous URL schemes.
+Conversion MUST validate the `facilitatorUrl` field using the same protocol-only check (§4.2.1) to prevent SSRF via dangerous URL schemes.
 
 ## 12. Security Considerations
 
@@ -510,7 +576,7 @@ An implementation is **s402-conformant** if it:
 2. Validates all required fields per §4.1, §5.1, and §6
 3. Rejects malformed input with the appropriate error code from §8
 4. Strips unknown keys on decode per §10
-5. Passes **every** machine-readable conformance test vector shipped in the `s402` npm package (167 vectors across 14 files as of v0.9.0)
+5. Passes **every** machine-readable conformance test vector shipped in the `s402` npm package (187 vectors across 14 files as of v0.9.0)
 
 The conformance vectors cover: encode, decode, body transport, x402 compat normalization, receipt format/parse, settlement verification, validation rejection, key stripping, and roundtrip identity. See the [Conformance Vectors guide](/guide/conformance) for the vector format and implementation instructions.
 
