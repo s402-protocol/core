@@ -281,14 +281,14 @@ describe('s402Gate — dynamic requirements', () => {
       requirements: (request) => {
         calls.push(new URL(request.url).pathname);
         return {
-          s402Version: S402_VERSION,
-          accepts: ['exact'],
+          scheme: 'exact' as const,
           network: NETWORK,
           asset: '0x2::sui::SUI',
           amount: new URL(request.url).pathname.endsWith('/premium') ? '5000000' : '1000000',
           payTo: PAY_TO,
         };
       },
+      resource: RESOURCE,
     });
     const handler = gate(async () => Response.json({ data: 'should 402' }));
 

@@ -258,7 +258,9 @@ describe('pbt-p2: monotonicity — valid optional fields preserve validity', () 
     fc.assert(
       fc.property(
         validRequirements(),
-        fc.integer({ min: 0, max: 3600 }),
+        // 1, not 0: x402 V2 requires a POSITIVE timeout, and a zero-second
+        // offer used to decode with no `expiresAt` at all.
+        fc.integer({ min: 1, max: 3600 }),
         (reqs, timeout) => {
           const wire = toRequirementsWire({
             ...reqs,

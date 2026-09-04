@@ -8,7 +8,7 @@ description: s402 Wire Format Specification v1 — the formal, field-by-field de
 
 This document defines the s402 wire format — the exact encoding, field definitions, validation rules, and error semantics for the s402 HTTP 402 payment protocol. It is the authoritative reference for any implementation in any language.
 
-The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (187 vectors across 14 files).
+The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (195 vectors across 14 files).
 
 ## 1. Terminology
 
@@ -588,7 +588,7 @@ An implementation is **s402-conformant** if it:
 2. Validates all required fields per §4.1, §5.1, and §6
 3. Rejects malformed input with the appropriate error code from §8
 4. Strips unknown keys on decode per §10
-5. Passes **every** machine-readable conformance test vector shipped in the `s402` npm package (187 vectors across 14 files as of v0.9.0)
+5. Passes **every** machine-readable conformance test vector shipped in the `s402` npm package (195 vectors across 14 files as of v0.9.0)
 
 The conformance vectors cover: encode, decode, body transport, x402 compat normalization, receipt format/parse, settlement verification, validation rejection, key stripping, and roundtrip identity. See the [Conformance Vectors guide](/guide/conformance) for the vector format and implementation instructions.
 

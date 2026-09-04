@@ -1907,6 +1907,92 @@ function generateValidationReject(): TestVector[] {
     expectedErrorCode: 'INVALID_PAYLOAD',
   });
 
+  // ── The four places s402's validator was looser than x402 V2's own schema ──
+  //
+  // Reference: `@x402/core` 2.25.0, `typescript/packages/core/src/schemas/
+  // index.ts` — `NetworkSchemaV2` (min 3, must contain ":"), `ResourceInfoSchema`
+  // (url non-empty; serviceName 1-32 printable ASCII; tags max 5, each 1-32
+  // printable ASCII; iconUrl max 2048), `PaymentRequirementsV2Schema`
+  // (maxTimeoutSeconds positive). A 402 that fails any of these is one the
+  // pinned upstream decoder refuses, so s402 must not accept it either — in
+  // either direction.
+
+  vectors.push({
+    description: 'Rejects a network that is not CAIP-2 (x402 V2 requires ":" and 3+ characters)',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'base-sepolia', asset: 'SUI', amount: '1000', payTo: '0xabc',
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects a network shorter than 3 characters',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'a:', asset: 'SUI', amount: '1000', payTo: '0xabc',
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects maxTimeoutSeconds of 0 (x402 V2 requires a positive timeout)',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI', amount: '1000', payTo: '0xabc',
+      maxTimeoutSeconds: 0,
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects an empty asset',
+    input: { header: wireReject({
+      scheme: 'exact', network: 'sui:mainnet', asset: '', amount: '1000', payTo: '0xabc',
+    }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  /** A wire 402 whose ResourceInfo is the thing under test. */
+  const resourceReject = (resource: Record<string, unknown>): string => toBase64(JSON.stringify({
+    x402Version: 2,
+    resource,
+    accepts: [{
+      scheme: 'exact', network: 'sui:mainnet', asset: 'SUI',
+      amount: '1000', payTo: '0xabc', maxTimeoutSeconds: 60, extra: {},
+    }],
+    extensions: { s402: { version: '2' } },
+  }));
+
+  vectors.push({
+    description: 'Rejects a resource.serviceName longer than 32 characters',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', serviceName: 'x'.repeat(33) }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects a resource.serviceName containing non-printable-ASCII characters',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', serviceName: 'Caf\u00e9 Paiement' }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects more than 5 resource.tags',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', tags: ['a', 'b', 'c', 'd', 'e', 'f'] }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
+  vectors.push({
+    description: 'Rejects a resource.iconUrl longer than 2048 characters',
+    input: { header: resourceReject({ url: 'https://api.example.com/paid', iconUrl: 'https://x/' + 'y'.repeat(2100) }) },
+    shouldReject: true,
+    expectedErrorCode: 'INVALID_PAYLOAD',
+  });
+
   return vectors;
 }
 

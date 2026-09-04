@@ -620,7 +620,7 @@ describe('s402 HTTP encode/decode', () => {
     it('decodePaymentRequired rejects a negative maxTimeoutSeconds', () => {
       const bad = wireHeader({ maxTimeoutSeconds: -1 });
       expect(() => decodePaymentRequired(bad)).toThrow(s402Error);
-      expect(() => decodePaymentRequired(bad)).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+      expect(() => decodePaymentRequired(bad)).toThrow('maxTimeoutSeconds must be a positive finite number');
     });
 
     it('decodePaymentRequired rejects a non-object extra', () => {

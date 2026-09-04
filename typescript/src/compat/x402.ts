@@ -884,11 +884,28 @@ export function toX402V2Requirements(
   const wire = toRequirementsWire({
     x402Version: 2,
     resource: { url: '' },
-    accepts: [{ ...s402, extra: { ...(s402.extra ?? {}), ...(options?.extra ?? {}) } }],
+    accepts: [applyOfferOverrides(s402, options)],
   }) as { accepts: x402V2PaymentRequirements[] };
-  const req = wire.accepts[0];
-  if (options?.maxTimeoutSeconds !== undefined) req.maxTimeoutSeconds = options.maxTimeoutSeconds;
-  return req;
+  return wire.accepts[0];
+}
+
+/**
+ * Apply the caller's per-envelope overrides to ONE offer, without mutating it.
+ *
+ * `extra` merges over whatever the offer already carried; `maxTimeoutSeconds`
+ * replaces. Kept as one function so the entry path and the envelope path cannot
+ * drift — an override that lands on `toX402V2Envelope` and not on
+ * `toX402V2Requirements` is a difference nobody would see until the wire.
+ */
+function applyOfferOverrides(
+  offer: s402PaymentRequirements,
+  options?: { maxTimeoutSeconds?: number; extra?: Record<string, unknown> },
+): s402PaymentRequirements {
+  if (!options?.extra && options?.maxTimeoutSeconds === undefined) return offer;
+  const out: s402PaymentRequirements = { ...offer };
+  if (options.extra) out.extra = { ...(offer.extra ?? {}), ...options.extra };
+  if (options.maxTimeoutSeconds !== undefined) out.maxTimeoutSeconds = options.maxTimeoutSeconds;
+  return out;
 }
 
 /**
@@ -915,15 +932,23 @@ export function toX402V2Envelope(
     throw new s402Error('INVALID_PAYLOAD',
       'x402 V2 envelope requires a non-empty resource.url (ResourceInfo.url is mandatory per the x402 V2 spec)');
   }
-  const offers = Array.isArray(s402) ? s402 : [s402];
-  const envelope: x402V2PaymentRequired = {
+  const offers = (Array.isArray(s402) ? s402 : [s402]).map((offer) => applyOfferOverrides(offer, options));
+  const required: s402PaymentRequired = {
     x402Version: 2,
     resource,
-    accepts: offers.map((offer) => toX402V2Requirements(offer, options)),
+    accepts: offers,
   };
-  if (options?.extensions) envelope.extensions = options.extensions;
-  if (options?.error) envelope.error = options.error;
-  return envelope;
+  if (options?.extensions) required.extensions = options.extensions;
+  if (options?.error) required.error = options.error;
+
+  // ONE projection, the same one `encodePaymentRequired` uses. Building the
+  // envelope field by field here is how the mandate went missing: it lives in
+  // `extensions.s402`, which only the whole-document projection writes, so a
+  // per-offer assembly published a route with the spending authorization
+  // silently removed. Byte-equality with the header encoder is the test.
+  const wire = toRequirementsWire(required);
+  validateRequirementsShape(wire, { emitting: true });
+  return wire as unknown as x402V2PaymentRequired;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -1034,7 +1059,7 @@ export function fromS402V1Requirements(
   // it: project to the wire, check, and lift back. A v1 document with a bad
   // amount or a `file://` facilitatorUrl fails here exactly as it did before.
   const wire = toRequirementsWire(required) as Record<string, unknown>;
-  validateRequirementsShape(wire);
+  validateRequirementsShape(wire, { liftedFromLegacy: true });
   return pickRequirementsFields(wire);
 }
 
@@ -1110,7 +1135,7 @@ export function normalizeRequirements(
       accepts: [entry],
     };
     const wire = toRequirementsWire(required) as Record<string, unknown>;
-    validateRequirementsShape(wire);
+    validateRequirementsShape(wire, { liftedFromLegacy: true });
     return pickRequirementsFields(wire);
   }
 

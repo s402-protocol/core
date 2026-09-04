@@ -78,7 +78,24 @@ function fromBase64(b64: string): string {
  * ```
  */
 export function encodePaymentRequired(required: s402PaymentRequired): string {
-  return toBase64(JSON.stringify(toRequirementsWire(required)));
+  return toBase64(JSON.stringify(toEmittableWire(required)));
+}
+
+/**
+ * Project a 402 document to the wire AND check it against the schema the
+ * pinned `@x402/core` will parse it with.
+ *
+ * ADR-016's invariant is a promise about what s402 emits, and until now nothing
+ * checked it on the way out: `encodePaymentRequired` projected and encoded, and
+ * the named ratchet drove `@x402/fetch`, whose header decoder only
+ * `JSON.parse`s. Eight type-valid gate configurations produced 402s upstream
+ * refuses; four of them s402's own decoder refuses too, so the gate could emit
+ * a document it could not read back.
+ */
+function toEmittableWire(required: s402PaymentRequired): Record<string, unknown> {
+  const wire = toRequirementsWire(required);
+  validateRequirementsShape(wire, { emitting: true });
+  return wire;
 }
 
 export function encodePaymentPayload(payload: s402PaymentPayload): string {
@@ -374,8 +391,12 @@ export function applyForeignExpiry(required: s402PaymentRequired, now?: number):
     // overwrite whatever that scheme means by the same key in its own `extra`.
     if (!S402_SCHEMES.has(offer.scheme as string)) continue;
     if (offer.expiresAt !== undefined) continue;
+    // No `> 0` guard. A zero timeout used to fall through here and leave the
+    // offer with NO `expiresAt`, which walks past all three S1 layers — the
+    // one outcome this function exists to prevent. Zero now means "already
+    // expired", which is what a server saying zero meant.
     const timeout = offer.maxTimeoutSeconds ?? S402_DEFAULT_MAX_TIMEOUT_SECONDS;
-    if (timeout > 0) offer.expiresAt = (now ?? Date.now()) + timeout * 1000;
+    offer.expiresAt = (now ?? Date.now()) + Math.max(timeout, 0) * 1000;
   }
 }
 
@@ -883,11 +904,27 @@ function validateExtraFields(extra: Record<string, unknown>, where: string): voi
     throw new s402Error('INVALID_PAYLOAD',
       `${where}: extra.extensions must be a plain object`);
   }
+  // The flow decides what a client may conclude from a retry — under `upfront`
+  // the charge may already have happened. A value we cannot name is a
+  // resource-server ordering we cannot describe to the payer, so it is refused
+  // rather than defaulted. This runs only for offers naming an s402 scheme
+  // (see `validateRequirementEntry`), which is why an `auth-capture` entry's
+  // own `escrow` flow is none of our business.
+  if (extra.paymentFlow !== undefined
+      && extra.paymentFlow !== 'authorization' && extra.paymentFlow !== 'upfront') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `${where}: extra.paymentFlow ${JSON.stringify(extra.paymentFlow)} is not a flow this build knows; ` +
+      'expected "authorization" or "upfront"');
+  }
   validateSubObjects(extra);
 }
 
 /** Validate one `accepts[]` entry as it arrived on the wire. */
-function validateRequirementEntry(entry: unknown, index: number): void {
+function validateRequirementEntry(
+  entry: unknown,
+  index: number,
+  options?: RequirementsValidationOptions,
+): void {
   const where = `accepts[${index}]`;
   if (!isPlainObject(entry)) {
     throw new s402Error('INVALID_PAYLOAD', `${where} is not an object`);
@@ -899,7 +936,11 @@ function validateRequirementEntry(entry: unknown, index: number): void {
   // decoder that refuses the whole 402 over it turns a menu into a rejection.
   if (typeof entry.scheme !== 'string' || entry.scheme.length === 0) missing.push('scheme (non-empty string)');
   if (typeof entry.network !== 'string') missing.push('network (string)');
-  if (typeof entry.asset !== 'string') missing.push('asset (string)');
+  if (typeof entry.asset !== 'string') {
+    missing.push('asset (string)');
+  } else if (entry.asset.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD', `${where}: asset must be a non-empty string`);
+  }
   if (typeof entry.amount !== 'string') {
     missing.push('amount (string)');
   } else if (!isValidAmount(entry.amount)) {
@@ -925,10 +966,22 @@ function validateRequirementEntry(entry: unknown, index: number): void {
     }
   }
 
+  // CAIP-2, after the control-character sweep so a null byte still reports as
+  // a null byte. Skipped only for a document lifted out of a retired flat
+  // shape, whose own schema predates the rule (see the options docblock).
+  if (!options?.liftedFromLegacy && !isCaip2Network(entry.network as string)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `${where}: network "${entry.network}" is not CAIP-2 (at least 3 characters, containing ":"). ` +
+      'x402 V2 requires it, so a 402 carrying anything else is one the pinned @x402/core decoder refuses.');
+  }
+
+  // Upstream's schema is `z.number().positive()`. Zero was accepted here and is
+  // not merely a schema mismatch: an offer good for zero seconds is one that
+  // was never payable, and it used to arrive with no `expiresAt` at all.
   if (entry.maxTimeoutSeconds !== undefined) {
-    if (typeof entry.maxTimeoutSeconds !== 'number' || !Number.isFinite(entry.maxTimeoutSeconds) || entry.maxTimeoutSeconds < 0) {
+    if (typeof entry.maxTimeoutSeconds !== 'number' || !Number.isFinite(entry.maxTimeoutSeconds) || entry.maxTimeoutSeconds <= 0) {
       throw new s402Error('INVALID_PAYLOAD',
-        `${where}: maxTimeoutSeconds must be a non-negative finite number, got ${JSON.stringify(entry.maxTimeoutSeconds)}`);
+        `${where}: maxTimeoutSeconds must be a positive finite number, got ${JSON.stringify(entry.maxTimeoutSeconds)}`);
     }
   }
 
@@ -953,7 +1006,77 @@ function validateRequirementEntry(entry: unknown, index: number): void {
  * not the lifted s402 view. Everything s402 adds is validated where it actually
  * travels: inside each entry's `extra`, and inside `extensions.s402`.
  */
-export function validateRequirementsShape(obj: unknown): void {
+export interface RequirementsValidationOptions {
+  /**
+   * This document is about to go ON the wire.
+   *
+   * Emission is held to upstream's own V2 schema, because ADR-016's invariant
+   * is a claim about what s402 EMITS: `resource.url` must be non-empty, which
+   * a decoder has no business demanding of a peer.
+   */
+  emitting?: boolean;
+  /**
+   * This document was lifted out of a retired flat shape (x402 V1, s402 v1) by
+   * the compat layer.
+   *
+   * Those shapes predate x402 V2's CAIP-2 `network` rule — x402 V1's own schema
+   * is `NonEmptyString` — and ADR-013 makes reading them an obligation. So the
+   * CAIP-2 check is skipped here and nowhere else. A lifted document that fails
+   * the strict check is one s402 can read and must not re-emit, and that
+   * asymmetry is the point.
+   */
+  liftedFromLegacy?: boolean;
+}
+
+/**
+ * x402 V2's CAIP-2 network rule, verbatim from upstream's `NetworkSchemaV2`:
+ * at least three characters, containing a colon.
+ */
+function isCaip2Network(value: string): boolean {
+  return value.length >= 3 && value.includes(':');
+}
+
+/** Upstream's `PRINTABLE_ASCII_REGEX`, used for `serviceName` and each `tag`. */
+const PRINTABLE_ASCII = /^[\x20-\x7e]+$/;
+
+/**
+ * Validate the x402 V2 `ResourceInfo` bounds upstream enforces and s402 did not.
+ *
+ * `serviceName` and `tags` are capped at 32 printable-ASCII characters and the
+ * list at five entries; `iconUrl` at 2048. A gate that set a 33-character
+ * service name emitted a 402 the pinned `@x402/core` refuses to parse, with
+ * nothing in s402 saying so.
+ */
+function validateResourceInfo(resource: Record<string, unknown>): void {
+  const { serviceName, tags, iconUrl } = resource;
+  if (serviceName !== undefined) {
+    if (typeof serviceName !== 'string' || serviceName.length === 0 || serviceName.length > 32
+        || !PRINTABLE_ASCII.test(serviceName)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        'resource.serviceName must be 1-32 printable ASCII characters (x402 V2 ResourceInfo)');
+    }
+  }
+  if (tags !== undefined) {
+    if (!Array.isArray(tags) || tags.length > 5) {
+      throw new s402Error('INVALID_PAYLOAD',
+        'resource.tags must be an array of at most 5 entries (x402 V2 ResourceInfo)');
+    }
+    for (const tag of tags) {
+      if (typeof tag !== 'string' || tag.length === 0 || tag.length > 32 || !PRINTABLE_ASCII.test(tag)) {
+        throw new s402Error('INVALID_PAYLOAD',
+          'each resource.tags entry must be 1-32 printable ASCII characters (x402 V2 ResourceInfo)');
+      }
+    }
+  }
+  if (iconUrl !== undefined) {
+    if (typeof iconUrl !== 'string' || iconUrl.length > 2048) {
+      throw new s402Error('INVALID_PAYLOAD',
+        'resource.iconUrl must be a string of at most 2048 characters (x402 V2 ResourceInfo)');
+    }
+  }
+}
+
+export function validateRequirementsShape(obj: unknown, options?: RequirementsValidationOptions): void {
   if (obj == null || typeof obj !== 'object') {
     throw new s402Error('INVALID_PAYLOAD', 'Payment requirements is not an object');
   }
@@ -984,10 +1107,17 @@ export function validateRequirementsShape(obj: unknown): void {
     throw new s402Error('INVALID_PAYLOAD',
       'Malformed payment requirements: missing resource (object with a url)');
   }
-  if (typeof (record.resource as Record<string, unknown>).url !== 'string') {
+  const resource = record.resource as Record<string, unknown>;
+  if (typeof resource.url !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       'Malformed payment requirements: resource.url must be a string');
   }
+  if (options?.emitting && resource.url.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD',
+      'resource.url must be non-empty on emission: x402 V2 requires it and the pinned ' +
+      '@x402/core decoder refuses an empty one. Pass the URL of the resource being paid for.');
+  }
+  validateResourceInfo(resource);
 
   if (!Array.isArray(record.accepts)) {
     throw new s402Error('INVALID_PAYLOAD',
@@ -997,7 +1127,7 @@ export function validateRequirementsShape(obj: unknown): void {
   if (record.accepts.length === 0) {
     throw new s402Error('INVALID_PAYLOAD', 'accepts array must contain at least one requirement');
   }
-  record.accepts.forEach(validateRequirementEntry);
+  record.accepts.forEach((entry, index) => validateRequirementEntry(entry, index, options));
 
   if (record.error !== undefined && typeof record.error !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
@@ -1227,7 +1357,7 @@ export const MAX_BODY_BYTES = 1024 * 1024;
  * envelope in both places, and an x402 V1 client reads only the body.
  */
 export function encodeRequirementsBody(required: s402PaymentRequired): string {
-  return JSON.stringify(toRequirementsWire(required));
+  return JSON.stringify(toEmittableWire(required));
 }
 
 /** Decode the 402 document from a JSON string (from the response body) */

@@ -194,8 +194,22 @@ describe('mcdc: validateRequirementsShape — happy paths', () => {
 
   it('mcdc-hp: an entry carrying unknown `extra` keys passes (x402 owns that bag)', () => {
     expect(() => validateRequirementsShape(valid({
-      accepts: [{ ...VALID, extra: { paymentFlow: 'authorize-capture', name: 'USDC' } }],
+      accepts: [{ ...VALID, extra: { name: 'USDC', version: '2', futureKey2030: { deep: true } } }],
     }))).not.toThrow();
+  });
+
+  it('mcdc-hp: `paymentFlow` is NOT one of those keys — x402 names it and closes its values', () => {
+    // The open-bag rule covers keys nobody has defined. `paymentFlow` is
+    // defined, and what a client may conclude from a retry depends on it, so a
+    // value this build cannot name is refused rather than carried.
+    for (const flow of ['authorization', 'upfront']) {
+      expect(() => validateRequirementsShape(valid({
+        accepts: [{ ...VALID, extra: { paymentFlow: flow } }],
+      }))).not.toThrow();
+    }
+    expect(() => validateRequirementsShape(valid({
+      accepts: [{ ...VALID, extra: { paymentFlow: 'authorize-capture' } }],
+    }))).toThrow('paymentFlow');
   });
 
   it('mcdc-hp: a plain x402 402 with no extensions.s402 passes', () => {
@@ -562,19 +576,24 @@ describe('mcdc: validateRequirementsShape — isolation tests', () => {
 
   // C37: maxTimeoutSeconds present AND invalid
   it('mcdc-mc37a: rejects non-numeric maxTimeoutSeconds', () => {
-    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: '60' }))).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: '60' }))).toThrow('maxTimeoutSeconds must be a positive finite number');
   });
 
   it('mcdc-mc37b: rejects negative maxTimeoutSeconds', () => {
-    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: -1 }))).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: -1 }))).toThrow('maxTimeoutSeconds must be a positive finite number');
   });
 
   it('mcdc-mc37c: rejects Infinity maxTimeoutSeconds', () => {
-    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: Infinity }))).toThrow('maxTimeoutSeconds must be a non-negative finite number');
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: Infinity }))).toThrow('maxTimeoutSeconds must be a positive finite number');
   });
 
-  it('mcdc-mc37d: accepts maxTimeoutSeconds = 0 (lower bound)', () => {
-    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: 0 }))).not.toThrow();
+  it('mcdc-mc37d: rejects maxTimeoutSeconds = 0, accepts 1 (the boundary moved)', () => {
+    // Upstream's schema is `z.number().positive()`, and zero is not merely a
+    // schema mismatch: an offer good for zero seconds was never payable, and
+    // it used to reach the facilitator with no `expiresAt` at all, past every
+    // S1 layer. 1 is the new lower bound and must still pass.
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: 0 }))).toThrow('maxTimeoutSeconds must be a positive finite number');
+    expect(() => validateRequirementsShape(valid({ maxTimeoutSeconds: 1 }))).not.toThrow();
   });
 
   // C38: entry.extra present AND not a plain object
