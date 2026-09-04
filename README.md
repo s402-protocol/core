@@ -3,9 +3,9 @@
 [![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
 
-**Chain-agnostic HTTP 402 protocol.** Six payment schemes for AI agent commerce. Wire-compatible with x402 — audited and tested against x402 @ `2cc7e9a6` (`x402-foundation/x402`, 2026-09-04; `@x402/core` 2.25.0). Zero runtime dependencies. Includes an optional compat layer (`s402/compat/x402`) for normalizing x402 input.
+**A profile of x402: the Sui binding, and the rules about what an agent may pay.** Six payment schemes for AI agent commerce, carried in the x402 V2 envelope every x402 client already reads — audited and tested against x402 @ `2cc7e9a6` (`x402-foundation/x402`, 2026-09-04; `@x402/core` 2.25.0). Chain-agnostic types, zero runtime dependencies. Includes a compat layer (`s402/compat/x402`) for x402 V1 and legacy s402 v1 input.
 
-s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for six payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)).
+s402 is a profile of x402 — types, HTTP encoding, scheme registry, and error handling for six payment schemes, all inside x402's `PaymentRequired` envelope. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)); the Sui binding lives in `@sweefi/sui`.
 
 The Sui reference implementation ships separately as [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui). Its Prepaid scheme uses Programmable Transaction Blocks to settle 1,000 API calls in **2 on-chain transactions instead of 1,000** — a *modelled* effective gas cost of ~$0.000014 per call against ~$0.007 for one-shot Exact. Those are estimates under stated price and congestion assumptions, not measurements from production traffic: the model, its inputs, and the cases where a competitor is cheaper are all in [the whitepaper's gas section](./docs/whitepaper.md).
 
@@ -55,7 +55,7 @@ See [ADR-005](./docs/adr/005-interop-superset-principle.md) for the full reasoni
 
 ## Why s402?
 
-HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a payment protocol that actually works. Coinbase's x402 proved the concept on EVM. s402 takes it further by leveraging what makes Sui different.
+HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a payment protocol that actually works. x402 is that protocol, and since April 2026 it is governed by a foundation under the Linux Foundation. s402 is its Sui profile: the same envelope, bound to what makes Sui different, with a policy layer above it.
 
 ### s402 vs x402
 
@@ -475,9 +475,9 @@ const offer: s402PaymentRequirements = {
 
 ## Design Principles
 
-1. **Protocol-agnostic core, Sui-native reference.** `s402` defines chain-agnostic protocol types and HTTP encoding. The reference implementation, [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui), is **published** and exploits Sui's properties — PTBs, object model, sub-second finality. Other chains can implement s402 schemes using their own primitives.
+1. **x402 envelope, chain-agnostic types, Sui-native reference.** `s402`'s 402 is an x402 V2 `PaymentRequired` envelope, always ([ADR-016](./docs/adr/016-s402-402-is-an-x402-envelope.md)); its types and HTTP encoding carry no chain-specific logic. The reference implementation, [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui), is **published** and exploits Sui's properties — PTBs, object model, sub-second finality. Other chains can implement s402 schemes using their own primitives.
 
-2. **Optional x402 compat.** The `s402/compat/x402` subpath provides a migration aid for codebases with x402-formatted JSON. It normalizes x402 V1 (`maxAmountRequired`) and V2 (`amount`) to s402 format. This is opt-in — the core protocol has no x402 dependency.
+2. **One wire, one compat subpath.** Because the 402 is x402's envelope, an unmodified x402 client pays an `s402Gate` with no server option (`test/interop-x402-client.test.ts` proves it against the upstream client). The `s402/compat/x402` subpath handles the rest: x402 V1 payment bodies and legacy s402 v1 requirements on intake, and receipts answered in the caller's dialect. `@x402/*` packages are test-only; runtime dependencies stay at zero.
 
 3. **Scheme-specific verification.** Each scheme has its own verify logic. Exact verify (signature recovery + dry-run) is fundamentally different from stream verify (deposit check + rate validation). The facilitator dispatches — it doesn't share logic.
 

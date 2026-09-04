@@ -41,9 +41,9 @@ But in 1997, there was no good way to send tiny payments over the internet. No d
 
 In 2025, Coinbase — one of the biggest cryptocurrency companies — built a protocol called [x402](https://www.coinbase.com/developer-platform/discover/launches/x402) that finally gave HTTP 402 a purpose. x402 lets websites charge for content using stablecoin payments on blockchains like Base and Solana. It processed [over 100 million payments](https://www.x402.org/) in its first few months.
 
-x402 proved the concept works. But it was built for one specific blockchain family (EVM — Ethereum and its cousins) and one payment model (pay per request). It's like building a toll road with only one lane.
+x402 proved the concept works, and in April 2026 it moved under the Linux Foundation, so it is the 402 everyone speaks. Its bindings, though, were laid down for EVM and Solana first. It's like a toll road whose lanes were built before the fastest cars existed.
 
-**s402** is what happens when you redesign that toll road for a blockchain called [Sui](https://sui.io), which can do things Ethereum simply can't:
+**s402** is the lane for a blockchain called [Sui](https://sui.io) — the same toll road, the same ticket every x402 client already carries, bound to things Ethereum simply can't do:
 
 - **Atomic transactions**: Instead of "verify... wait... settle" (two steps with a gap), Sui can do both in a single transaction that either fully succeeds or fully fails. No gap. No risk.
 - **Sub-second finality**: Sui confirms transactions in ~400 milliseconds. Ethereum takes 12+ seconds. That's the difference between a conversation and a phone call with long pauses.
@@ -142,7 +142,7 @@ This is the most common question. The answer is architectural:
 
 ### The ecosystem vision
 
-s402 is the **protocol layer** — it defines what goes over the wire. It's the foundation for:
+s402 is the **profile layer** — it defines what goes inside x402's envelope on Sui, and the rules above it. It's the foundation for:
 
 - **Scheme implementations**: Sui-specific PTB builders, gas station, and developer SDK — your own or a third-party Sui integration.
 - **Service discovery**: Where services advertise their s402 endpoints and agents discover them (e.g. `/.well-known/s402.json`).
