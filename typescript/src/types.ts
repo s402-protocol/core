@@ -157,6 +157,17 @@ export interface s402PaymentRequirements {
   settlementMode?: s402SettlementMode;
   /** When these requirements expire (Unix timestamp ms). Facilitator MUST reject after this. */
   expiresAt?: number;
+  /**
+   * AP2 mandate requirements (if agent spending authorization is needed).
+   *
+   * Flat here, envelope-level on the wire: it rides in `extensions.s402.mandate`
+   * and is projected back onto every entry on decode. It is read per-requirement
+   * — a facilitator and a scheme implementation are handed one offer and never
+   * see the envelope — but a mandate authorizes the AGENT, not one price line,
+   * so two entries of the same 402 may not disagree about it. The encoder
+   * refuses that rather than publishing one of two answers.
+   */
+  mandate?: s402MandateRequirements;
 
   // ── Scheme-specific extensions (ordered by tier) ──
 

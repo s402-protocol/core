@@ -1230,3 +1230,170 @@ describe('decodePaymentRequired — `extra` is x402\'s bag, not ours', () => {
     expect(() => decodePaymentRequired(btoa(JSON.stringify(bad)))).toThrow(/required must be a boolean/);
   });
 });
+
+describe('mandate survives the round trip (it is a field, not a note)', () => {
+  it('carries a requirement-level mandate through encode → decode', () => {
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [{ ...SAMPLE_OFFER, mandate: { required: true, minPerTx: '100000' } }],
+    };
+    const decoded = decodePaymentRequired(encodePaymentRequired(doc));
+    expect(decoded.accepts[0].mandate).toEqual({ required: true, minPerTx: '100000' });
+    expect(decoded.mandate).toEqual({ required: true, minPerTx: '100000' });
+  });
+
+  it('puts it where the wire says it goes — extensions.s402.mandate, not the entry', () => {
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [{ ...SAMPLE_OFFER, mandate: { required: true } }],
+    };
+    const wire = JSON.parse(atob(encodePaymentRequired(doc)));
+    expect(wire.extensions.s402.mandate).toEqual({ required: true });
+    expect(wire.accepts[0].mandate).toBeUndefined();
+    expect(wire.accepts[0].extra.mandate).toBeUndefined();
+  });
+
+  it('refuses to emit two entries that disagree about the mandate', () => {
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [
+        { ...SAMPLE_OFFER, mandate: { required: true } },
+        { ...SAMPLE_OFFER, scheme: 'prepaid', mandate: { required: false } },
+      ],
+    };
+    // A mandate authorizes the AGENT, not one price line. Two answers on one
+    // 402 is a question the wire has no slot for — better to refuse than to
+    // silently publish one of them.
+    expect(() => encodePaymentRequired(doc)).toThrow(/mandate/i);
+  });
+
+  it('projects the envelope mandate back onto every entry on decode', () => {
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      mandate: { required: true, minPerTx: '500' },
+      accepts: [SAMPLE_OFFER, { ...SAMPLE_OFFER, scheme: 'prepaid' }],
+    };
+    const decoded = decodePaymentRequired(encodePaymentRequired(doc));
+    expect(decoded.accepts.map((a) => a.mandate)).toEqual([
+      { required: true, minPerTx: '500' },
+      { required: true, minPerTx: '500' },
+    ]);
+  });
+});
+
+describe("a foreign scheme's `extra` is not ours to validate", () => {
+  it('decodes a 402 whose foreign entry carries an s402-shaped key in another shape', () => {
+    // x402 ships `auth-capture`. If that scheme ever puts an `escrow` key in
+    // its own `extra`, s402's escrow validator would reject the WHOLE 402 —
+    // including the `exact` entry we can pay. One unreadable offer must not
+    // make an entire menu unreadable.
+    const doc = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [
+        { ...SAMPLE_OFFER, maxTimeoutSeconds: 60, extra: {} },
+        {
+          scheme: 'auth-capture', network: 'eip155:8453', asset: '0xUSDC',
+          amount: '10000', payTo: '0xabc', maxTimeoutSeconds: 300,
+          extra: { escrow: 'foo', expiresAt: 'whenever', upto: 42 },
+        },
+      ],
+    };
+    const decoded = decodePaymentRequired(btoa(JSON.stringify(doc)));
+    expect(decoded.accepts).toHaveLength(2);
+
+    // The exact entry is intact and payable.
+    expect(decoded.accepts[0].scheme).toBe('exact');
+    expect(decoded.accepts[0].amount).toBe(SAMPLE_OFFER.amount);
+
+    // The foreign entry's extra rides through verbatim — nothing lifted,
+    // nothing validated, nothing dropped.
+    expect(decoded.accepts[1].extra).toEqual({ escrow: 'foo', expiresAt: 'whenever', upto: 42 });
+    expect(decoded.accepts[1].expiresAt).toBeUndefined();
+    expect(decoded.accepts[1].escrow).toBeUndefined();
+  });
+
+  it('still validates those keys on an entry whose scheme IS ours', () => {
+    const doc = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [{ ...SAMPLE_OFFER, maxTimeoutSeconds: 60, extra: { escrow: 'foo' } }],
+    };
+    expect(() => decodePaymentRequired(btoa(JSON.stringify(doc)))).toThrow(/must be a plain object/);
+  });
+});
+
+describe('a plain x402 402 gets an expiry, on every decode path', () => {
+  const PLAIN = {
+    x402Version: 2,
+    resource: { url: 'https://x402.example.com/paid' },
+    accepts: [{
+      scheme: 'exact', network: 'eip155:8453', asset: '0xUSDC',
+      amount: '10000', payTo: '0xabc', maxTimeoutSeconds: 300, extra: {},
+    }],
+  };
+  const NOW = 1_700_000_000_000;
+
+  it('derives expiresAt from maxTimeoutSeconds in decodePaymentRequired', () => {
+    // Without this, inbound x402 traffic bypasses all three S1 stale-payment
+    // layers: the facilitator's expiry guards skip an undefined `expiresAt`.
+    const decoded = decodePaymentRequired(btoa(JSON.stringify(PLAIN)), NOW);
+    expect(decoded.accepts[0].expiresAt).toBe(NOW + 300_000);
+  });
+
+  it('derives it in decodeRequirementsBody too', () => {
+    const decoded = decodeRequirementsBody(JSON.stringify(PLAIN), NOW);
+    expect(decoded.accepts[0].expiresAt).toBe(NOW + 300_000);
+  });
+
+  it('leaves our own documents alone — silence about expiry is an answer', () => {
+    const ours = encodePaymentRequired({
+      x402Version: 2, resource: { url: RESOURCE_URL }, accepts: [SAMPLE_OFFER],
+    });
+    expect(decodePaymentRequired(ours, NOW).accepts[0].expiresAt).toBeUndefined();
+  });
+
+  it('never overwrites an expiry the peer stated', () => {
+    const stated = {
+      ...PLAIN,
+      accepts: [{ ...PLAIN.accepts[0], extra: { expiresAt: 42 } }],
+    };
+    expect(decodePaymentRequired(btoa(JSON.stringify(stated)), NOW).accepts[0].expiresAt).toBe(42);
+  });
+});
+
+describe('exact is listed first — enforced, not documented', () => {
+  it('stable-sorts exact entries to the front on the way to the wire', () => {
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [
+        { ...SAMPLE_OFFER, scheme: 'prepaid' },
+        { ...SAMPLE_OFFER, scheme: 'stream' },
+        { ...SAMPLE_OFFER, scheme: 'exact' },
+      ],
+    };
+    // x402's client pays the first entry it has a handler for. An `exact` entry
+    // listed third is an entry an x402 client walks past.
+    const wire = JSON.parse(atob(encodePaymentRequired(doc)));
+    expect(wire.accepts.map((a: { scheme: string }) => a.scheme)).toEqual(['exact', 'prepaid', 'stream']);
+  });
+
+  it('leaves the order of everything else alone', () => {
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [
+        { ...SAMPLE_OFFER, scheme: 'stream' },
+        { ...SAMPLE_OFFER, scheme: 'prepaid' },
+        { ...SAMPLE_OFFER, scheme: 'escrow' },
+      ],
+    };
+    const wire = JSON.parse(atob(encodePaymentRequired(doc)));
+    expect(wire.accepts.map((a: { scheme: string }) => a.scheme)).toEqual(['stream', 'prepaid', 'escrow']);
+  });
+});

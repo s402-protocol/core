@@ -238,7 +238,8 @@ grammars, and there is only one now ([ADR-016](../adr/016-s402-402-is-an-x402-en
 
 Every s402 scheme is expressible. `prepaid`, `stream`, `escrow`, `unlock` and `upto` each get
 their own `accepts[]` entry; an x402 client without a handler for one skips it, which is what
-`accepts[]` is for. s402's own per-requirement fields (`facilitatorUrl`, `expiresAt`, the fee
+`accepts[]` is for. The encoder sorts `exact` to the front, because x402's client pays the first
+entry it has a handler for and an `exact` entry listed third is one it walks past. s402's own per-requirement fields (`facilitatorUrl`, `expiresAt`, the fee
 fields, the per-scheme extras) ride in that entry's `extra`, and `mandate` rides in
 `extensions.s402` — so nothing is dropped to make the document readable.
 
@@ -271,10 +272,31 @@ Takes any of them — wire v2 / x402 V2 envelope, x402 V1 flat, s402 v1 flat —
 `s402PaymentRequired`. The V2 case is identity plus the `extra` projection, because that envelope
 is the native shape.
 
-One thing is added rather than copied: when a document carries **no** `extensions.s402` — a plain
-x402 402 from a server that has never heard of s402 — an entry with no `expiresAt` gets one derived
-from its `maxTimeoutSeconds`. Without it, inbound x402 traffic would bypass every S1 stale-payment
-guard, because those guards skip an undefined `expiresAt`. s402's own documents are never touched.
+### One thing every decode path adds rather than copies
+
+When a document carries **no** `extensions.s402` — a plain x402 402, from a server that has never
+heard of s402 — an offer with no `expiresAt` gets one derived from its `maxTimeoutSeconds`. Without
+it, inbound x402 traffic bypasses every S1 stale-payment guard, because those guards skip an
+undefined `expiresAt`.
+
+This runs in `decodePaymentRequired`, `decodeRequirementsBody`, the MCP and A2A decoders and
+`normalizeRequirements` alike — one helper, every entry point. `decodePaymentRequired(header, now)`
+and `decodeRequirementsBody(body, now)` take an optional clock for testing and for reproducible
+conformance vectors.
+
+Two things it does not do: it never overwrites an expiry the peer stated, and it skips offers
+naming a scheme s402 does not implement — an offer no s402 payment will be built for has nothing
+for S1 to protect, and writing to it would clobber whatever that scheme means by the same key.
+
+s402's own documents are never touched. Saying nothing about expiry is an answer, and it is ours.
+
+### `x402AcceptedFromHeaders(headers)`
+
+The requirement an x402 V2 payment says it is paying. x402 V2's `PaymentPayload` carries
+`accepted` — the FULL `PaymentRequirements` the client chose, not just its scheme name — and on a
+402 that offered several entries at several prices, that object is the only thing that says which
+one the money is for. `s402Gate` uses it to settle against the offer the payer actually took, and
+refuses when it matches none. Returns `null` for an x402 V1 payload, which has no `accepted`.
 
 ## x402 Types
 

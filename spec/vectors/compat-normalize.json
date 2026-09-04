@@ -499,7 +499,11 @@
           "asset": "0x2::sui::SUI",
           "amount": "1000000",
           "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-          "maxTimeoutSeconds": 60
+          "maxTimeoutSeconds": 60,
+          "mandate": {
+            "required": true,
+            "minPerTx": "100000"
+          }
         }
       ],
       "mandate": {

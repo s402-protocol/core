@@ -85,8 +85,10 @@ describe('Conformance: requirements-decode', () => {
 
   for (const v of vectors) {
     it(v.description, () => {
-      const header = (v.input as { header: string }).header;
-      const result = decodePaymentRequired(header);
+      // `now` is present only on vectors decoding a document with no
+      // `extensions.s402`, where `expiresAt` is derived rather than read.
+      const { header, now } = v.input as { header: string; now?: number };
+      const result = decodePaymentRequired(header, now);
       expect(result).toEqual(v.expected);
     });
   }

@@ -72,6 +72,9 @@ function toBase64(str: string): string {
 
 // ── Requirements fixtures ────────────────────────
 
+/** Fixed clock for every vector whose expected value would otherwise move. */
+const COMPAT_REFERENCE_NOW = 1700000000000; // 2023-11-14T22:13:20Z
+
 const RESOURCE: s402ResourceInfo = {
   url: 'https://api.example.com/paid',
   description: 'Paid content',
@@ -348,11 +351,16 @@ function generateRequirementsDecode(): TestVector[] {
 
   // THE interop vector: a plain x402 V2 402, carrying no s402 extensions at
   // all, decodes into requirements an s402 client can pay.
+  //
+  // ⚠️ These carry `now`. A document with no `extensions.s402` gets `expiresAt`
+  // DERIVED from `maxTimeoutSeconds` on decode (S1 stale-payment rejection has
+  // nothing to read otherwise), and a derivation off the wall clock is not a
+  // reproducible vector. Runners must pass `input.now` when it is present.
   const plainHeader = toBase64(JSON.stringify(PLAIN_X402_V2));
   results.push({
     description: 'Decode a plain x402 V2 402 (no extensions.s402) — it is payable as-is',
-    input: { header: plainHeader },
-    expected: decodePaymentRequired(plainHeader),
+    input: { header: plainHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(plainHeader, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -368,8 +376,8 @@ function generateRequirementsDecode(): TestVector[] {
   const foreignHeader = toBase64(JSON.stringify(foreignScheme));
   results.push({
     description: 'Decode an x402 402 offering a scheme s402 does not implement',
-    input: { header: foreignHeader },
-    expected: decodePaymentRequired(foreignHeader),
+    input: { header: foreignHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(foreignHeader, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -383,8 +391,8 @@ function generateRequirementsDecode(): TestVector[] {
   const unknownHeader = toBase64(JSON.stringify(withUnknownKeys));
   results.push({
     description: 'Decode strips unknown top-level envelope keys',
-    input: { header: unknownHeader },
-    expected: decodePaymentRequired(unknownHeader),
+    input: { header: unknownHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(unknownHeader, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -398,8 +406,8 @@ function generateRequirementsDecode(): TestVector[] {
   const unknownEntryHeader = toBase64(JSON.stringify(withUnknownEntryKeys));
   results.push({
     description: 'Decode strips unknown accepts[] entry keys but keeps unknown extra keys',
-    input: { header: unknownEntryHeader },
-    expected: decodePaymentRequired(unknownEntryHeader),
+    input: { header: unknownEntryHeader, now: COMPAT_REFERENCE_NOW },
+    expected: decodePaymentRequired(unknownEntryHeader, COMPAT_REFERENCE_NOW),
     shouldReject: false,
   });
 
@@ -817,8 +825,6 @@ function generateBodyTransport(): TestVector[] {
 
 // Fixed reference timestamp for deterministic vector generation.
 // Tests MUST use this same value when calling normalizeRequirements().
-const COMPAT_REFERENCE_NOW = 1700000000000; // 2023-11-14T22:13:20Z
-
 function generateCompatNormalize(): TestVector[] {
   const vectors: TestVector[] = [];
 

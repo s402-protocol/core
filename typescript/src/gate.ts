@@ -37,10 +37,12 @@ import {
 } from './http.js';
 import {
   fromX402PayloadHeaders,
+  x402AcceptedFromHeaders,
   x402PayloadDialect,
   toX402SettleResponse,
   encodeX402SettleResponse,
 } from './compat/x402.js';
+import { s402Error } from './errors.js';
 import type { s402ResourceServer } from './server.js';
 
 /** A Web Fetch-style handler. */
@@ -115,6 +117,18 @@ export interface S402GateOptions {
    * @default true
    */
   verifyBeforeServe?: boolean;
+}
+
+/**
+ * A 402 must offer something. Checked at construction for a static list, and at
+ * resolve time for a `requirements` function — which can only be caught when it
+ * runs, so it throws there rather than returning an unpayable 402.
+ */
+function assertOffered(accepts: readonly s402PaymentRequirements[]): void {
+  if (accepts.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD',
+      's402Gate requires at least one payment requirement; an empty `accepts` is a 402 no client can pay.');
+  }
 }
 
 /** The wire dialect a payment arrived in; the receipt is answered in the same one. */
@@ -206,6 +220,11 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
  * ```
  */
 export function s402Gate(options: S402GateOptions): S402Gate {
+  // A gate with nothing to sell emits a 402 whose `accepts` is empty — a
+  // document no decoder accepts, ours included — and then hands `undefined` to
+  // verify. Refuse at construction, where the misconfiguration actually is.
+  if (Array.isArray(options.requirements)) assertOffered(options.requirements);
+
   const middleware: S402Middleware = (next) => {
     return async (request: Request): Promise<Response> => {
       const check = await runCheck(request, options);
@@ -294,13 +313,20 @@ async function runCheck(
     };
   }
 
-  // A 402 may offer several schemes; the payment picked one. Settle against
-  // THAT offer — its own price, network and expiry — not against whichever
-  // entry happened to be listed first. An offer the payload does not match
-  // falls through to `accepts[0]`, where the facilitator's own scheme
-  // cross-check rejects it with a reason.
-  const requirements = required.accepts.find((offer) => offer.scheme === payload.scheme)
-    ?? required.accepts[0];
+  // A 402 may offer several entries, and they differ in PRICE. Which one the
+  // payment is for is a question that must be answered exactly or not at all.
+  let requirements: s402PaymentRequirements;
+  try {
+    requirements = selectOffer(required, payload, dialect === 'x402' ? x402AcceptedFromHeaders(request.headers) : null);
+  } catch (e) {
+    return {
+      accepted: false,
+      response: await buildError(request, options, {
+        message: e instanceof Error ? e.message : String(e),
+        code: e instanceof s402Error ? e.code : 'INVALID_PAYLOAD',
+      }),
+    };
+  }
 
   // Security-first (default): verify the payment cryptographically BEFORE the
   // protected handler runs, so an invalid payment never triggers handler compute
@@ -345,6 +371,58 @@ async function runCheck(
   };
 }
 
+/**
+ * Decide which offer a payment is settling against.
+ *
+ * **Fails closed.** There is no "pick the first one" branch: an entry that was
+ * never offered at the price the payer signed for is not a near miss, it is a
+ * different contract, and charging it is worse than refusing the request.
+ *
+ * An x402 V2 payment carries `accepted` — the whole requirement the client
+ * chose — so it is matched on all five economic fields. Anything less (matching
+ * the scheme name and taking the first hit) settles a payment for a $5 offer
+ * against a $1 one whenever both are on the menu.
+ *
+ * A native s402 payment names only its scheme. That identifies an offer when
+ * exactly one entry uses that scheme, and does not when two do — so two do is
+ * refused as ambiguous rather than guessed.
+ *
+ * @throws {s402Error} `SCHEME_NOT_SUPPORTED` when nothing matches,
+ *   `INVALID_PAYLOAD` when the payload cannot tell two offers apart.
+ */
+function selectOffer(
+  required: s402PaymentRequired,
+  payload: s402PaymentPayload,
+  accepted: Record<string, unknown> | null,
+): s402PaymentRequirements {
+  if (accepted) {
+    const match = required.accepts.find((offer) =>
+      offer.scheme === accepted.scheme &&
+      offer.network === accepted.network &&
+      offer.asset === accepted.asset &&
+      offer.amount === accepted.amount &&
+      offer.payTo === accepted.payTo);
+    if (match) return match;
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      `The payment names a requirement this route did not offer ` +
+      `(scheme "${String(accepted.scheme)}", network "${String(accepted.network)}", ` +
+      `asset "${String(accepted.asset)}", amount "${String(accepted.amount)}", ` +
+      `payTo "${String(accepted.payTo)}").`);
+  }
+
+  const candidates = required.accepts.filter((offer) => offer.scheme === payload.scheme);
+  if (candidates.length === 1) return candidates[0];
+  if (candidates.length === 0) {
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      `Scheme "${payload.scheme}" is not offered by this route. ` +
+      `Offered: [${required.accepts.map((o) => o.scheme).join(', ')}].`);
+  }
+  throw new s402Error('INVALID_PAYLOAD',
+    `Ambiguous payment: ${candidates.length} offers use scheme "${payload.scheme}" and the ` +
+    `payload does not say which one it paid. Pay in x402's V2 dialect, whose payload carries ` +
+    `the full \`accepted\` requirement, or offer that scheme once.`);
+}
+
 async function resolveRequired(
   request: Request,
   options: S402GateOptions,
@@ -353,6 +431,7 @@ async function resolveRequired(
     ? await options.requirements(request)
     : options.requirements;
   const accepts = Array.isArray(resolved) ? resolved : [resolved];
+  assertOffered(accepts);
   const required: s402PaymentRequired = {
     x402Version: 2,
     resource: options.resource,

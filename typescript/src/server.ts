@@ -76,8 +76,15 @@ export class s402ResourceServer {
     const schemeImpl = this.schemes.get(config.network)?.get(target);
     if (schemeImpl) {
       // A scheme implementation owns its own extras; it does not get to change
-      // which scheme the entry is for.
-      return { ...schemeImpl.buildRequirements(config), scheme: target };
+      // which scheme the entry is for, and it does not get to drop the mandate
+      // the route configured.
+      const built = schemeImpl.buildRequirements(config);
+      return {
+        ...built,
+        scheme: target,
+        mandate: built.mandate
+          ?? (config.mandate ? { required: config.mandate.required, minPerTx: config.mandate.minPerTx } : undefined),
+      };
     }
 
     // Fallback: build generic requirements
@@ -88,6 +95,7 @@ export class s402ResourceServer {
       amount: config.price,
       payTo: config.payTo,
       facilitatorUrl: config.facilitatorUrl,
+      mandate: config.mandate ? { required: config.mandate.required, minPerTx: config.mandate.minPerTx } : undefined,
       protocolFeeBps: config.protocolFeeBps,
       receiptRequired: config.receiptRequired,
       settlementMode: config.settlementMode,

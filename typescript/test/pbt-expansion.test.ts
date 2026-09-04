@@ -94,6 +94,19 @@ const validExactPayload = () =>
 // ══════════════════════════════════════════════════════════════
 
 describe('pbt-p1: encode → decode idempotency (exhaustive)', () => {
+/**
+ * The order the encoder puts offers on the wire: every `exact` first, the rest
+ * in their original relative order. A round trip preserves every FIELD; it does
+ * not promise to preserve the ORDER, because x402's client pays the first entry
+ * it can handle and `exact` has to be that entry (ADR-016 rule 2).
+ */
+function expectedOrder<T extends { scheme: string }>(accepts: readonly T[]): T[] {
+  const exact = accepts.filter((o) => o.scheme === 'exact');
+  return exact.length === 0 || exact.length === accepts.length
+    ? [...accepts]
+    : [...exact, ...accepts.filter((o) => o.scheme !== 'exact')];
+}
+
   it('requirements roundtrip preserves all fields including optional ones', () => {
     // The optional s402 fields are per-requirement: they ride in each
     // `accepts[]` entry's `extra` on the wire and are lifted back on decode.
@@ -124,7 +137,7 @@ describe('pbt-p1: encode → decode idempotency (exhaustive)', () => {
         expect(decoded.x402Version).toBe(2);
         expect(decoded.resource.url).toBe(reqs.resource.url);
         expect(decoded.accepts).toHaveLength(reqs.accepts.length);
-        reqs.accepts.forEach((offer, i) => {
+        expectedOrder(reqs.accepts).forEach((offer, i) => {
           const entry = decoded.accepts[i];
           expect(entry.scheme).toBe(offer.scheme);
           expect(entry.network).toBe(offer.network);

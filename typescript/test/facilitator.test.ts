@@ -1,5 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  encodePaymentRequired,
+  decodePaymentRequired,
   s402Facilitator,
   s402ResourceServer,
   S402_VERSION,
@@ -383,6 +385,40 @@ describe('s402Facilitator standalone verify/settle guards', () => {
 });
 
 describe('s402ResourceServer.buildRequirements()', () => {
+  it('maps config.mandate onto the requirement it builds', () => {
+    // This mapping existed before wire v2 and was dropped when `mandate` moved
+    // to the envelope. Every caller then emitted a 402 with NO mandate, and
+    // nothing said so — the field just stopped arriving.
+    const server = new s402ResourceServer();
+    const reqs = server.buildRequirements({
+      schemes: ['exact'],
+      price: '1000000',
+      network: 'sui:testnet',
+      payTo: '0xabc',
+      asset: '0x2::sui::SUI',
+      mandate: { required: true, minPerTx: '100000' },
+    });
+    expect(reqs.mandate).toEqual({ required: true, minPerTx: '100000' });
+  });
+
+  it('survives the wire: buildRequirements → encode → decode keeps the mandate', () => {
+    const server = new s402ResourceServer();
+    const reqs = server.buildRequirements({
+      schemes: ['exact'],
+      price: '1000000',
+      network: 'sui:testnet',
+      payTo: '0xabc',
+      asset: '0x2::sui::SUI',
+      mandate: { required: true, minPerTx: '100000' },
+    });
+    const decoded = decodePaymentRequired(encodePaymentRequired({
+      x402Version: 2,
+      resource: { url: 'https://api.example.com/paid' },
+      accepts: [reqs],
+    }));
+    expect(decoded.accepts[0].mandate).toEqual({ required: true, minPerTx: '100000' });
+  });
+
   it('builds ONE generic entry for the config\'s first scheme', () => {
     const server = new s402ResourceServer();
     const reqs = server.buildRequirements({
@@ -441,7 +477,7 @@ describe('s402ResourceServer.buildRequirements()', () => {
     expect(reqs.asset).toBe('0xdba::usdc::USDC');
   });
 
-  it('leaves mandate off the entry — it is envelope-level now', () => {
+  it('keeps mandate flat on the entry — that is where it is READ', () => {
     const server = new s402ResourceServer();
     const reqs = server.buildRequirements({
       schemes: ['exact'],
@@ -452,9 +488,11 @@ describe('s402ResourceServer.buildRequirements()', () => {
       mandate: { required: true, minPerTx: '500' },
     });
 
-    // A mandate authorizes the AGENT, not one price line, so it cannot differ
-    // per entry. buildPaymentRequired() hoists it to the envelope.
-    expect('mandate' in reqs).toBe(false);
+    // A facilitator and a scheme implementation are handed ONE offer and never
+    // see the envelope, so the mandate has to be on the offer in memory. The
+    // wire is the other story: it carries one mandate, at
+    // extensions.s402.mandate, and the encoder refuses two that disagree.
+    expect(reqs.mandate).toEqual({ required: true, minPerTx: '500' });
   });
 
   it('includes stream/escrow/unlock extensions', () => {
@@ -559,7 +597,7 @@ describe('s402ResourceServer.buildPaymentRequired()', () => {
     expect(required.accepts.map((a) => a.scheme)).toEqual(['exact', 'stream']);
   });
 
-  it('hoists the mandate to the envelope, off every entry', () => {
+  it('puts one mandate on the envelope and the same one on every entry', () => {
     const server = new s402ResourceServer();
     const required = server.buildPaymentRequired({
       schemes: ['stream'],
@@ -572,8 +610,12 @@ describe('s402ResourceServer.buildPaymentRequired()', () => {
 
     expect(required.mandate).toEqual({ required: true, minPerTx: '500' });
     for (const entry of required.accepts) {
-      expect('mandate' in entry).toBe(false);
+      expect(entry.mandate).toEqual({ required: true, minPerTx: '500' });
     }
+    // One mandate on the wire, whichever way it was set in memory.
+    const wire = JSON.parse(atob(encodePaymentRequired(required)));
+    expect(wire.extensions.s402.mandate).toEqual({ required: true, minPerTx: '500' });
+    expect(wire.accepts.every((a: { mandate?: unknown }) => a.mandate === undefined)).toBe(true);
   });
 
   it('omits mandate entirely when the route does not configure one', () => {

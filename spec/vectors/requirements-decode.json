@@ -262,7 +262,11 @@
           "asset": "0x2::sui::SUI",
           "amount": "1000000",
           "payTo": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
-          "maxTimeoutSeconds": 60
+          "maxTimeoutSeconds": 60,
+          "mandate": {
+            "required": true,
+            "minPerTx": "100000"
+          }
         }
       ],
       "mandate": {
@@ -684,7 +688,8 @@
   {
     "description": "Decode a plain x402 V2 402 (no extensions.s402) — it is payable as-is",
     "input": {
-      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV19"
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV19",
+      "now": 1700000000000
     },
     "expected": {
       "x402Version": 2,
@@ -702,7 +707,8 @@
           "extra": {
             "name": "USD Coin",
             "version": "2"
-          }
+          },
+          "expiresAt": 1700000300000
         }
       ]
     },
@@ -711,7 +717,8 @@
   {
     "description": "Decode an x402 402 offering a scheme s402 does not implement",
     "input": {
-      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiYXV0aC1jYXB0dXJlIiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYXNzZXQiOiIweEEwYjg2OTkxYzYyMThiMzZjMWQxOUQ0YTJlOUViMGNFMzYwNmVCNDgiLCJhbW91bnQiOiIxMDAwMCIsInBheVRvIjoiMHgyMDk2OTNCYzZhZmMwQzUzMjhiQTM2RmFGMDNDNTE0RUYzMTIyODdDIiwibWF4VGltZW91dFNlY29uZHMiOjMwMCwiZXh0cmEiOnsibmFtZSI6IlVTRCBDb2luIiwidmVyc2lvbiI6IjIifX0seyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJlaXAxNTU6ODQ1MyIsImFzc2V0IjoiMHhBMGI4Njk5MWM2MjE4YjM2YzFkMTlENGEyZTlFYjBjRTM2MDZlQjQ4IiwiYW1vdW50IjoiMTAwMDAiLCJwYXlUbyI6IjB4MjA5NjkzQmM2YWZjMEM1MzI4YkEzNkZhRjAzQzUxNEVGMzEyMjg3QyIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsImV4dHJhIjp7Im5hbWUiOiJVU0QgQ29pbiIsInZlcnNpb24iOiIyIn19XX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiYXV0aC1jYXB0dXJlIiwibmV0d29yayI6ImVpcDE1NTo4NDUzIiwiYXNzZXQiOiIweEEwYjg2OTkxYzYyMThiMzZjMWQxOUQ0YTJlOUViMGNFMzYwNmVCNDgiLCJhbW91bnQiOiIxMDAwMCIsInBheVRvIjoiMHgyMDk2OTNCYzZhZmMwQzUzMjhiQTM2RmFGMDNDNTE0RUYzMTIyODdDIiwibWF4VGltZW91dFNlY29uZHMiOjMwMCwiZXh0cmEiOnsibmFtZSI6IlVTRCBDb2luIiwidmVyc2lvbiI6IjIifX0seyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJlaXAxNTU6ODQ1MyIsImFzc2V0IjoiMHhBMGI4Njk5MWM2MjE4YjM2YzFkMTlENGEyZTlFYjBjRTM2MDZlQjQ4IiwiYW1vdW50IjoiMTAwMDAiLCJwYXlUbyI6IjB4MjA5NjkzQmM2YWZjMEM1MzI4YkEzNkZhRjAzQzUxNEVGMzEyMjg3QyIsIm1heFRpbWVvdXRTZWNvbmRzIjozMDAsImV4dHJhIjp7Im5hbWUiOiJVU0QgQ29pbiIsInZlcnNpb24iOiIyIn19XX0=",
+      "now": 1700000000000
     },
     "expected": {
       "x402Version": 2,
@@ -741,7 +748,8 @@
           "extra": {
             "name": "USD Coin",
             "version": "2"
-          }
+          },
+          "expiresAt": 1700000300000
         }
       ]
     },
@@ -750,7 +758,8 @@
   {
     "description": "Decode strips unknown top-level envelope keys",
     "input": {
-      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV0sImluamVjdGVkRXZpbCI6InNob3VsZCBiZSBzdHJpcHBlZCIsIl9pbnRlcm5hbCI6Imhhcm1sZXNzIGJ1dCB1bmtub3duIiwieF9jdXN0b21faGVhZGVyIjo0Mn0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9fV0sImluamVjdGVkRXZpbCI6InNob3VsZCBiZSBzdHJpcHBlZCIsIl9pbnRlcm5hbCI6Imhhcm1sZXNzIGJ1dCB1bmtub3duIiwieF9jdXN0b21faGVhZGVyIjo0Mn0=",
+      "now": 1700000000000
     },
     "expected": {
       "x402Version": 2,
@@ -768,7 +777,8 @@
           "extra": {
             "name": "USD Coin",
             "version": "2"
-          }
+          },
+          "expiresAt": 1700000300000
         }
       ]
     },
@@ -777,7 +787,8 @@
   {
     "description": "Decode strips unknown accepts[] entry keys but keeps unknown extra keys",
     "input": {
-      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9LCJpbmplY3RlZEVudHJ5RmllbGQiOiJzdHJpcHBlZCJ9XX0="
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly94NDAyLmV4YW1wbGUuY29tL3BhaWQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoiZWlwMTU1Ojg0NTMiLCJhc3NldCI6IjB4QTBiODY5OTFjNjIxOGIzNmMxZDE5RDRhMmU5RWIwY0UzNjA2ZUI0OCIsImFtb3VudCI6IjEwMDAwIiwicGF5VG8iOiIweDIwOTY5M0JjNmFmYzBDNTMyOGJBMzZGYUYwM0M1MTRFRjMxMjI4N0MiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MzAwLCJleHRyYSI6eyJuYW1lIjoiVVNEIENvaW4iLCJ2ZXJzaW9uIjoiMiJ9LCJpbmplY3RlZEVudHJ5RmllbGQiOiJzdHJpcHBlZCJ9XX0=",
+      "now": 1700000000000
     },
     "expected": {
       "x402Version": 2,
@@ -795,7 +806,8 @@
           "extra": {
             "name": "USD Coin",
             "version": "2"
-          }
+          },
+          "expiresAt": 1700000300000
         }
       ]
     },

@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import {
+  encodePaymentRequired,
   s402Error,
   S402_VERSION,
   type s402PaymentRequirements,
@@ -602,12 +603,19 @@ describe('s402 compat layer', () => {
       }
     });
 
-    it('hoists mandate to the envelope (it authorizes the agent, not a price line)', () => {
+    it('carries ONE mandate — on the envelope and on every entry that reads it', () => {
       const result = fromS402V1Requirements({ ...V1, accepts: ['exact', 'upto'], mandate: { required: true, minPerTx: '100' } });
+      // A mandate authorizes the AGENT, not a price line, so v1's single
+      // mandate stays single: one slot on the wire (`extensions.s402.mandate`),
+      // and the same value on each entry, which is where a facilitator handed
+      // one offer actually reads it.
       expect(result.mandate).toEqual({ required: true, minPerTx: '100' });
       for (const entry of result.accepts) {
-        expect((entry as any).mandate).toBeUndefined();
+        expect(entry.mandate).toEqual({ required: true, minPerTx: '100' });
       }
+      const wire = JSON.parse(atob(encodePaymentRequired(result)));
+      expect(wire.extensions.s402.mandate).toEqual({ required: true, minPerTx: '100' });
+      expect(wire.accepts.every((a: { mandate?: unknown }) => a.mandate === undefined)).toBe(true);
     });
 
     it('uses the supplied resource, and an empty url when none is known', () => {

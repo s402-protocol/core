@@ -262,7 +262,8 @@ describe('an unmodified x402 client pays an s402 gate', () => {
       }],
     };
 
-    const decoded = decodePaymentRequired(btoa(JSON.stringify(plain)));
+    const NOW = 1_700_000_000_000;
+    const decoded = decodePaymentRequired(btoa(JSON.stringify(plain)), NOW);
     expect(decoded.x402Version).toBe(2);
     expect(decoded.mandate).toBeUndefined();
     expect(decoded.extensions).toBeUndefined();
@@ -273,6 +274,9 @@ describe('an unmodified x402 client pays an s402 gate', () => {
       amount: '10000',
       payTo: '0x209693Bc6afc0C5328bA36FaF03C514EF312287C',
       maxTimeoutSeconds: 300,
+      // Derived, not copied: a 402 with no `extensions.s402` says nothing about
+      // expiry, and an undefined `expiresAt` walks past every S1 guard.
+      expiresAt: NOW + 300_000,
       // x402's own `extra` keys survive; the bag is theirs and open by spec.
       extra: { name: 'USD Coin', version: '2' },
     });
@@ -340,5 +344,59 @@ describe('an unmodified x402 client pays an s402 gate', () => {
     expect(settle.txDigest).toBe(DIGEST);
     expect(settle.transaction).toBeUndefined();
     expect(settle.network).toBeUndefined();
+  });
+
+  it('pays the offer its `accepted` names, not the first one on the menu', async () => {
+    // Two `exact` offers at DIFFERENT prices. Upstream's client has a handler
+    // for the second network only, so it picks offer 1 and its `accepted`
+    // carries that offer in full. The gate must settle against THAT one — the
+    // mock facilitator only accepts `mock-pay-<amount>-to-<payTo>` for the
+    // amount on the requirement it is handed, so a 200 is the assertion.
+    const OTHER = 'sui:mainnet';
+    const DIGEST = 'D5';
+    const server = buildServer(DIGEST);
+    const gate = s402Gate({
+      server,
+      requirements: [
+        { scheme: 'exact', network: OTHER, asset: ASSET, amount: '9999999', payTo: PAY_TO },
+        { scheme: 'exact', network: NETWORK, asset: ASSET, amount: PRICE, payTo: PAY_TO },
+      ],
+      resource: { url: URL_ },
+    });
+    const handler = gate(async () => Response.json({ data: 'paid' }));
+
+    const { http, fetchWithPay } = x402Fetch(inProcess(handler));
+
+    const challenge = await handler(new Request(URL_));
+    const pr = http.getPaymentRequiredResponse((n) => challenge.headers.get(n), await challenge.clone().json());
+    expect(pr.accepts.map((a) => a.network)).toEqual([OTHER, NETWORK]);
+
+    const res = await fetchWithPay(URL_);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: 'paid' });
+
+    const settle = http.getPaymentSettleResponse((n) => res.headers.get(n));
+    expect(settle.network).toBe(NETWORK);
+  });
+
+  it('refuses a payment naming an offer the route never made', async () => {
+    const server = buildServer('D6');
+    const gate = s402Gate({
+      server,
+      requirements: server.buildRequirements({ schemes: ['exact'], price: PRICE, network: NETWORK, payTo: PAY_TO, asset: ASSET }),
+      resource: { url: URL_ },
+    });
+    const handler = gate(async () => Response.json({ data: 'should not see this' }));
+
+    // Everything matches the real offer except the price. Under a
+    // scheme-name-only match with an `accepts[0]` fallback, this settled.
+    const forged = {
+      x402Version: 2,
+      accepted: { scheme: 'exact', network: NETWORK, asset: ASSET, amount: '1', payTo: PAY_TO, maxTimeoutSeconds: 60, extra: {} },
+      payload: { transaction: paidTx('1', PAY_TO), signature: 'sig' },
+    };
+    const res = await handler(new Request(URL_, { headers: { 'PAYMENT-SIGNATURE': btoa(JSON.stringify(forged)) } }));
+    expect(res.status).toBe(402);
+    expect(((await res.json()) as { errorCode: string }).errorCode).toBe('SCHEME_NOT_SUPPORTED');
   });
 });

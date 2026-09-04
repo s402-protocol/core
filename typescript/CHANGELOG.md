@@ -70,7 +70,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `toX402V2Envelope` accepts an array of offers.
 - **MCP `_meta` and A2A `metadata` carry the same wire envelope the header does**, through one
   shared projection rather than three.
-- The conformance vectors were regenerated against the envelope: 180 vectors across 13 files
+- The conformance vectors were regenerated against the envelope: 187 vectors across 14 files
   (`requirements-encode` 23, `requirements-decode` 28, `validation-reject` 51,
   `compat-normalize` 14).
 
@@ -176,6 +176,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `s402Version` is unchanged on payment payloads and settlement responses — those legs did not move.
 
 ### Fixed
+
+- **A payment could be settled against an offer it did not make.** When a 402 offered several
+  entries, the gate matched the payment on its scheme NAME and fell back to the first entry when
+  nothing matched — so a client paying the $5 offer on a route that also lists a $1 one was
+  charged against whichever was listed first, and a payment naming a price nobody offered was
+  charged anyway. An x402 V2 payment carries `accepted`, the full requirement the client chose;
+  the gate now matches on all five economic fields (scheme, network, asset, amount, payTo) and
+  **refuses** when nothing matches instead of falling back. A native payment, which names only its
+  scheme, is refused as ambiguous when two offers share it rather than guessed.
+- **`s402ResourceServer.buildRequirements()` silently dropped `config.mandate`.** Every route that
+  configured an AP2 mandate emitted a 402 with no mandate on it and nothing said so. `mandate` is
+  a field on the requirement again — that is where a facilitator and a scheme implementation read
+  it, since both are handed one offer and never see the envelope. On the wire it still travels
+  once, at `extensions.s402.mandate`, and the encoder now refuses two entries that disagree about
+  it rather than publishing one of the two answers.
+- **A plain x402 402 decoded through `decodePaymentRequired` had no expiry.** The derivation of
+  `expiresAt` from `maxTimeoutSeconds` — the thing that keeps S1 stale-payment rejection working
+  for a peer that has never heard of s402 — lived only in `normalizeRequirements`, while the docs
+  named `decodePaymentRequired` as the path for exactly those 402s. It now runs on every decode
+  path from one shared helper. `decodePaymentRequired` and `decodeRequirementsBody` take an
+  optional clock so the derivation is testable and the conformance vectors stay reproducible.
+- **One unreadable offer could make a whole 402 unreadable.** s402's fail-hard validators for
+  `escrow` / `upto` / `expiresAt` and the rest ran on every entry's `extra`, including entries
+  naming schemes s402 does not implement. An x402 `auth-capture` offer using an `escrow` key in
+  its own shape would take down the `exact` offer beside it. Those validators now run only on
+  entries whose scheme is one of s402's six; a foreign entry's `extra` is carried through whole,
+  and nothing is lifted out of it.
+- **`s402Gate` accepted an empty `requirements` array**, emitted a 402 with `"accepts": []` that no
+  decoder — including its own — will read, and then handed `undefined` to `verify`. It is refused
+  at gate construction now, and at resolve time for a dynamic `requirements` function.
+- **`exact` is sorted to the front of `accepts[]` by the encoder** rather than left to each
+  caller. x402's client pays the first entry it has a handler for, so an `exact` entry listed
+  third is one an x402 client walks past. ADR-016 stated the rule; stating it was not enforcing it.
 
 - **The README's headline compatibility sentence was false on the first leg of the round trip.**
   "An x402 client can talk to an s402 server with zero modifications" had stood since April with

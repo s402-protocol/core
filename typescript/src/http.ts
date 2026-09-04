@@ -19,6 +19,7 @@ import type {
   s402PaymentPayload,
   s402SettleResponse,
   s402ResourceInfo,
+  s402MandateRequirements,
 } from './types.js';
 import {
   S402_HEADERS,
@@ -153,6 +154,12 @@ function pickSubObjectFields(key: string, value: unknown): unknown {
   return clean;
 }
 
+/**
+ * The six schemes s402 defines. Used to decide whether an `accepts[]` entry's
+ * `extra` is OURS — see {@link fromWireRequirement}.
+ */
+const S402_SCHEMES = new Set<string>(['exact', 'upto', 'prepaid', 'stream', 'escrow', 'unlock']);
+
 /** True for a plain (non-array, non-null) object. */
 function isPlainObject(value: unknown): value is Record<string, unknown> {
   return value != null && typeof value === 'object' && !Array.isArray(value);
@@ -200,7 +207,8 @@ export function toRequirementsWire(required: s402PaymentRequired): Record<string
   const carried = isPlainObject(rest[S402_EXTENSION_KEY]) ? rest[S402_EXTENSION_KEY] as Record<string, unknown> : {};
   delete rest[S402_EXTENSION_KEY];
   const s402Ext: Record<string, unknown> = { version: S402_WIRE_VERSION };
-  if (required.mandate !== undefined) s402Ext.mandate = required.mandate;
+  const mandate = resolveEnvelopeMandate(required);
+  if (mandate !== undefined) s402Ext.mandate = mandate;
   for (const [k, v] of Object.entries(carried)) {
     if (k !== 'version' && k !== 'mandate') s402Ext[k] = v;
   }
@@ -208,9 +216,53 @@ export function toRequirementsWire(required: s402PaymentRequired): Record<string
   const out: Record<string, unknown> = { x402Version: 2 };
   if (required.error !== undefined) out.error = required.error;
   out.resource = resource;
-  out.accepts = (required.accepts ?? []).map(toWireRequirement);
+  out.accepts = exactFirst(required.accepts ?? []).map(toWireRequirement);
   out.extensions = { ...rest, [S402_EXTENSION_KEY]: s402Ext };
   return out;
+}
+
+/**
+ * Put every `exact` offer at the front, keeping the relative order of
+ * everything else.
+ *
+ * x402's client pays the FIRST entry it has a handler for, so an `exact` entry
+ * listed third is an entry an x402 client walks past. ADR-016 rule 2 states
+ * this as a requirement on emitters; stating it is not enforcing it, so the
+ * encoder does the sort rather than trusting every caller to have read the ADR.
+ */
+function exactFirst(accepts: readonly s402PaymentRequirements[]): s402PaymentRequirements[] {
+  const exact = accepts.filter((offer) => offer.scheme === 'exact');
+  return exact.length === 0 || exact.length === accepts.length
+    ? [...accepts]
+    : [...exact, ...accepts.filter((offer) => offer.scheme !== 'exact')];
+}
+
+/**
+ * The one mandate this 402 declares, gathered from the envelope and from every
+ * entry that names one.
+ *
+ * A mandate authorizes the AGENT, not one price line, so it cannot differ per
+ * offer — the wire has exactly one slot for it, at `extensions.s402.mandate`.
+ * In memory it is allowed to sit flat on each requirement, because that is
+ * where the facilitator and the scheme implementations read it; this is the
+ * function that reconciles the two.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` if two of them disagree. Publishing one
+ *   of two answers silently is the failure mode worth refusing.
+ */
+function resolveEnvelopeMandate(required: s402PaymentRequired): s402MandateRequirements | undefined {
+  let found: s402MandateRequirements | undefined = required.mandate;
+  for (const offer of required.accepts ?? []) {
+    if (offer.mandate === undefined) continue;
+    if (found === undefined) { found = offer.mandate; continue; }
+    if (JSON.stringify(found) !== JSON.stringify(offer.mandate)) {
+      throw new s402Error('INVALID_PAYLOAD',
+        'Conflicting mandate requirements on one 402: a mandate authorizes the agent, ' +
+        'not a single offer, and the wire carries exactly one at extensions.s402.mandate. ' +
+        `Got ${JSON.stringify(found)} and ${JSON.stringify(offer.mandate)}.`);
+    }
+  }
+  return found;
 }
 
 /**
@@ -227,10 +279,16 @@ function fromWireRequirement(raw: Record<string, unknown>): s402PaymentRequireme
     if (key !== 'extra' && key in raw) out[key] = raw[key];
   }
   const extra: Record<string, unknown> = isPlainObject(raw.extra) ? { ...raw.extra } : {};
-  for (const key of S402_EXTRA_KEYS) {
-    if (!(key in extra)) continue;
-    out[key] = key in S402_SUB_OBJECT_KEYS ? pickSubObjectFields(key, extra[key]) : extra[key];
-    delete extra[key];
+  // Only an entry offering one of OUR schemes has an `extra` we own. A foreign
+  // entry's `extra` is carried through whole: nothing lifted (a `facilitatorUrl`
+  // there is not ours to hand onward), nothing validated (see
+  // validateRequirementEntry), nothing dropped.
+  if (S402_SCHEMES.has(raw.scheme as string)) {
+    for (const key of S402_EXTRA_KEYS) {
+      if (!(key in extra)) continue;
+      out[key] = key in S402_SUB_OBJECT_KEYS ? pickSubObjectFields(key, extra[key]) : extra[key];
+      delete extra[key];
+    }
   }
   if (Object.keys(extra).length > 0) out.extra = extra;
   return out as unknown as s402PaymentRequirements;
@@ -243,7 +301,7 @@ function fromWireRequirement(raw: Record<string, unknown>): s402PaymentRequireme
  * Kept under its historical name because it is the same trust boundary it
  * always was; what changed is the document it guards.
  */
-export function pickRequirementsFields(obj: Record<string, unknown>): s402PaymentRequired {
+export function pickRequirementsFields(obj: Record<string, unknown>, now?: number): s402PaymentRequired {
   const out: Record<string, unknown> = { x402Version: 2 };
   if (obj.error !== undefined) out.error = obj.error;
 
@@ -270,7 +328,39 @@ export function pickRequirementsFields(obj: Record<string, unknown>): s402Paymen
   }
   if (Object.keys(extensions).length > 0) out.extensions = extensions;
 
-  return out as unknown as s402PaymentRequired;
+  const required = out as unknown as s402PaymentRequired;
+
+  // The mandate travels once, on the envelope, and is read per-requirement —
+  // schemes and the facilitator take a single offer and never see the envelope.
+  if (required.mandate !== undefined) {
+    for (const offer of required.accepts) offer.mandate = required.mandate;
+  }
+  if (s402Ext === undefined) applyForeignExpiry(required, now);
+
+  return required;
+}
+
+/**
+ * Give a foreign x402 offer an `expiresAt` derived from its `maxTimeoutSeconds`.
+ *
+ * Runs on EVERY decode path, for any 402 that carries no `extensions.s402` —
+ * a document from a server that has never heard of s402. Without it, inbound
+ * x402 traffic bypasses all three S1 (stale payment rejection) layers, because
+ * the facilitator's expiry guards skip an undefined `expiresAt`. An offer that
+ * states its own expiry is never overwritten, and s402's own documents are
+ * never touched: saying nothing about expiry is an answer, and it is ours.
+ */
+export function applyForeignExpiry(required: s402PaymentRequired, now?: number): void {
+  for (const offer of required.accepts) {
+    // Only offers we could actually pay. An entry naming a scheme we do not
+    // implement is one no s402 payment will ever be built for, so S1 has
+    // nothing to protect there — and writing an `expiresAt` onto it would
+    // overwrite whatever that scheme means by the same key in its own `extra`.
+    if (!S402_SCHEMES.has(offer.scheme as string)) continue;
+    if (offer.expiresAt !== undefined) continue;
+    const timeout = offer.maxTimeoutSeconds ?? S402_DEFAULT_MAX_TIMEOUT_SECONDS;
+    if (timeout > 0) offer.expiresAt = (now ?? Date.now()) + timeout * 1000;
+  }
 }
 
 /**
@@ -294,7 +384,7 @@ export function pickRequirementsFields(obj: Record<string, unknown>): s402Paymen
  * console.log(required.accepts[0].amount);            // '1000000'
  * ```
  */
-export function decodePaymentRequired(header: string): s402PaymentRequired {
+export function decodePaymentRequired(header: string, now?: number): s402PaymentRequired {
   if (typeof header !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `payment-required header must be a string, got ${typeof header}`);
@@ -311,7 +401,7 @@ export function decodePaymentRequired(header: string): s402PaymentRequired {
       `Failed to decode payment-required header: ${e instanceof Error ? e.message : 'invalid base64 or JSON'}`);
   }
   validateRequirementsShape(parsed);
-  return pickRequirementsFields(parsed as Record<string, unknown>);
+  return pickRequirementsFields(parsed as Record<string, unknown>, now);
 }
 
 /**
@@ -830,7 +920,13 @@ function validateRequirementEntry(entry: unknown, index: number): void {
     if (!isPlainObject(entry.extra)) {
       throw new s402Error('INVALID_PAYLOAD', `${where}: extra must be a plain object`);
     }
-    validateExtraFields(entry.extra, where);
+    // s402's validators run only where s402 owns the keys. x402 ships schemes
+    // we do not implement (`auth-capture`, `batch-settlement`); if one of them
+    // puts an `escrow` or `expiresAt` key in its own `extra`, in its own shape,
+    // that is not an error — and rejecting the whole document over it would
+    // make an entire menu unreadable because of one dish we were never going to
+    // order. The offers we CAN pay are still validated to the letter.
+    if (S402_SCHEMES.has(entry.scheme as string)) validateExtraFields(entry.extra, where);
   }
 }
 
@@ -1119,7 +1215,7 @@ export function encodeRequirementsBody(required: s402PaymentRequired): string {
 }
 
 /** Decode the 402 document from a JSON string (from the response body) */
-export function decodeRequirementsBody(body: string): s402PaymentRequired {
+export function decodeRequirementsBody(body: string, now?: number): s402PaymentRequired {
   if (typeof body !== 'string') {
     throw new s402Error('INVALID_PAYLOAD',
       `s402 requirements body must be a string, got ${typeof body}`);
@@ -1136,7 +1232,7 @@ export function decodeRequirementsBody(body: string): s402PaymentRequired {
       `Failed to parse s402 requirements body: ${e instanceof Error ? e.message : 'invalid JSON'}`);
   }
   validateRequirementsShape(parsed);
-  return pickRequirementsFields(parsed as Record<string, unknown>);
+  return pickRequirementsFields(parsed as Record<string, unknown>, now);
 }
 
 /** Encode payment payload as JSON string (for request body) */

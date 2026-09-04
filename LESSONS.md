@@ -148,3 +148,30 @@ passes through untouched, and the mandate that IS ours still fails validation at
 between levels, move its validator with it and re-derive the list at the destination — a carried-over
 whitelist inside a bag defined by someone else's spec turns their forward compatibility into your
 rejection.
+
+---
+
+## [2026-09-04] — A selector that falls back has decided the money question by accident
+
+**Mistake:** wire v2 let one 402 offer several entries, and the entries differ in PRICE. The gate
+picked which one a payment settled against with
+`accepts.find(o => o.scheme === payload.scheme) ?? accepts[0]`. Two things were wrong and both were
+invisible in a green test suite: an x402 V2 payload carries `accepted` — the whole requirement the
+client chose — and only its `scheme` was read, so a client paying the $5 offer on a route that also
+listed a $1 one was charged against whichever came first; and the `?? accepts[0]` meant a payment
+naming a price nobody offered was charged anyway, against an offer it had never seen.
+
+**Why it happened:** the fallback was written as ergonomics — "let the facilitator's own scheme
+cross-check produce the error" — and it reads as defensive. It is the opposite. A fallback on a
+selector converts "I cannot tell which contract this is" into "this contract", silently, at the one
+moment where being wrong moves money. Every test passed because every test offered one entry.
+
+**Fix:** `selectOffer` in `gate.ts` matches an x402 payment on all five economic fields
+(scheme, network, asset, amount, payTo), refuses as `SCHEME_NOT_SUPPORTED` when nothing matches,
+and refuses as ambiguous when a native payload cannot tell two offers apart. There is no fallback
+branch. Six tests, including one driving the real upstream `@x402/fetch` against a two-price 402.
+
+**For future agents:** when a value selects which contract a payment executes, the code has no
+"nearest match" and no default — write the refusal first and let the callers complain. And when a
+list grows from one element to many, grep for every `[0]` and every `find(...) ??` that was written
+while it was one: those are the places where a fixture of size one was doing the reasoning.

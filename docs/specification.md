@@ -162,6 +162,12 @@ Each entry is an x402 V2 `PaymentRequirements`.
 | `maxTimeoutSeconds` | number | No | Non-negative finite number. | Seconds the facilitator will wait before rejecting. Emitters SHOULD always send it; `60` is the default when a requirement does not name one. |
 | `extra` | object | No | Opaque bag | Scheme-specific requirement fields. s402's own are listed in §4.2.1. Keys s402 does not name MUST be preserved on decode — this bag is x402's and open by specification. |
 
+The fields in §4.2.1 are defined **only for the six s402 schemes**. On an entry naming any other
+scheme, `extra` is that scheme's own bag: implementations MUST NOT validate it against §4.2.1, MUST
+NOT lift fields out of it, and MUST carry it through unchanged. One unreadable offer must not make
+a whole 402 unreadable — the offers a client can pay are validated to the letter, and the rest are
+skipped.
+
 #### 4.2.1 s402 fields inside an entry's `extra`
 
 | Field | Type | Constraints | Description |
@@ -551,6 +557,12 @@ s402 payment data (requirements, payloads, settlement responses) travels in HTTP
 ### 12.2 Requirements Expiration
 
 Servers SHOULD set `expiresAt` on payment requirements to prevent replay of stale 402 responses. Facilitators MUST reject requirements where `Date.now() > expiresAt`.
+
+A 402 carrying no `extensions.s402` states no `expiresAt`, because the field is s402's. On decode,
+implementations SHOULD derive one for each offer naming an s402 scheme, as
+`now + maxTimeoutSeconds × 1000`, and MUST NOT overwrite an expiry the peer stated. Without this,
+an expiration guard reading an undefined `expiresAt` skips, and every stale-payment defence is
+silently absent on exactly the traffic that arrived from outside.
 
 ### 12.3 Facilitator URL Validation
 

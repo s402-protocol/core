@@ -113,11 +113,16 @@ describe('FINDING 2: detectProtocol now uses in-check (FIXED)', () => {
 // FINDING 3: x402 V2 envelope inner requirement field injection
 // ════════════════════════════════════════════════════════════════
 describe('FINDING 3: V2 envelope inner requirement field injection → fromX402Requirements', () => {
-  it('extensions injected into an accepts[] entry\'s extra propagates to s402 output', () => {
-    // Wire v2: the entry's s402 fields ride in its `extra`, so that is where an
-    // attacker injects. `extensions` is lifted back out of `extra` as a known
-    // field — it survives, and its CONTENTS stay attacker-controlled and unvalidated.
-    const envelope: x402PaymentRequiredEnvelope = {
+  it('a literal "__proto__" key in the wire bytes is carried as DATA, never as a prototype', () => {
+    // ⚠️ This test used to build the payload as a TypeScript object literal with
+    // `__proto__:` in it, which SETS THE PROTOTYPE rather than creating a key —
+    // so it asserted `{}.__proto__ !== undefined`, which is true of every object
+    // in JavaScript. It passed on an empty object and proved nothing. The attack
+    // only exists in the BYTES, so the bytes are what this drives now.
+    // `__proto__:` in an object literal is the prototype setter even when the
+    // key is quoted, so the payload is assembled with a placeholder and the
+    // real key is spliced into the JSON TEXT.
+    const wire = JSON.stringify({
       x402Version: 2,
       resource: { url: 'https://api.example.com/paid' },
       accepts: [{
@@ -126,13 +131,26 @@ describe('FINDING 3: V2 envelope inner requirement field injection → fromX402R
         asset: '0x2::sui::SUI',
         amount: '1000',
         payTo: '0xabc',
-        extra: { extensions: { __proto__: { polluted: true }, toString: 'gotcha' } },
+        maxTimeoutSeconds: 60,
+        extra: { extensions: { PROTO_KEY_PLACEHOLDER: { polluted: true }, toString: 'gotcha' } },
       }],
-    };
-    const result = fromX402Envelope(envelope);
-    const entry = result.accepts[0];
-    expect(entry.extensions).toBeDefined();
-    expect((entry.extensions as any).__proto__).toBeDefined();
+    }).replace('PROTO_KEY_PLACEHOLDER', '__proto__');
+    expect(wire).toContain('"__proto__"');
+
+    const entry = decodePaymentRequired(btoa(wire)).accepts[0];
+    const extensions = entry.extensions as Record<string, unknown>;
+
+    // The key survives as an OWN property — `extensions` is a passthrough bag
+    // and dropping it would be a different bug.
+    expect(Object.prototype.hasOwnProperty.call(extensions, '__proto__')).toBe(true);
+    expect((extensions as Record<string, unknown>)['__proto__']).toEqual({ polluted: true });
+
+    // …and it was not honored as a prototype: nothing was polluted, here or
+    // globally, and the decoded objects still have the ordinary Object prototype.
+    expect((extensions as { polluted?: unknown }).polluted).toBeUndefined();
+    expect(({} as { polluted?: unknown }).polluted).toBeUndefined();
+    expect(Object.getPrototypeOf(entry)).toBe(Object.prototype);
+    expect(Object.getPrototypeOf(extensions)).toBe(Object.prototype);
   });
 
   it('an accepts[] entry with an injected facilitatorUrl still carries it after decode', () => {

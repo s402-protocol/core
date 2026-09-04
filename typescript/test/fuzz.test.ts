@@ -84,6 +84,19 @@ const validSettleResponse = () =>
 // 1. Roundtrip: encode → decode = identity
 // ══════════════════════════════════════════════════════════════
 
+/**
+ * The order the encoder puts offers on the wire: every `exact` first, the rest
+ * in their original relative order. A round trip preserves every FIELD; it does
+ * not promise to preserve the ORDER, because x402's client pays the first entry
+ * it can handle and `exact` has to be that entry (ADR-016 rule 2).
+ */
+function expectedOrder<T extends { scheme: string }>(accepts: readonly T[]): T[] {
+  const exact = accepts.filter((o) => o.scheme === 'exact');
+  return exact.length === 0 || exact.length === accepts.length
+    ? [...accepts]
+    : [...exact, ...accepts.filter((o) => o.scheme !== 'exact')];
+}
+
 describe('fuzz: encode → decode roundtrip', () => {
   it('requirements survive roundtrip', () => {
     fc.assert(
@@ -93,7 +106,7 @@ describe('fuzz: encode → decode roundtrip', () => {
         expect(decoded.x402Version).toBe(2);
         expect(decoded.resource.url).toBe(reqs.resource.url);
         expect(decoded.accepts).toHaveLength(reqs.accepts.length);
-        reqs.accepts.forEach((offer, i) => {
+        expectedOrder(reqs.accepts).forEach((offer, i) => {
           expect(decoded.accepts[i].scheme).toBe(offer.scheme);
           expect(decoded.accepts[i].network).toBe(offer.network);
           expect(decoded.accepts[i].asset).toBe(offer.asset);

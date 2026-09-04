@@ -7,6 +7,7 @@ import {
   S402_HEADERS,
   S402_VERSION,
   S402_WIRE_VERSION,
+  s402Error,
   type s402ServerScheme,
   type s402FacilitatorScheme,
   type s402PaymentRequirements,
@@ -587,5 +588,108 @@ describe('s402Gate — verify-before-serve (security-first default)', () => {
     expect(res.status).toBe(402); // settlement failed → error surfaced
     const body = (await res.json()) as { data?: string };
     expect(body.data).toBeUndefined(); // paywalled content still withheld
+  });
+});
+
+describe('s402Gate — which offer a payment settles against', () => {
+  // A 402 may offer several entries. Choosing the wrong one is not a cosmetic
+  // bug: the entries differ in PRICE. Settling a payment for entry 1 against
+  // entry 0 charges the wrong amount, on the wrong network, to the wrong payee.
+  const OFFER_A: s402PaymentRequirements = {
+    scheme: 'exact', network: NETWORK, asset: '0x2::sui::SUI',
+    amount: '1000000', payTo: PAY_TO,
+  };
+  const OFFER_B: s402PaymentRequirements = {
+    scheme: 'exact', network: NETWORK, asset: '0x2::usdc::USDC',
+    amount: '5000000', payTo: PAY_TO,
+  };
+
+  const x402Header = (accepted: Record<string, unknown>, amount: string) =>
+    btoa(JSON.stringify({
+      x402Version: 2,
+      accepted,
+      payload: { transaction: `mock-pay-${amount}-to-${PAY_TO}`, signature: '0xmock-sig' },
+    }));
+
+  const wireOffer = (offer: s402PaymentRequirements) => ({
+    scheme: offer.scheme, network: offer.network, asset: offer.asset,
+    amount: offer.amount, payTo: offer.payTo, maxTimeoutSeconds: 60, extra: {},
+  });
+
+  it('settles an x402 payment against the entry its `accepted` names, not the first', async () => {
+    const server = buildServer();
+    const gate = s402Gate({ server, requirements: [OFFER_A, OFFER_B], resource: RESOURCE });
+    const handler = gate(async () => Response.json({ data: 'paid' }));
+
+    // The mock facilitator only accepts `mock-pay-<amount>-to-<payTo>` for the
+    // amount on the requirement it is handed — so a 200 here IS the assertion
+    // that entry 1 was selected.
+    const res = await handler(new Request('http://test/api/paid', {
+      headers: { 'PAYMENT-SIGNATURE': x402Header(wireOffer(OFFER_B), OFFER_B.amount) },
+    }));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ data: 'paid' });
+  });
+
+  it('refuses an x402 payment whose `accepted` matches no offer — never falls back', async () => {
+    const server = buildServer();
+    const gate = s402Gate({ server, requirements: [OFFER_A, OFFER_B], resource: RESOURCE });
+    const handler = gate(async () => Response.json({ data: 'should not see this' }));
+
+    // Same scheme and network as OFFER_A, but a price nobody offered. Under the
+    // old `?? accepts[0]` fallback this settled against OFFER_A.
+    const forged = { ...wireOffer(OFFER_A), amount: '1' };
+    const res = await handler(new Request('http://test/api/paid', {
+      headers: { 'PAYMENT-SIGNATURE': x402Header(forged, '1') },
+    }));
+    expect(res.status).toBe(402);
+    const body = (await res.json()) as { errorCode: string };
+    expect(body.errorCode).toBe('SCHEME_NOT_SUPPORTED');
+  });
+
+  it('refuses a native payment when two offers share its scheme and it cannot disambiguate', async () => {
+    const server = buildServer();
+    const gate = s402Gate({ server, requirements: [OFFER_A, OFFER_B], resource: RESOURCE });
+    const handler = gate(async () => Response.json({ data: 'should not see this' }));
+
+    const res = await handler(new Request('http://test/api/paid', {
+      headers: { [S402_HEADERS.PAYMENT]: buildValidPayment(OFFER_B) },
+    }));
+    expect(res.status).toBe(402);
+    const body = (await res.json()) as { error: string; errorCode: string };
+    expect(body.errorCode).toBe('INVALID_PAYLOAD');
+    expect(body.error).toMatch(/ambiguous/i);
+  });
+
+  it('refuses a payment naming a scheme no entry offers', async () => {
+    const server = buildServer();
+    const gate = s402Gate({ server, requirements: [OFFER_A], resource: RESOURCE });
+    const handler = gate(async () => Response.json({ data: 'should not see this' }));
+
+    const payload = {
+      s402Version: S402_VERSION, scheme: 'stream',
+      payload: { transaction: 'dHg=', signature: 'c2ln' },
+    };
+    const res = await handler(new Request('http://test/api/paid', {
+      headers: { [S402_HEADERS.PAYMENT]: btoa(JSON.stringify(payload)) },
+    }));
+    expect(res.status).toBe(402);
+    expect(((await res.json()) as { errorCode: string }).errorCode).toBe('SCHEME_NOT_SUPPORTED');
+  });
+});
+
+describe('s402Gate — a 402 with no offers is a misconfiguration, not a response', () => {
+  it('refuses an empty requirements array at construction', () => {
+    const server = buildServer();
+    expect(() => s402Gate({ server, requirements: [], resource: RESOURCE })).toThrow(s402Error);
+    expect(() => s402Gate({ server, requirements: [], resource: RESOURCE }))
+      .toThrow(/at least one/i);
+  });
+
+  it('refuses an empty array returned by a dynamic requirements function', async () => {
+    const server = buildServer();
+    const gate = s402Gate({ server, requirements: () => [], resource: RESOURCE });
+    const handler = gate(async () => Response.json({ data: 'nope' }));
+    await expect(handler(new Request('http://test/api/paid'))).rejects.toThrow(/at least one/i);
   });
 });

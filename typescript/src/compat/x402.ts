@@ -403,6 +403,13 @@ export function encodeX402V2Envelope(envelope: x402V2PaymentRequired): string {
  * ```
  */
 export function fromX402PayloadHeaders(headers: Headers): s402PaymentPayload | null {
+  const decoded = readX402PayloadHeader(headers);
+  if (decoded == null) return null;
+  return fromX402Payload(decoded as unknown as x402PaymentPayload);
+}
+
+/** Read, size-check and parse the x402 payload header. `null` when absent. */
+function readX402PayloadHeader(headers: Headers): Record<string, unknown> | null {
   let raw: string | null = null;
   for (const name of X402_PAYLOAD_HEADERS) {
     const value = headers.get(name);
@@ -423,7 +430,28 @@ export function fromX402PayloadHeaders(headers: Headers): s402PaymentPayload | n
   if (decoded == null || typeof decoded !== 'object' || Array.isArray(decoded)) {
     throw new s402Error('INVALID_PAYLOAD', 'x402 payment payload must be a JSON object');
   }
-  return fromX402Payload(decoded as x402PaymentPayload);
+  return decoded as Record<string, unknown>;
+}
+
+/**
+ * The requirement an x402 V2 payment says it is paying.
+ *
+ * x402 V2's `PaymentPayload` carries `accepted` — the FULL `PaymentRequirements`
+ * the client chose, not just its scheme name. On a 402 that offered several
+ * entries, that object is the only thing that says which one the money is for,
+ * and the entries differ in price. Reading the scheme alone and taking the
+ * first match settles the payment against the wrong amount.
+ *
+ * Returns `null` for an x402 V1 payload (no `accepted`) or no payment header.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` if the header is present but unreadable.
+ */
+export function x402AcceptedFromHeaders(headers: Headers): Record<string, unknown> | null {
+  const decoded = readX402PayloadHeader(headers);
+  const accepted = decoded?.accepted;
+  return accepted != null && typeof accepted === 'object' && !Array.isArray(accepted)
+    ? accepted as Record<string, unknown>
+    : null;
 }
 
 /**
@@ -992,11 +1020,12 @@ export function normalizeRequirements(
   }
 
   // x402 V2 envelope — and s402's own wire v2, which is the same document.
+  // `pickRequirementsFields` is the whole decode, foreign-expiry derivation
+  // included; there is one copy of that rule and it is on the decode path, so
+  // every entry point gets it (http.ts `applyForeignExpiry`).
   if (isX402Envelope(obj)) {
     validateRequirementsShape(obj);
-    const required = pickRequirementsFields(obj);
-    if (!hasS402Extension(obj)) applyForeignExpiry(required, now);
-    return required;
+    return pickRequirementsFields(obj, now);
   }
 
   // x402 V1 flat: { x402Version, scheme, network, amount/maxAmountRequired, ... }
@@ -1016,23 +1045,6 @@ export function normalizeRequirements(
   }
 
   throw new s402Error('INVALID_PAYLOAD', 'Unrecognized payment requirements format: missing s402Version or x402Version');
-}
-
-/** Does this envelope declare the s402 profile? */
-function hasS402Extension(obj: Record<string, unknown>): boolean {
-  const extensions = obj.extensions;
-  if (extensions == null || typeof extensions !== 'object' || Array.isArray(extensions)) return false;
-  const s402Ext = (extensions as Record<string, unknown>).s402;
-  return s402Ext != null && typeof s402Ext === 'object' && !Array.isArray(s402Ext);
-}
-
-/** Give a foreign x402 entry an `expiresAt` so S1's expiry guards have something to read. */
-function applyForeignExpiry(required: s402PaymentRequired, now?: number): void {
-  for (const entry of required.accepts) {
-    if (entry.expiresAt !== undefined) continue;
-    const timeout = entry.maxTimeoutSeconds ?? S402_DEFAULT_MAX_TIMEOUT_SECONDS;
-    if (timeout > 0) entry.expiresAt = (now ?? Date.now()) + timeout * 1000;
-  }
 }
 
 /** Validate that an x402 object has required fields (supports V1 and V2). */
