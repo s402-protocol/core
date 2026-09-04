@@ -55,22 +55,66 @@ How a payment gets settled. `'facilitator'` routes through a third-party settlem
 
 ## Payment Requirements
 
+### `s402PaymentRequired`
+
+The 402 **document** — an x402 V2 `PaymentRequired` envelope, which is what
+`payment-required` carries on every route (ADR-016). There is no s402-native flat
+shape and no option to select one.
+
+```typescript
+interface s402PaymentRequired {
+  x402Version: 2;
+  resource: s402ResourceInfo;         // what is being paid for; required
+  accepts: s402PaymentRequirements[]; // one entry per offered scheme
+  error?: string;                     // human-readable, surfaced by x402 clients
+  extensions?: Record<string, unknown>;
+  mandate?: s402MandateRequirements;  // envelope-level; rides in extensions.s402
+}
+```
+
+`exact` is listed **first whenever it is offered** — an x402 client pays the
+first entry it has a handler for.
+
+### `s402ResourceInfo`
+
+x402 V2's `ResourceInfo`, verbatim. `url` is mandatory on emission; the optional
+metadata is bounded the way upstream bounds it (`serviceName` 1–32 printable
+ASCII, at most five `tags` of the same shape, `iconUrl` at most 2048 characters).
+
+```typescript
+interface s402ResourceInfo {
+  url: string;
+  description?: string;
+  mimeType?: string;
+  serviceName?: string;
+  tags?: string[];
+  iconUrl?: string;
+}
+```
+
 ### `s402PaymentRequirements`
 
-Sent by the server in the 402 response. Tells the client how to pay.
+ONE entry of the 402's `accepts[]` — an offer of a single scheme. On the wire
+this is an x402 V2 `PaymentRequirements`; everything below that x402 does not
+name travels inside that entry's `extra` and is lifted back to the top level
+here on decode.
+
+**Architecture Invariant:** there is no `accepts` on this type. A requirement
+describes one scheme. Offering several is what the envelope's `accepts[]` array
+is for.
 
 ```typescript
 interface s402PaymentRequirements {
-  // ── Core fields (x402-compatible) ──
-  s402Version: '1';
-  accepts: s402Scheme[];
-  network: string;              // e.g., "sui:mainnet"
+  // ── x402 V2's own fields ──
+  scheme: s402SchemeName;       // one scheme, not a list
+  network: string;              // CAIP-2, e.g., "sui:mainnet"
   asset: string;                // e.g., "0x2::sui::SUI"
   amount: string;               // base units (MIST)
   payTo: string;                // recipient address
-  facilitatorUrl?: string;
+  maxTimeoutSeconds?: number;   // positive; the encoder supplies 60 when omitted
 
-  // ── s402 extensions ──
+  // ── s402's own fields — carried inside this entry's `extra` on the wire ──
+  facilitatorUrl?: string;
   mandate?: s402MandateRequirements;
   protocolFeeBps?: number;      // 0–10000
   protocolFeeAddress?: string;
@@ -154,6 +198,12 @@ Sent by the client via header transport (`x-payment` header) or body transport (
 interface s402PaymentPayloadBase {
   s402Version: '1';
   scheme: s402Scheme;
+  /**
+   * Which `accepts[]` entry this pays. Optional; `s402Client` fills it in. A
+   * 402 may offer the same scheme on several networks at different prices, and
+   * the scheme name alone cannot say which one was paid.
+   */
+  network?: string;
 }
 ```
 

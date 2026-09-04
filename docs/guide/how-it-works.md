@@ -47,16 +47,47 @@ HTTP/1.1 402 Payment Required
 payment-required: eyJzNDAyVmVyc2lvbiI6IjEiLC...  (base64 JSON)
 ```
 
-The decoded requirements tell the client everything it needs:
-- What schemes are accepted (`exact`, `prepaid`, etc.)
-- Which network and asset (`sui:mainnet`, `0x2::sui::SUI`)
-- How much to pay (`1000000` MIST = 0.001 SUI)
-- Where to pay (`0xrecipient...`)
-- When the offer expires (`expiresAt`)
+The decoded document is an **x402 V2 `PaymentRequired` envelope** — the same
+shape an unmodified x402 client already reads, on every s402 route, with no
+server option (ADR-016). It tells the client everything it needs:
+
+- What is being paid for (`resource.url`)
+- One `accepts[]` entry per offered scheme, `exact` first
+- Per entry: which network and asset (`sui:mainnet`, `0x2::sui::SUI`), how much
+  (`1000000` MIST = 0.001 SUI), and where (`payTo`)
+- s402's own per-entry fields (`facilitatorUrl`, `expiresAt`, the fee fields)
+  inside that entry's `extra`
+- s402's envelope-level fields — the wire version, and any `mandate` — under
+  `extensions.s402`. Their PRESENCE is what makes a 402 an *s402-profile* 402;
+  their absence makes it a plain x402 402 an s402 client still pays.
+
+```json
+{
+  "x402Version": 2,
+  "resource": { "url": "https://api.example.com/premium-data" },
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "sui:mainnet",
+      "asset": "0x2::sui::SUI",
+      "amount": "1000000",
+      "payTo": "0xrecipient...",
+      "maxTimeoutSeconds": 60,
+      "extra": { "facilitatorUrl": "https://facilitator.example.com" }
+    }
+  ],
+  "extensions": { "s402": { "version": "2" } }
+}
+```
 
 **3. Client builds and signs a payment**
 
-The client picks a scheme from the `accepts` array, builds a Sui Programmable Transaction Block (PTB), and signs it. The signed transaction is encoded in the `x-payment` header.
+The client picks the first `accepts[]` entry it has a scheme registered for on
+that entry's own network, builds a Sui Programmable Transaction Block (PTB), and
+signs it. The signed transaction is encoded in the `x-payment` header, along with
+the `network` of the entry it chose — a 402 may offer the same scheme on two
+networks at different prices, and the scheme name alone cannot say which one was
+paid.
 
 ```
 GET /api/premium-data HTTP/1.1

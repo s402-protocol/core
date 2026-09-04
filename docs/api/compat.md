@@ -1,10 +1,10 @@
 ---
-description: Bidirectional interop between s402 and x402. An unmodified x402 client can pay an s402 gate that sets the x402 option; s402 reads x402 payments on every gate.
+description: Bidirectional interop between s402 and x402. An unmodified x402 client pays an s402 gate with no client changes and no server options; s402 reads x402 payments on every gate.
 ---
 
 # x402 Compatibility
 
-Bidirectional interop between s402 and x402. An unmodified x402 client can pay an `s402Gate` that sets the `x402` option (via the "exact" scheme), and an s402 client can talk to an x402 server (via automatic normalization).
+Bidirectional interop between s402 and x402. An unmodified x402 client pays an `s402Gate` with **no client changes and no server options** — s402's 402 is an x402 V2 `PaymentRequired` envelope on every route (ADR-016) — and an s402 client talks to an x402 server via automatic normalization.
 
 **Audited against:** x402 `x402-foundation/x402` @ `2cc7e9a6880c08433b692666032862bcbea51187` (2026-09-04), `@x402/core` / `@x402/fetch` 2.25.0. The pin is exported as `X402_UPSTREAM_PIN` and asserted by `test/compat-x402-dialect.test.ts`; the round trip is exercised by `test/interop-x402-client.test.ts` against the real upstream client. Development moved from `coinbase/x402` (frozen at `dd927a26`) to the foundation repo in 2026-04 — check drift against the foundation.
 
@@ -45,12 +45,13 @@ Handles three formats:
 import { decodePaymentRequired } from 's402/http';
 import { normalizeRequirements } from 's402/compat/x402';
 
-// Option A: decode s402 headers directly (validates s402Version)
-const requirements = decodePaymentRequired(header);
+// Option A: decode the wire directly. This reads s402's own 402 AND a plain
+// x402 V2 one — since wire v2 they are the same envelope.
+const required = decodePaymentRequired(header);
 
-// Option B: normalize any format (s402, x402 V1, x402 V2)
-const requirements = normalizeRequirements(decodedJson);
-// Always returns s402PaymentRequirements
+// Option B: normalize any era (wire v2 / x402 V2, x402 V1 flat, s402 v1 flat)
+const required = normalizeRequirements(decodedJson);
+// Always returns s402PaymentRequired — the 402 document, not one requirement
 ```
 
 ::: warning
@@ -62,7 +63,7 @@ Do not use `JSON.parse(atob(...))` for decoding. The protocol uses Unicode-safe 
 Quick checks for protocol format.
 
 ```typescript
-function isS402(obj: Record<string, unknown>): boolean;  // has s402Version
+function isS402(obj: Record<string, unknown>): boolean;  // the RETIRED flat shape: has s402Version
 function isX402(obj: Record<string, unknown>): boolean;  // has x402Version, no s402Version
 ```
 
@@ -86,7 +87,7 @@ function fromX402Requirements(
 ): s402PaymentRequirements;
 ```
 
-- Maps `scheme` → `accepts: ['exact']`
+- Returns ONE `accepts[]` entry, with `scheme: 'exact'`
 - Handles both V1 (`maxAmountRequired`) and V2 (`amount`) wire formats
 - Preserves `extensions` field for forward compatibility
 
