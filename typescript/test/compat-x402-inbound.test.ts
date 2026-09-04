@@ -47,6 +47,16 @@ describe('fromX402PayloadHeaders — opt-in x402 inbound bridge (ADR-011 Chunk 1
     expect(fromX402PayloadHeaders(new Headers())).toBeNull();
   });
 
+  it('an empty PAYMENT-SIGNATURE is not a payment — it must not throw INVALID_PAYLOAD', () => {
+    expect(fromX402PayloadHeaders(new Headers({ 'payment-signature': '' }))).toBeNull();
+  });
+
+  it('an empty PAYMENT-SIGNATURE does not shadow a valid X-PAYMENT', () => {
+    const xp = { x402Version: 1, scheme: 'exact', payload: { transaction: 'tx_v1', signature: 'sig_v1' } };
+    const headers = new Headers({ 'payment-signature': '', 'x-payment': enc(xp) });
+    expect(fromX402PayloadHeaders(headers)!.payload.transaction).toBe('tx_v1');
+  });
+
   it('throws on a present-but-malformed header (not base64/JSON)', () => {
     const headers = new Headers({ 'payment-signature': 'not-base64-json!!!' });
     expect(() => fromX402PayloadHeaders(headers)).toThrow();
