@@ -60,7 +60,12 @@ class TestRequirementsDecode:
 
     @pytest.mark.parametrize("vector", vectors, ids=[v["description"] for v in vectors])
     def test_decode(self, vector: dict) -> None:
-        result = decode_payment_required(vector["input"]["header"])
+        # `now` is present only on vectors decoding a document with no
+        # extensions.s402, where expiresAt is derived from maxTimeoutSeconds.
+        # Runners must pass it, or the expectation is not reproducible.
+        result = decode_payment_required(
+            vector["input"]["header"], vector["input"].get("now")
+        )
         assert result == vector["expected"]
 
 

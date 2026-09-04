@@ -1,14 +1,18 @@
 """s402 — Chain-agnostic HTTP 402 wire format for AI agent payments.
 
-Five payment schemes: exact, stream, escrow, unlock, prepaid.
-Wire-compatible with x402. Zero dependencies.
+Six payment schemes: exact, upto, prepaid, stream, escrow, unlock.
+The 402 IS an x402 V2 `PaymentRequired` envelope (wire v2, ADR-016).
+Zero dependencies.
 """
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
 
 from .errors import S402Error, S402ErrorCode
 from .http import (
     S402_VERSION,
+    S402_WIRE_VERSION,
+    S402_DEFAULT_MAX_TIMEOUT_SECONDS,
+    S402_EXTENSION_KEY,
     S402_HEADERS,
     S402_CONTENT_TYPE,
     is_valid_amount,
@@ -26,6 +30,9 @@ from .http import (
     decode_settle_body,
     detect_protocol,
     validate_requirements_shape,
+    to_requirements_wire,
+    apply_foreign_expiry,
+    resolve_mandate,
     pick_requirements_fields,
     pick_payload_fields,
     pick_settle_response_fields,
@@ -34,6 +41,8 @@ from .compat import (
     normalize_requirements,
     from_x402_requirements,
     from_x402_envelope,
+    from_s402_v1_requirements,
+    x402_payment_flow_of,
     is_s402,
     is_x402,
     is_x402_envelope,
@@ -50,12 +59,18 @@ __all__ = [
     "S402ErrorCode",
     # Constants
     "S402_VERSION",
+    "S402_WIRE_VERSION",
+    "S402_DEFAULT_MAX_TIMEOUT_SECONDS",
+    "S402_EXTENSION_KEY",
     "S402_HEADERS",
     "S402_CONTENT_TYPE",
     "S402_RECEIPT_HEADER",
     # Validation
     "is_valid_amount",
     "validate_requirements_shape",
+    "to_requirements_wire",
+    "apply_foreign_expiry",
+    "resolve_mandate",
     # Header transport
     "encode_payment_required",
     "decode_payment_required",
@@ -80,6 +95,8 @@ __all__ = [
     "normalize_requirements",
     "from_x402_requirements",
     "from_x402_envelope",
+    "from_s402_v1_requirements",
+    "x402_payment_flow_of",
     "is_s402",
     "is_x402",
     "is_x402_envelope",
