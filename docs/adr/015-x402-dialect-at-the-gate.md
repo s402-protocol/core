@@ -1,6 +1,6 @@
 # ADR-015: The gate answers in the dialect it was addressed in, and emits x402's 402 only when asked
 
-**Status:** Accepted
+**Status:** Accepted — **superseded in part by ADR-016** (2026-09-04): rule 3 and the `x402` gate option are retired; rules 1 and 2 stand.
 **Implementation:** shipped
 **Force:** heuristic
 **Date:** 2026-09-04
