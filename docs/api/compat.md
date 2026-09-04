@@ -1,10 +1,12 @@
 ---
-description: Bidirectional interop between s402 and x402. An x402 client can pay an s402 server using the Exact scheme with zero code changes.
+description: Bidirectional interop between s402 and x402. An unmodified x402 client can pay an s402 gate that sets the x402 option; s402 reads x402 payments on every gate.
 ---
 
 # x402 Compatibility
 
-Bidirectional interop between s402 and x402. An x402 client can talk to an s402 server (via the "exact" scheme), and an s402 client can talk to an x402 server (via automatic normalization).
+Bidirectional interop between s402 and x402. An unmodified x402 client can pay an `s402Gate` that sets the `x402` option (via the "exact" scheme), and an s402 client can talk to an x402 server (via automatic normalization).
+
+**Audited against:** x402 `x402-foundation/x402` @ `2cc7e9a6880c08433b692666032862bcbea51187` (2026-09-04), `@x402/core` / `@x402/fetch` 2.25.0. The pin is exported as `X402_UPSTREAM_PIN` and asserted by `test/compat-x402-dialect.test.ts`; the round trip is exercised by `test/interop-x402-client.test.ts` against the real upstream client. Development moved from `coinbase/x402` (frozen at `dd927a26`) to the foundation repo in 2026-04 — check drift against the foundation.
 
 ```typescript
 import {
@@ -18,7 +20,7 @@ import {
 
 ## Why This Exists
 
-x402 (by Coinbase) established HTTP 402 payments. s402 extends the protocol for Sui-native capabilities — but maintains wire compatibility so the ecosystem isn't fragmented. An x402 client that only knows "exact" payments can talk to an s402 server without any changes.
+x402 (by Coinbase, now the x402 Foundation) established HTTP 402 payments. s402 extends the protocol for Sui-native capabilities — but maintains wire compatibility so the ecosystem isn't fragmented. An x402 client that only knows "exact" payments can pay an s402 gate without any client changes; the gate needs the `x402` option to emit a 402 that client can read (see [Serving x402 clients](#serving-x402-clients-from-a-gate)).
 
 ## Auto-Detection
 
@@ -189,6 +191,53 @@ function toX402Payload(
 ```
 
 Returns `null` if the scheme is not "exact".
+
+### `toX402SettleResponse(s402, network)` · `encodeX402SettleResponse(response)`
+
+Translate an s402 settlement result into the x402 `SettleResponse` an x402 client's `PAYMENT-RESPONSE` decoder reads, and encode it for the header.
+
+```typescript
+function toX402SettleResponse(
+  s402: s402SettleResponse,
+  network: string,          // x402 requires it; s402's settle response does not carry it
+): x402SettleResponse;
+```
+
+| s402 | x402 |
+|---|---|
+| `txDigest` | `transaction` (`""` when nothing was broadcast — x402 requires the field) |
+| `errorCode` | `errorReason` |
+| `error` | `errorMessage` |
+| `actualAmount` | `amount` |
+
+s402's own fields are kept alongside; x402 decoders ignore unknown keys. The reverse translation deliberately does not exist — see [ADR-013](../adr/013-x402-intake-compatibility.md).
+
+### `x402PayloadDialect(headers)`
+
+`'x402'` when a request's payment arrived under `PAYMENT-SIGNATURE` (x402 V2) or under `X-PAYMENT` carrying an `x402Version` (x402 V1); `null` for a native s402 payment or no payment. The gate uses this to answer the receipt in the dialect it was addressed in.
+
+## Serving x402 clients from a gate
+
+The 402 is the one leg an x402 client cannot cross on its own: s402's native `payment-required` carries `s402Version` and `accepts: ['exact']`, while x402 reads `x402Version` and `accepts: [PaymentRequirements]`. Same header, same key, different type — the two cannot share one document. So emitting x402's envelope is a **server option**:
+
+```typescript
+import { s402Gate } from 's402';
+
+const gate = s402Gate({
+  server,
+  requirements,
+  x402: {
+    resource: { url: 'https://api.example.com/paid', description: 'Paid data', mimeType: 'application/json' },
+    maxTimeoutSeconds: 60,   // optional
+  },
+});
+```
+
+With the option set, an unmodified `@x402/fetch` client completes the round trip: it reads the 402, pays under `PAYMENT-SIGNATURE`, and decodes the receipt. Without it, the 402 stays s402-native and nothing changes for existing s402 clients.
+
+What is **not** optional: every gate accepts x402 payments (`PAYMENT-SIGNATURE` V2, `X-PAYMENT` V1) and answers an x402-dialect payment with an x402-dialect receipt. Compatibility on intake is an obligation ([ADR-013](../adr/013-x402-intake-compatibility.md)); emission on the 402 is a choice ([ADR-015](../adr/015-x402-dialect-at-the-gate.md)).
+
+Only `exact`-first requirements are expressible on an x402 envelope; s402-only fields (`facilitatorUrl`, `mandate`, `expiresAt`, fees, `extensions`) do not travel on it. s402 clients hitting a gate in this mode must call `normalizeRequirements()` on the 402.
 
 ## x402 Types
 

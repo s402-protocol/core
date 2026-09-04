@@ -137,6 +137,8 @@
   },
   "devDependencies": {
     "@vitest/coverage-v8": "^3.2.4",
+    "@x402/core": "2.25.0",
+    "@x402/fetch": "2.25.0",
     "fast-check": "^4.5.3",
     "tsdown": "^0.20.3",
     "typescript": "^5.7.0",

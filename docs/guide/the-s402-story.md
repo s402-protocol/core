@@ -138,7 +138,7 @@ This is the most common question. The answer is architectural:
 
 3. **x402 has no concept of ongoing payment relationships.** Streams, prepaid balances, and escrows are stateful — they exist on-chain beyond a single request/response. x402's model is stateless per-request.
 
-4. **Compatibility is already solved.** s402's `exact` scheme *is* x402. The wire format is identical. An x402 client can talk to an s402 server out of the box. The `s402/compat/x402` layer handles format normalization in both directions. Building a "Sui adapter for x402" would give you less capability, not more.
+4. **Compatibility is already solved.** s402's `exact` scheme *is* x402's `exact`. An unmodified x402 client can pay an `s402Gate` that sets the `x402` option — zero client changes, one server option, proven against the real `@x402/fetch` in `test/interop-x402-client.test.ts`. The `s402/compat/x402` layer handles format normalization in both directions. Building a "Sui adapter for x402" would give you less capability, not more.
 
 ### The ecosystem vision
 

@@ -2,11 +2,17 @@
  * s402Gate — framework-agnostic payment gate for s402-protected routes.
  *
  * Returns a middleware that:
- *   1. Reads the `x-payment` header from the incoming `Request`.
+ *   1. Reads the payment header from the incoming `Request` — s402's `x-payment`,
+ *      or x402's `PAYMENT-SIGNATURE` (V2) / `X-PAYMENT` (V1). x402 intake is
+ *      always on: compatibility obliges s402 to understand x402 (ADR-013).
  *   2. If absent → responds `402 Payment Required` with encoded requirements.
+ *      s402-native by default; an x402 V2 `PaymentRequired` envelope when the
+ *      `x402` option is set (ADR-015 — an unmodified x402 client cannot read
+ *      the native 402, and the two dialects cannot share one header).
  *   3. If present → decodes, runs server.process() (verify + settle), then
- *      invokes the downstream handler and attaches the `x-payment-response`
- *      header to its `Response` so the client sees the settlement receipt.
+ *      invokes the downstream handler and attaches the `payment-response`
+ *      header to its `Response` so the client sees the settlement receipt —
+ *      in the dialect the client addressed us in.
  *
  * Signature is pure Web Fetch: `(Request) => Promise<Response>`. This works
  * natively in Hono (via `c.req.raw`), Next.js Route Handlers, Bun, Deno, and
@@ -25,6 +31,15 @@ import {
   decodePaymentPayload,
   encodeSettleResponse,
 } from './http.js';
+import {
+  fromX402PayloadHeaders,
+  x402PayloadDialect,
+  toX402V2Envelope,
+  encodeX402V2Envelope,
+  toX402SettleResponse,
+  encodeX402SettleResponse,
+  type x402V2ResourceInfo,
+} from './compat/x402.js';
 import type { s402ResourceServer } from './server.js';
 
 /** A Web Fetch-style handler. */
@@ -78,7 +93,38 @@ export interface S402GateOptions {
    * @default true
    */
   verifyBeforeServe?: boolean;
+
+  /**
+   * Emit the 402 as an x402 V2 `PaymentRequired` envelope instead of s402's
+   * native requirements, so an **unmodified x402 client** (`@x402/fetch`,
+   * `x402Client`) can read it and pay. Opt-in, because the two dialects cannot
+   * share the `payment-required` header: both use the key `accepts`, s402 for
+   * a list of scheme names and x402 for a list of requirement objects.
+   *
+   * Only `exact`-first requirements are expressible (that is the x402 scheme
+   * s402 shares); anything else throws at 402 time rather than silently
+   * downgrading. s402-only requirement fields (`facilitatorUrl`, `mandate`,
+   * `expiresAt`, fee fields, `extensions`) are not carried on an x402 envelope.
+   *
+   * s402 clients hitting a gate in this mode must normalize the 402 with
+   * `normalizeRequirements()` from `s402/compat/x402` — which they need anyway
+   * to talk to x402 servers. Payment INTAKE is unaffected by this option: x402
+   * payloads are accepted whether or not it is set.
+   */
+  x402?: {
+    /** Required by the x402 V2 envelope: what is being paid for. */
+    resource: x402V2ResourceInfo;
+    /** x402 `maxTimeoutSeconds` on the emitted requirement. @default 60 */
+    maxTimeoutSeconds?: number;
+    /** Scheme-specific `extra` on the emitted requirement. @default {} */
+    extra?: Record<string, unknown>;
+    /** Envelope-level x402 extensions. */
+    extensions?: Record<string, unknown>;
+  };
 }
+
+/** The wire dialect a payment arrived in; the receipt is answered in the same one. */
+export type S402PaymentDialect = 's402' | 'x402';
 
 /** Result of the low-level `.check()` escape hatch. */
 export type S402CheckResult =
@@ -93,6 +139,13 @@ export type S402CheckResult =
       payload: s402PaymentPayload;
       /** Resolved requirements (after dynamic evaluation). */
       requirements: s402PaymentRequirements;
+      /**
+       * Which dialect the client paid in. Callers threading settlement through
+       * their own framework should encode the receipt for this dialect
+       * (`encodeSettleResponse` for s402, `toX402SettleResponse` +
+       * `encodeX402SettleResponse` for x402).
+       */
+      dialect: S402PaymentDialect;
       /** Completes verify+settle. Call exactly once. */
       settle: () => Promise<s402SettleResponse>;
     };
@@ -180,10 +233,18 @@ export function s402Gate(options: S402GateOptions): S402Gate {
         });
       }
 
-      // Attach the settlement receipt header to the handler's response.
+      // Attach the settlement receipt header to the handler's response, in the
+      // dialect the client paid in: an x402 client's decoder wants
+      // `transaction` + `network`, s402's wants `txDigest`. Same header name
+      // either way — x402 V2 reads `PAYMENT-RESPONSE`, V1 falls back to it.
       // Also ensure browsers can read the s402 headers cross-origin.
       const headers = new Headers(handlerResponse.headers);
-      headers.set(S402_HEADERS.PAYMENT_RESPONSE, encodeSettleResponse(settleResult));
+      headers.set(
+        S402_HEADERS.PAYMENT_RESPONSE,
+        check.dialect === 'x402'
+          ? encodeX402SettleResponse(toX402SettleResponse(settleResult, check.requirements.network))
+          : encodeSettleResponse(settleResult),
+      );
       mergeExposeHeaders(headers);
       return new Response(handlerResponse.body, {
         status: handlerResponse.status,
@@ -204,8 +265,9 @@ async function runCheck(
 ): Promise<S402CheckResult> {
   const requirements = await resolveRequirements(request, options);
   const paymentHeader = request.headers.get(S402_HEADERS.PAYMENT);
+  const dialect: S402PaymentDialect = x402PayloadDialect(request.headers) ?? 's402';
 
-  if (!paymentHeader) {
+  if (!paymentHeader && dialect === 's402') {
     return {
       accepted: false,
       response: await build402(request, options, requirements),
@@ -214,12 +276,14 @@ async function runCheck(
 
   let payload: s402PaymentPayload;
   try {
-    // Dialect-aware by design: `decodePaymentPayload` accepts x402 *exact*
-    // payments transparently — s402 treats `s402Version` as optional (x402
-    // omits it) and an x402 exact payload is shape-identical to s402's. So
-    // x402 clients are accepted out of the box; the s402 wire format is a
-    // superset at the payment layer, no config required.
-    payload = decodePaymentPayload(paymentHeader);
+    // Two dialects, one gate. x402 V1 shares s402's `x-payment` header and a
+    // top-level `scheme`, so the native decoder reads it; x402 V2 moved the
+    // scheme under `accepted` and the header to `PAYMENT-SIGNATURE`, which
+    // the native decoder cannot see. `fromX402PayloadHeaders` normalizes both
+    // x402 versions; the dialect is remembered so the receipt answers in kind.
+    payload = dialect === 'x402'
+      ? fromX402PayloadHeaders(request.headers)!
+      : decodePaymentPayload(paymentHeader!);
   } catch (e) {
     return {
       accepted: false,
@@ -261,6 +325,7 @@ async function runCheck(
     accepted: true,
     payload,
     requirements,
+    dialect,
     settle: async () => {
       if (settled) {
         throw new Error('s402Gate: settle() called more than once on the same request');
@@ -287,6 +352,29 @@ async function build402(
 ): Promise<Response> {
   const custom = await options.on402?.(request, requirements);
   if (custom) return withHygiene(custom);
+
+  if (options.x402) {
+    // x402 V2 envelope in the header AND the body: upstream's own resource
+    // server does the same, and a V1 client reads only the body. Throws
+    // (s402Error INVALID_PAYLOAD) if the requirements are not exact-first —
+    // a misconfiguration that must surface, not a silent downgrade.
+    const envelope = toX402V2Envelope(requirements, options.x402.resource, {
+      maxTimeoutSeconds: options.x402.maxTimeoutSeconds,
+      extra: options.x402.extra,
+      extensions: options.x402.extensions,
+      error: 'Payment Required',
+    });
+    return new Response(JSON.stringify(envelope), {
+      status: 402,
+      headers: {
+        'content-type': JSON_CT,
+        'cache-control': 'no-store',
+        'x-content-type-options': 'nosniff',
+        'access-control-expose-headers': CORS_EXPOSE,
+        [S402_HEADERS.PAYMENT_REQUIRED]: encodeX402V2Envelope(envelope),
+      },
+    });
+  }
 
   return new Response(
     JSON.stringify({

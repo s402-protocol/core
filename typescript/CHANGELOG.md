@@ -7,7 +7,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **An unmodified x402 client can now pay an `s402Gate`, and there is a test that proves it against
+  the real upstream packages.** `test/interop-x402-client.test.ts` runs `@x402/fetch`'s
+  `wrapFetchWithPayment` over an `x402Client` (2.25.0, the version published from x402 @
+  `2cc7e9a6`) against the gate in-process and asserts paid content, one handler run, and a receipt
+  upstream's own decoder reads. Three pieces made it pass:
+  - `s402Gate({ x402: { resource } })` emits the 402 as an x402 V2 `PaymentRequired` envelope
+    (header and body). Opt-in, because s402's native 402 and x402's use the same `accepts` key
+    with different types on the same header — no one document satisfies both decoders.
+  - The gate reads x402 V2's `PAYMENT-SIGNATURE` and V1's `X-PAYMENT` unconditionally, through
+    `fromX402PayloadHeaders`, and remembers which dialect the payment arrived in (`dialect` on the
+    `.check()` result).
+  - An x402-dialect payment gets an x402-shaped receipt: `toX402SettleResponse` maps `txDigest` →
+    `transaction`, adds `network`, and keeps s402's fields alongside. Native payments get exactly
+    what they got before.
+- **`X402_UPSTREAM_PIN`** in `s402/compat/x402` names the x402 repo, sha, date and npm version this
+  layer was audited against. "Compatible with x402" now carries a date. Note the repo: development
+  moved to `x402-foundation/x402`; `coinbase/x402` is frozen at `dd927a26`.
+- `x402PayloadDialect`, `toX402SettleResponse`, `encodeX402SettleResponse`, `encodeX402V2Envelope`
+  exported from `s402/compat/x402`; `@x402/core` and `@x402/fetch` added as pinned
+  devDependencies (test-only; zero runtime dependencies unchanged).
+
 ### Fixed
+
+- **The README's headline compatibility sentence was false on the first leg of the round trip.**
+  "An x402 client can talk to an s402 server with zero modifications" had stood since April with
+  no test. Run against the unmodified upstream client it failed immediately: the client could not
+  read s402's 402 (`No client registered for x402 version: undefined`), and had it been handed the
+  requirements some other way, its V2 payment under `PAYMENT-SIGNATURE` would have been answered
+  with another 402. The gate's own comment said x402 clients were "accepted out of the box" — true
+  of V1's header and payload shape, false of V2's, and V2 is what the upstream client sends. The
+  sentence now says what the test proves: zero client changes, one server option. The migration
+  guide's header table also claimed x402 V1 uses `payment-required` / `payment-response`; V1 uses
+  a JSON body and `X-PAYMENT-RESPONSE` (`specs/transports-v1/http.md`). Corrected.
 
 - **An MPP challenge could select a different HTTP field for the credential, and s402 threw the
   parameter away.** mpp-specs #328 (`ccab885`, 2026-08-25) lets a Payment challenge carry

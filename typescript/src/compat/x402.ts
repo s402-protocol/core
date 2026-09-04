@@ -9,10 +9,32 @@
  * s402-only fields (mandate, stream, escrow, unlock extensions) are stripped.
  */
 
-import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload } from '../types.js';
+import type { s402PaymentRequirements, s402ExactPayload, s402PaymentPayload, s402SettleResponse } from '../types.js';
 import { S402_VERSION } from '../types.js';
 import { s402Error } from '../errors.js';
 import { isValidAmount, validateRequirementsShape, pickRequirementsFields } from '../http.js';
+
+// ══════════════════════════════════════════════════════════════
+// Upstream pin — the x402 HEAD this layer was last audited against
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * The exact upstream x402 commit this compat layer was audited and tested
+ * against. "Compatible with x402" means nothing without a date on it; this is
+ * the date. Bump it only after re-running `bin/check-x402-mpp-drift.sh` and
+ * the interop tests (`test/interop-x402-client.test.ts`) against the new HEAD.
+ *
+ * x402 development lives in the `x402-foundation/x402` repo (Linux Foundation)
+ * since 2026-04; `coinbase/x402` is frozen at `dd927a26` and must not be used
+ * as the reference.
+ */
+export const X402_UPSTREAM_PIN = {
+  repo: 'x402-foundation/x402',
+  sha: '2cc7e9a6880c08433b692666032862bcbea51187',
+  date: '2026-09-04',
+  /** Version of `@x402/core` / `@x402/fetch` published from that HEAD; the interop tests run against it. */
+  npmVersion: '2.25.0',
+} as const;
 
 // ══════════════════════════════════════════════════════════════
 // x402 types (minimal — just what we need for conversion)
@@ -246,6 +268,79 @@ function decodeBase64Json(b64: string): unknown {
   const binary = atob(b64);
   const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
   return JSON.parse(new TextDecoder().decode(bytes));
+}
+
+/** Unicode-safe JSON → standard base64, the encoding x402's header decoders accept. */
+function encodeBase64Json(value: unknown): string {
+  const bytes = new TextEncoder().encode(JSON.stringify(value));
+  return btoa(Array.from(bytes, (b) => String.fromCharCode(b)).join(''));
+}
+
+/**
+ * Which dialect did the client address us in?
+ *
+ * `'x402'` when the payment arrived under x402 V2's `PAYMENT-SIGNATURE`, or under
+ * `X-PAYMENT` carrying an `x402Version` (x402 V1 — s402 shares that header name
+ * and its own payloads never carry `x402Version`). `null` when no payment header
+ * is present or the payload is s402-native.
+ *
+ * A server that knows the dialect it was addressed in can answer in it — the
+ * `PAYMENT-RESPONSE` an x402 client decodes wants `transaction` and `network`,
+ * where s402's own carries `txDigest`. Answering in the caller's dialect is not
+ * a wire change for s402 clients, who never send these markers.
+ */
+export function x402PayloadDialect(headers: Headers): 'x402' | null {
+  if (headers.get('payment-signature') != null) return 'x402';
+  const legacy = headers.get('x-payment');
+  if (legacy == null || legacy.length > MAX_X402_HEADER_BYTES) return null;
+  try {
+    const decoded = decodeBase64Json(legacy);
+    return decoded != null && typeof decoded === 'object' && 'x402Version' in (decoded as object) ? 'x402' : null;
+  } catch {
+    return null; // malformed → let the native decoder produce the error
+  }
+}
+
+/**
+ * Translate an s402 settlement result into the x402 `SettleResponse` shape an
+ * x402 client's `PAYMENT-RESPONSE` decoder reads.
+ *
+ * Field map: `txDigest` → `transaction` (x402 requires the field; empty string
+ * when nothing was broadcast) · `errorCode` → `errorReason` · `error` →
+ * `errorMessage` · `actualAmount` → `amount`. `network` is required by x402
+ * and s402's settle response does not carry it, so the caller supplies it from
+ * the requirements the payment was verified against.
+ *
+ * s402-specific fields (`receiptId`, `finalityMs`, scheme object ids) are kept
+ * alongside: x402 decoders ignore unknown keys, and losing them would make an
+ * x402-dialect receipt strictly poorer than a native one for no reason.
+ *
+ * Direction note: this is s402 → x402 (emission in the caller's dialect). The
+ * reverse, `toS402SettleResponse`, deliberately does not exist — see ADR-013.
+ */
+export function toX402SettleResponse(s402: s402SettleResponse, network: string): x402SettleResponse {
+  const { success, txDigest, errorCode, error, actualAmount, ...rest } = s402;
+  const out: x402SettleResponse = {
+    ...rest,
+    success,
+    transaction: txDigest ?? '',
+    network,
+  };
+  if (txDigest !== undefined) out.txDigest = txDigest;
+  if (errorCode !== undefined) out.errorReason = errorCode;
+  if (error !== undefined) out.errorMessage = error;
+  if (actualAmount !== undefined) { out.amount = actualAmount; out.actualAmount = actualAmount; }
+  return out;
+}
+
+/** Encode an x402 `SettleResponse` for the `PAYMENT-RESPONSE` header. */
+export function encodeX402SettleResponse(response: x402SettleResponse): string {
+  return encodeBase64Json(response);
+}
+
+/** Encode an x402 V2 `PaymentRequired` envelope for the `PAYMENT-REQUIRED` header. */
+export function encodeX402V2Envelope(envelope: x402V2PaymentRequired): string {
+  return encodeBase64Json(envelope);
 }
 
 /**

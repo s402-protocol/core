@@ -87,3 +87,15 @@ a lint/test) so the next agent never repeats it. Read after `AGENTS.md` +
 **Fix:** ADR-013 states the boundary and states it as an absence — nothing in `compat/` may collapse a pending onto `success: false`. There is deliberately no `toS402SettleResponse()` counterpart to the intake classifier, and the reason is documented in the code at the place someone would go looking for it.
 
 **For future agents:** when a task says "be compatible with X", split it into *what must we understand* and *what must we say* before writing anything. The second half is almost always a wire-format decision that belongs to whoever owns the format. If you find you cannot do the first without the second, that is a finding to write up, not a call to make.
+
+---
+
+## [2026-09-04] — A compatibility sentence with no test was false for five months
+
+**Mistake:** the README, the API docs, the migration guide and a comment in `gate.ts` all said an x402 client could pay an s402 server "with zero modifications" / "out of the box." No test executed the sentence. The first one that did — the unmodified upstream `@x402/fetch` against `s402Gate` — failed on the first leg: the client could not read s402's 402 at all, and its V2 payment header would have been ignored on the second. The sentence was true only of x402 **V1** payload intake, which is not what the current upstream client sends.
+
+**Why it happened:** "wire-compatible" was asserted from shared header *names* and a shared `exact` payload shape, and never from a round trip. Compatibility is a property of a conversation, not of a schema — three legs, each a boundary, and a claim about the whole conversation needs the whole conversation run. The claim also aged silently: x402 V2 renamed the client→server header and restructured the payload after the sentence was written, and nothing in the repo could notice.
+
+**Fix:** `test/interop-x402-client.test.ts` runs the real upstream client end to end (the strongest available encoding — it fails the day upstream drifts). `X402_UPSTREAM_PIN` dates the claim in code. The prose everywhere now says what the test proves: zero client changes, one server option. ADR-015 records why the 402 half is opt-in.
+
+**For future agents:** any sentence of the form "X works with Y unmodified" is a test, not a fact, until a real X is run against a real Y in CI — install the real X as a pinned devDependency and drive it; never re-implement X's client to prove X's client works. And put a sha next to every compatibility claim, because a claim without a date cannot be found stale.

@@ -10,26 +10,41 @@ This guide is for x402 server maintainers, x402 client maintainers, and AI codin
 
 ## TL;DR
 
-- s402 is **wire-compatible with x402 V1** and reads x402 V2 via a compat layer
-- Your x402 `exact` flow keeps working — no client changes required
+- s402 reads x402 V1 **and** V2 payments on every gate, and emits x402 V2's 402 with one gate option
+- Your x402 `exact` flow keeps working — no client changes required, one server option (`x402: { resource }`)
+- Audited against x402 @ `2cc7e9a6` (2026-09-04); the pin lives in code as `X402_UPSTREAM_PIN`
 - You gain on-chain NFT receipts, atomic PTB settlement on Sui, and typed errors with `retryable` + `suggestedAction`
 - If you want them, five additional schemes are available: Upto, Prepaid, Escrow, Stream, Unlock
 
 ## What's the same
 
-The wire format. s402 uses the same three HTTP headers as x402 V1:
+The transport: HTTP 402, base64-encoded JSON in headers. The header *names* are where the two protocols and their versions differ, and an `s402Gate` reads all of them:
 
-| Header | Direction | x402 V1 | s402 |
-|--------|-----------|---------|------|
-| `payment-required` | Server → Client | ✅ | ✅ |
-| `x-payment` | Client → Server | ✅ | ✅ |
-| `payment-response` | Server → Client | ✅ | ✅ |
+| Leg | x402 V1 | x402 V2 | s402 native | `s402Gate` accepts |
+|-----|---------|---------|-------------|--------------------|
+| 402 → client | JSON body (`x402Version: 1`) | `PAYMENT-REQUIRED` | `payment-required` | emits s402 native; emits the x402 V2 envelope with the `x402` option |
+| payment → server | `X-PAYMENT` | `PAYMENT-SIGNATURE` | `x-payment` | all three, always |
+| receipt → client | `X-PAYMENT-RESPONSE` | `PAYMENT-RESPONSE` | `payment-response` | answers in the dialect the payment arrived in |
 
-An x402 client sending an `exact` payment to an s402 server works with **zero code changes**. Detection is automatic via `detectProtocol()`.
+*(Header names verified against `specs/transports-v1/http.md` and `specs/transports-v2/http.md` at x402 @ `2cc7e9a6`.)*
+
+An x402 client sending an `exact` payment to an `s402Gate` is accepted with **zero client changes**. For that client to also *read the 402* it needs the gate to speak x402's envelope — one server option, below. The round trip is proven against the unmodified upstream `@x402/fetch` in `typescript/test/interop-x402-client.test.ts`.
 
 ## Drop-in migration (server)
 
-For `exact`-scheme traffic, the s402 V1 and x402 V1 wire formats are identical. If you have an x402 server today using the `exact` scheme, your existing x402 clients work against an s402 server with **zero changes on either side** — you just replace your x402 library with `s402` and keep the same headers and flow.
+For `exact`-scheme traffic, the payload an x402 client signs is the same payload an s402 facilitator verifies. If you have an x402 server today using the `exact` scheme, your existing x402 clients work against an `s402Gate` with **zero client changes and one server option**:
+
+```typescript
+const gate = s402Gate({
+  server,
+  requirements,
+  x402: { resource: { url: 'https://api.example.com/paid', mimeType: 'application/json' } },
+});
+```
+
+That option makes the 402 an x402 V2 `PaymentRequired` envelope. Payment intake and the receipt need nothing: the gate reads `PAYMENT-SIGNATURE` and `X-PAYMENT` unconditionally and answers an x402 payment with an x402-shaped `PAYMENT-RESPONSE`. Why the 402 half is opt-in — the two protocols use the same `accepts` key for different things on the same header — is [ADR-015](../adr/015-x402-dialect-at-the-gate.md).
+
+If you are wiring headers by hand instead of using the gate, the same pieces are exported from `s402/compat/x402`: `toX402V2Envelope` + `encodeX402V2Envelope` for the 402, `fromX402PayloadHeaders` for intake, `toX402SettleResponse` + `encodeX402SettleResponse` for the receipt.
 
 ```typescript
 import {
