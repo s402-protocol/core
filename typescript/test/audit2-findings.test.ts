@@ -166,6 +166,7 @@ describe('FINDING 3: V2 envelope inner requirement field injection → fromX402R
       x402Version: 2,
       resource: { url: 'https://api.example.com/paid' },
       accepts: [{
+        x402Version: 2,
         scheme: 'exact',
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
@@ -477,7 +478,7 @@ describe('FINDING 12: toX402Requirements passes s402.extensions to x402 output',
   it('s402-specific data leaks into x402 output via extensions field', () => {
     const s402Req = {
       s402Version: '1' as const,
-      accepts: ['exact' as const],
+      scheme: 'exact' as const,
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',

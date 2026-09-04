@@ -109,9 +109,12 @@ describe('fromX402SettleResponse — settlement_pending is not a failure', () =>
 // ══════════════════════════════════════════════════════════════
 
 describe('x402PaymentFlowOf — exact gained an upfront flow', () => {
+  // `x402PaymentFlowOf` reads only `extra`; the rest is here so the fixture
+  // reads like the requirement it stands for.
   const base = {
     x402Version: 2, scheme: 'exact', network: 'sui:testnet',
     asset: 'USDC', amount: '1000', payTo: '0xabc', maxTimeoutSeconds: 60,
+    extra: undefined as Record<string, unknown> | undefined,
   };
 
   it('reads an absent flow as authorization, which is what absence means', () => {

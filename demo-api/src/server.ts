@@ -48,9 +48,10 @@ function mockExactServerScheme(): s402ServerScheme {
   return {
     scheme: 'exact',
     buildRequirements(config: s402RouteConfig): s402PaymentRequirements {
+      // Wire v2: ONE scheme per requirement. The 402's `accepts[]` array is
+      // where several offers live, and `buildPaymentRequired` assembles it.
       return {
-        s402Version: S402_VERSION,
-        accepts: [...new Set([...config.schemes, 'exact' as const])],
+        scheme: 'exact',
         network: config.network,
         asset: config.asset,
         amount: config.price,
@@ -220,13 +221,18 @@ const routeMap = new Map(
     route.path,
     {
       route,
-      requirements: resourceServer.buildRequirements({
-        schemes: ['exact'],
-        price: route.price,
-        network: NETWORK,
-        payTo: PAY_TO,
-        asset: '0x2::sui::SUI',
-      }),
+      // The 402 DOCUMENT for this route — an x402 V2 envelope, `resource` and
+      // all — plus the single offer the facilitator settles against.
+      required: resourceServer.buildPaymentRequired(
+        {
+          schemes: ['exact'],
+          price: route.price,
+          network: NETWORK,
+          payTo: PAY_TO,
+          asset: '0x2::sui::SUI',
+        },
+        { url: `http://localhost:${PORT}${route.path}`, description: route.description },
+      ),
     },
   ]),
 );
@@ -328,7 +334,8 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return;
   }
 
-  const { route, requirements } = entry;
+  const { route, required } = entry;
+  const requirements = required.accepts[0];
   const paymentHeader = req.headers[S402_HEADERS.PAYMENT] as string | undefined;
   const acceptPaymentHeader = req.headers[S402_HEADERS.ACCEPT_PAYMENT] as string | undefined;
   const clientPreferences = parseAcceptPayment(acceptPaymentHeader);
@@ -340,7 +347,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
       `  402 ${route.path} → ${route.priceDisplay}${negotiated ? ` (negotiated ${negotiated})` : ''}`,
     );
     res.writeHead(402, {
-      [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
+      [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(required),
       [S402_HEADERS.ACCEPT_PAYMENT]: ACCEPT_PAYMENT_HEADER,
       'content-type': 'application/json; charset=utf-8',
     });

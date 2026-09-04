@@ -10,5 +10,9 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src"]
+  // `test` and `examples` are here on purpose. With only `src`, `pnpm
+  // typecheck` was green while `pnpm demo` crashed on its first line and four
+  // consumers were still built against the retired wire — the type errors
+  // existed, nothing was looking at them (DAN-1078 rework, item 5).
+  "include": ["src", "test", "examples"]
 }

@@ -338,7 +338,7 @@ function generateRequirementsDecode(): TestVector[] {
     ['Decode zero amount', WITH_ZERO_AMOUNT],
   ];
 
-  const results = fixtures.map(([description, input]) => {
+  const results: TestVector[] = fixtures.map(([description, input]) => {
     const header = encodePaymentRequired(input);
     const decoded = decodePaymentRequired(header);
     return {
@@ -971,7 +971,6 @@ function generateCompatNormalize(): TestVector[] {
   // x402 V2 envelope with resource metadata (stripped)
   const x402V2WithResource = {
     x402Version: 2,
-    resource: { url: 'https://api.example.com/paid' },
     accepts: [{
       scheme: 'exact',
       network: 'sui:mainnet',
@@ -979,6 +978,9 @@ function generateCompatNormalize(): TestVector[] {
       amount: '3000000',
       payTo: '0xrecipientRes',
     }],
+    // NOTE: this object used to declare `resource` twice — the later one won
+    // silently, so the vector always described /data. The dead first copy is
+    // removed; the generated vector is unchanged.
     resource: { url: 'https://api.example.com/data', mimeType: 'application/json' },
   };
   vectors.push({

@@ -21,9 +21,10 @@ describe('s402 types', () => {
   });
 
   it('payment requirements type satisfies shape', () => {
+    // Wire v2: ONE scheme per requirement. Offering several is what the
+    // envelope's `accepts[]` array is for — see the s402PaymentRequired case.
     const req: s402PaymentRequirements = {
-      s402Version: S402_VERSION,
-      accepts: ['exact', 'stream'],
+      scheme: 'exact',
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000000000',
@@ -32,16 +33,14 @@ describe('s402 types', () => {
       mandate: { required: true, minPerTx: '100000' },
     };
 
-    expect(req.s402Version).toBe('1');
-    expect(req.accepts).toContain('exact');
+    expect(req.scheme).toBe('exact');
     expect(req.mandate?.required).toBe(true);
   });
 
   it('payment requirements supports optional expiresAt', () => {
     const future = Date.now() + 5 * 60 * 1000;
     const req: s402PaymentRequirements = {
-      s402Version: S402_VERSION,
-      accepts: ['exact'],
+      scheme: 'exact',
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000000000',
@@ -54,8 +53,7 @@ describe('s402 types', () => {
 
   it('payment requirements without expiresAt is valid', () => {
     const req: s402PaymentRequirements = {
-      s402Version: S402_VERSION,
-      accepts: ['exact'],
+      scheme: 'exact',
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000000000',
