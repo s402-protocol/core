@@ -436,6 +436,19 @@ export interface s402PaymentPayloadBase {
   s402Version: typeof S402_VERSION;
   /** Which scheme is being used */
   scheme: s402Scheme;
+  /**
+   * The network of the `accepts[]` entry this payment is for. Optional, and
+   * `s402Client` fills it in.
+   *
+   * Since wire v2 a 402 may offer the same scheme on several networks at
+   * different prices — `exact` on Sui and `exact` on Base is the configuration
+   * the upgrade guide recommends — and the scheme name alone cannot say which
+   * one was paid. x402's V2 payload answers this with a whole `accepted`
+   * requirement; this is the one field of it a native payload needs. A payload
+   * without it is still valid: it identifies an offer whenever the route's
+   * entries for that scheme are the same contract.
+   */
+  network?: string;
 }
 
 // ── Tier 1: Single Payment ──────────────────────────────────

@@ -89,7 +89,12 @@ export class s402Client {
 
     for (const offer of offers) {
       const scheme = this.schemes.get(offer.network)?.get(offer.scheme as s402Scheme);
-      if (scheme) return scheme.createPayment(offer);
+      if (!scheme) continue;
+      const payload = await scheme.createPayment(offer);
+      // Name the offer's network on the payload unless the scheme already did.
+      // The gate cannot otherwise tell `exact` on Sui from `exact` on Base, and
+      // a 402 offering both is the configuration the upgrade guide recommends.
+      return payload.network === undefined ? { ...payload, network: offer.network } : payload;
     }
 
     throw new s402Error(

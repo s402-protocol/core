@@ -445,7 +445,7 @@ export function decodePaymentRequired(header: string, now?: number): s402Payment
  * Known top-level keys on s402PaymentPayload.
  * Used by decodePaymentPayload to strip unknown keys at the HTTP trust boundary.
  */
-const S402_PAYLOAD_TOP_KEYS = new Set(['s402Version', 'scheme', 'payload']);
+const S402_PAYLOAD_TOP_KEYS = new Set(['s402Version', 'scheme', 'network', 'payload']);
 
 /**
  * Known inner payload keys per scheme. All schemes share transaction + signature;
@@ -1172,6 +1172,16 @@ export function validatePayloadShape(obj: unknown): void {
   if (record.s402Version !== undefined && record.s402Version !== '1') {
     throw new s402Error('INVALID_PAYLOAD',
       `Unsupported s402 version "${record.s402Version}" in payment payload. This library supports version "1".`);
+  }
+
+  if (record.network !== undefined) {
+    if (typeof record.network !== 'string' || record.network.length === 0) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `Payment payload network must be a non-empty string, got ${JSON.stringify(record.network)}`);
+    }
+    if (/[\x00-\x1f\x7f]/.test(record.network)) {
+      throw new s402Error('INVALID_PAYLOAD', 'Payment payload network contains control characters');
+    }
   }
 
   const missing: string[] = [];
