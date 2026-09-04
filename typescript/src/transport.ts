@@ -36,7 +36,7 @@ import type {
 } from './types.js';
 import { S402_HEADERS } from './types.js';
 import {
-  toRequirementsWire,
+  toEmittableWire,
   encodePaymentRequired,
   decodePaymentRequired,
   encodePaymentPayload,
@@ -228,7 +228,7 @@ export const mcpTransport: PaymentTransport<McpMetaFrame> = {
   carrier: 'mcp',
 
   encodeRequirements(requirements) {
-    return metaFrame(toRequirementsWire(requirements));
+    return metaFrame(toEmittableWire(requirements));
   },
   decodeRequirements(frame) {
     const raw = frame[S402_MCP_META_KEY];
@@ -354,7 +354,7 @@ export const a2aTransport: PaymentTransport<A2aMetadataFrame> = {
   carrier: 'a2a',
 
   encodeRequirements(requirements, ctx) {
-    return { ...a2aPreamble('required', ctx), [S402_A2A_KEYS.REQUIRED]: toRequirementsWire(requirements) };
+    return { ...a2aPreamble('required', ctx), [S402_A2A_KEYS.REQUIRED]: toEmittableWire(requirements) };
   },
   decodeRequirements(frame) {
     const raw = frame[S402_A2A_KEYS.REQUIRED];

@@ -2,7 +2,9 @@
 
 ## What is this?
 
-Python implementation of the s402 wire format specification. Encode/decode/validate HTTP 402 payment headers. Zero runtime dependencies. Passes all 132 conformance test vectors from the TypeScript reference.
+Python implementation of the s402 wire format specification. Encode/decode/validate HTTP 402 payment headers. Zero runtime dependencies. Passes the conformance test vectors from the TypeScript reference.
+
+**The 402 IS an x402 V2 `PaymentRequired` envelope** — `{ x402Version: 2, resource, accepts: PaymentRequirements[], extensions }` (wire v2, ADR-016). One `accepts[]` entry per offered scheme, `exact` first. s402's per-requirement fields ride in that entry's `extra`; envelope-level fields ride in `extensions.s402`. Nothing emits the retired v1 flat shape (`s402Version` + `accepts: ["exact"]`); reading it is an intake obligation discharged in `compat.py`.
 
 ## Architecture
 
@@ -10,8 +12,8 @@ Python implementation of the s402 wire format specification. Encode/decode/valid
 src/s402/
   __init__.py       — Public API (barrel export + __version__)
   errors.py         — S402Error class + 15 error codes with retryable flags
-  http.py           — Encode/decode, validation, key stripping (the big file)
-  compat.py         — x402 V1/V2 → s402 normalization
+  http.py           — Encode/decode, wire projection, validation, key stripping (the big file)
+  compat.py         — intake of the two retired flat shapes (x402 V1, s402 v1)
   receipts.py       — X-S402-Receipt header format/parse
   py.typed          — PEP 561 marker for typed package
 ```
@@ -19,26 +21,25 @@ src/s402/
 ## Key rules
 
 - **Zero runtime deps.** This package must never add runtime dependencies.
-- **Wire-compatible with TypeScript.** Same base64 encoding, same JSON key order, same validation rules. The 132 conformance vectors enforce this.
+- **Wire-compatible with TypeScript.** Same base64 encoding, same JSON key order, same validation rules. The conformance vectors in `../spec/vectors/` enforce this, and `typescript/src/http.ts` is the reference — when the two disagree, TypeScript is right and this is the bug.
+- **Key order in `_S402_EXTRA_KEYS` is load-bearing.** The encoder writes an entry's passthrough `extra` keys first and the named s402 keys after, in that order, so decode → re-encode is byte-identical. Reordering that list breaks the roundtrip vectors.
+- **An `extra` we do not own is carried through whole.** x402 ships schemes we do not implement; unknown keys inside an entry's `extra` are kept, not stripped, and s402's validators run only on entries whose scheme is one of ours. A menu is not made unreadable by one dish we were never going to order.
 - **Chain-agnostic.** No chain-specific imports, validation, or constants.
 - **camelCase in JSON.** The wire format uses camelCase (`payTo`, `s402Version`). Python functions use snake_case. JSON field names are NOT converted — they match the wire format exactly.
 
 ## Commands
 
 ```bash
-pytest              # Run 132 conformance tests
-pytest -v           # Verbose output
+pytest              # Run the conformance suite
+pytest -v           # Verbose output (what CI runs)
 mypy src/           # Type check (requires mypy installed)
 ```
 
 ## Conformance
 
-Test vectors live in `tests/vectors/` — copied from the TypeScript reference at `test/conformance/vectors/`. When the TS vectors are updated, copy them here and re-run:
+Test vectors are read straight out of the monorepo at `../spec/vectors/` — there is no copy to keep in sync. They are generated FROM the TypeScript implementation, so a vector that looks wrong is a TypeScript ticket, never a reason to edit the JSON.
 
-```bash
-cp ../s402/test/conformance/vectors/* tests/vectors/
-pytest
-```
+A vector carrying `input.now` must have it passed through to the decoder: those decode a document with no `extensions.s402`, where `expiresAt` is derived from `maxTimeoutSeconds`, and without the clock the expectation is not reproducible.
 
 ## Design decisions
 

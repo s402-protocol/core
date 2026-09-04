@@ -56,13 +56,15 @@ When a client requests a paid resource, respond with HTTP 402 and the payment re
 ```typescript
 import {
   encodePaymentRequired,
-  type s402PaymentRequirements,
+  type s402PaymentRequired,
 } from 's402';
 
 function handleRequest(req: Request): Response {
-  const requirements: s402PaymentRequirements = {
-    s402Version: '1',
-    accepts: ['exact', 'prepaid'],
+  // The 402 is an x402 V2 `PaymentRequired` envelope, always: a `resource`
+  // saying what is being paid for, and one `accepts[]` entry per offered
+  // scheme. `exact` goes first — an x402 client pays the first entry it has a
+  // handler for.
+  const price = {
     network: 'sui:mainnet',
     asset: '0x2::sui::SUI',
     amount: '1000000', // 0.001 SUI
@@ -70,10 +72,19 @@ function handleRequest(req: Request): Response {
     expiresAt: Date.now() + 5 * 60 * 1000, // 5-minute window
   };
 
+  const required: s402PaymentRequired = {
+    x402Version: 2,
+    resource: { url: 'https://api.example.com/paid' },
+    accepts: [
+      { scheme: 'exact', ...price },
+      { scheme: 'prepaid', ...price },
+    ],
+  };
+
   return new Response('Payment Required', {
     status: 402,
     headers: {
-      'payment-required': encodePaymentRequired(requirements),
+      'payment-required': encodePaymentRequired(required),
     },
   });
 }
@@ -165,9 +176,9 @@ from s402 import (
 )
 
 # Decode a 402 response
-requirements = decode_payment_required(header_value)
-print(requirements["accepts"])  # ['exact', 'prepaid']
-print(requirements["amount"])   # '1000000'
+required = decode_payment_required(header_value)
+print([a["scheme"] for a in required["accepts"]])  # ['exact', 'prepaid']
+print(required["accepts"][0]["amount"])            # '1000000'
 
 # Build and encode a payment
 payment = {
@@ -189,7 +200,7 @@ except S402Error as e:
     print(e.suggested_action) # 'Check payload format...'
 ```
 
-Both implementations pass the same [161 conformance test vectors](/guide/conformance) — they produce byte-identical wire output.
+Both implementations pass the same [195 conformance test vectors](/guide/conformance) — they produce byte-identical wire output.
 
 ## What's Next?
 

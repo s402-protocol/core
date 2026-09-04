@@ -12,7 +12,6 @@
 import type {
   s402PaymentRequired,
   s402PaymentRequirements,
-  s402ResourceInfo,
   s402Scheme,
   s402ExactPayload,
   s402PaymentPayload,
@@ -25,6 +24,7 @@ import {
   validateRequirementsShape,
   pickRequirementsFields,
   toRequirementsWire,
+  fromS402V1Requirements,
 } from '../http.js';
 
 // ══════════════════════════════════════════════════════════════
@@ -303,12 +303,20 @@ function encodeBase64Json(value: unknown): string {
  * a wire change for s402 clients, who never send these markers.
  */
 export function x402PayloadDialect(headers: Headers): 'x402' | null {
-  if (headers.get('payment-signature') != null) return 'x402';
+  // Truthiness, not presence: an empty `PAYMENT-SIGNATURE` is not a payment.
+  // x402's own resource server reads `getHeader('payment-signature') || ...`,
+  // so a stray empty header falls through to the next candidate there too.
+  // Presence alone would let `payment-signature: ""` shadow a real `X-PAYMENT`.
+  if (headers.get('payment-signature')) return 'x402';
   const legacy = headers.get('x-payment');
-  if (legacy == null || legacy.length > MAX_X402_HEADER_BYTES) return null;
+  if (!legacy || legacy.length > MAX_X402_HEADER_BYTES) return null;
   try {
     const decoded = decodeBase64Json(legacy);
-    return decoded != null && typeof decoded === 'object' && 'x402Version' in (decoded as object) ? 'x402' : null;
+    if (decoded == null || typeof decoded !== 'object') return null;
+    // Both markers → s402, because s402 is the superset. Same rule as `isX402()`
+    // below and the note at the top of `http.ts`; classifying on `x402Version`
+    // alone would have this function disagree with every other detector here.
+    return 'x402Version' in (decoded as object) && !('s402Version' in (decoded as object)) ? 'x402' : null;
   } catch {
     return null; // malformed → let the native decoder produce the error
   }
@@ -412,8 +420,12 @@ export function fromX402PayloadHeaders(headers: Headers): s402PaymentPayload | n
 function readX402PayloadHeader(headers: Headers): Record<string, unknown> | null {
   let raw: string | null = null;
   for (const name of X402_PAYLOAD_HEADERS) {
+    // Truthiness, not presence — matching x402's own server, which reads
+    // `getHeader('payment-signature') || getHeader('x-payment')`. An empty
+    // header is not a payment: taking it would both throw on `JSON.parse('')`
+    // and stop us from reading the real payload in the next header.
     const value = headers.get(name);
-    if (value != null) { raw = value; break; }
+    if (value) { raw = value; break; }
   }
   if (raw == null) return null;
   if (raw.length > MAX_X402_HEADER_BYTES) {
@@ -523,9 +535,10 @@ interface x402SettlementBase {
   network?: string;
   payer?: string;
   /**
-   * Whether re-submitting a NEW payment is safe. `false` for both `settled`
-   * and `pending`, and those are the same answer for different reasons: one
-   * has been paid, the other may have been.
+   * Whether re-submitting a NEW payment is safe. `false` for `settled`,
+   * `pending`, and any `failed` that still carries a `transaction` hash — three
+   * different reasons for one answer: it has been paid, it may have been, or
+   * something was broadcast that nobody has reconciled yet.
    */
   retryable: boolean;
   /** The response as received, so callers lose nothing this type does not name. */
@@ -547,7 +560,15 @@ export interface x402SettlementPending extends x402SettlementBase {
 
 export interface x402SettlementFailed extends x402SettlementBase {
   state: 'failed';
-  retryable: true;
+  /**
+   * `true` only when nothing was broadcast (`transaction` is empty).
+   *
+   * Upstream `@x402/core` forwards `transaction` on any `errorReason`, so a
+   * failure can arrive holding a real broadcast hash. Building a fresh payload
+   * on that is the double-pay this module exists to prevent: reconcile the hash
+   * on chain first. Not a literal `true` for exactly this reason.
+   */
+  retryable: boolean;
   reason?: string;
   message?: string;
 }
@@ -583,6 +604,10 @@ export type x402SettlementOutcome =
  * make the transaction not exist. Downgrading a malformed pending to `failed`
  * would trade a spec violation for a double charge.
  *
+ * The same reasoning governs `failed`: upstream forwards `transaction` on any
+ * `errorReason`, so `retryable` is `true` only when that hash is empty. A
+ * failure holding a broadcast hash is a reconciliation, not a retry.
+ *
  * @throws {s402Error} `INVALID_PAYLOAD` if the response is not an object with a
  *   boolean `success`.
  */
@@ -613,7 +638,10 @@ export function fromX402SettleResponse(response: x402SettleResponse): x402Settle
     };
   }
   return {
-    state: 'failed', retryable: true, transaction, network, payer,
+    // A hash in hand means something was broadcast. Retrying builds a SECOND
+    // payment for a transaction that may already have landed — the same trap as
+    // `settlement_pending`, arriving under an ordinary errorReason.
+    state: 'failed', retryable: transaction === '', transaction, network, payer,
     reason: typeof response.errorReason === 'string' ? response.errorReason : undefined,
     message, raw: response,
   };
@@ -628,20 +656,61 @@ export function fromX402SettleResponse(response: x402SettleResponse): x402Settle
 const X402_SETTLE_HEADERS = ['payment-response', 'x-payment-response'] as const;
 
 /**
+ * The one settle header whose name s402 also uses natively
+ * (`S402_HEADERS.PAYMENT_RESPONSE` in `types.ts` is byte-identical). Reading it
+ * is therefore a dialect question, not a lookup.
+ */
+const AMBIGUOUS_SETTLE_HEADER = 'payment-response';
+
+/**
+ * Fields only a NATIVE s402 settle response carries. `txDigest` is the one that
+ * matters — s402 names the hash `txDigest` where x402 names it `transaction` —
+ * and the rest are s402's scheme-specific receipt fields.
+ */
+const S402_SETTLE_MARKERS = [
+  'txDigest', 'receiptId', 'finalityMs', 'actualAmount',
+  'depositId', 'balanceId', 'streamId', 'escrowId', 'errorCode', 'error',
+] as const;
+
+/** Fields only an x402 settle response carries. */
+const X402_SETTLE_MARKERS = ['transaction', 'network', 'errorReason', 'errorMessage', 'payer'] as const;
+
+/**
+ * Is this settle body written in x402's dialect? The body-side twin of
+ * {@link x402PayloadDialect}, and it follows the same rule: a native marker
+ * wins over an x402 one, because s402 is the superset. `false` covers both the
+ * native case and a body too bare to tell — on s402's own header name, the
+ * native decoder is the safe default for both.
+ */
+function settleBodyIsX402(body: object): boolean {
+  if (S402_SETTLE_MARKERS.some((k) => k in body)) return false;
+  return X402_SETTLE_MARKERS.some((k) => k in body);
+}
+
+/**
  * Client-intake bridge: read an x402 server's settle result off the response
  * headers and classify it.
  *
- * Returns `null` when neither header is present, so a caller can fall back to
- * the native s402 `payment-response` decode path.
+ * Returns `null` when no x402 settle result is there — no header at all, or a
+ * `PAYMENT-RESPONSE` that turns out to be a native s402 receipt — so a caller
+ * can fall back to the native `payment-response` decode path.
  *
- * @throws {s402Error} `INVALID_PAYLOAD` if a header IS present but oversized,
- *   not base64-JSON, or not a valid settle response.
+ * ⚠️ `PAYMENT-RESPONSE` is s402's own settle header name as well as x402 V2's,
+ * so the name cannot answer the question and the body has to. A native receipt
+ * `{ success, txDigest, receiptId }` read as x402 would come back as
+ * `state: 'settled', transaction: ''` — the digest and the receipt id silently
+ * dropped, and the caller told a hash does not exist when it does.
+ * `X-PAYMENT-RESPONSE` is x402-only and needs no such check.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` if an x402 header IS present but
+ *   oversized, not base64-JSON, or not a valid settle response.
  */
 export function fromX402SettleResponseHeaders(headers: Headers): x402SettlementOutcome | null {
   let raw: string | null = null;
+  let ambiguous = false;
   for (const name of X402_SETTLE_HEADERS) {
     const value = headers.get(name);
-    if (value != null) { raw = value; break; }
+    if (value) { raw = value; ambiguous = name === AMBIGUOUS_SETTLE_HEADER; break; }
   }
   if (raw == null) return null;
   if (raw.length > MAX_X402_HEADER_BYTES) {
@@ -658,6 +727,7 @@ export function fromX402SettleResponseHeaders(headers: Headers): x402SettlementO
   if (decoded == null || typeof decoded !== 'object' || Array.isArray(decoded)) {
     throw new s402Error('INVALID_PAYLOAD', 'x402 settle response must be a JSON object');
   }
+  if (ambiguous && !settleBodyIsX402(decoded)) return null;
   return fromX402SettleResponse(decoded as x402SettleResponse);
 }
 
@@ -814,11 +884,28 @@ export function toX402V2Requirements(
   const wire = toRequirementsWire({
     x402Version: 2,
     resource: { url: '' },
-    accepts: [{ ...s402, extra: { ...(s402.extra ?? {}), ...(options?.extra ?? {}) } }],
+    accepts: [applyOfferOverrides(s402, options)],
   }) as { accepts: x402V2PaymentRequirements[] };
-  const req = wire.accepts[0];
-  if (options?.maxTimeoutSeconds !== undefined) req.maxTimeoutSeconds = options.maxTimeoutSeconds;
-  return req;
+  return wire.accepts[0];
+}
+
+/**
+ * Apply the caller's per-envelope overrides to ONE offer, without mutating it.
+ *
+ * `extra` merges over whatever the offer already carried; `maxTimeoutSeconds`
+ * replaces. Kept as one function so the entry path and the envelope path cannot
+ * drift — an override that lands on `toX402V2Envelope` and not on
+ * `toX402V2Requirements` is a difference nobody would see until the wire.
+ */
+function applyOfferOverrides(
+  offer: s402PaymentRequirements,
+  options?: { maxTimeoutSeconds?: number; extra?: Record<string, unknown> },
+): s402PaymentRequirements {
+  if (!options?.extra && options?.maxTimeoutSeconds === undefined) return offer;
+  const out: s402PaymentRequirements = { ...offer };
+  if (options.extra) out.extra = { ...(offer.extra ?? {}), ...options.extra };
+  if (options.maxTimeoutSeconds !== undefined) out.maxTimeoutSeconds = options.maxTimeoutSeconds;
+  return out;
 }
 
 /**
@@ -845,15 +932,23 @@ export function toX402V2Envelope(
     throw new s402Error('INVALID_PAYLOAD',
       'x402 V2 envelope requires a non-empty resource.url (ResourceInfo.url is mandatory per the x402 V2 spec)');
   }
-  const offers = Array.isArray(s402) ? s402 : [s402];
-  const envelope: x402V2PaymentRequired = {
+  const offers = (Array.isArray(s402) ? s402 : [s402]).map((offer) => applyOfferOverrides(offer, options));
+  const required: s402PaymentRequired = {
     x402Version: 2,
     resource,
-    accepts: offers.map((offer) => toX402V2Requirements(offer, options)),
+    accepts: offers,
   };
-  if (options?.extensions) envelope.extensions = options.extensions;
-  if (options?.error) envelope.error = options.error;
-  return envelope;
+  if (options?.extensions) required.extensions = options.extensions;
+  if (options?.error) required.error = options.error;
+
+  // ONE projection, the same one `encodePaymentRequired` uses. Building the
+  // envelope field by field here is how the mandate went missing: it lives in
+  // `extensions.s402`, which only the whole-document projection writes, so a
+  // per-offer assembly published a route with the spending authorization
+  // silently removed. Byte-equality with the header encoder is the test.
+  const wire = toRequirementsWire(required);
+  validateRequirementsShape(wire, { emitting: true });
+  return wire as unknown as x402V2PaymentRequired;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -899,83 +994,11 @@ export function fromX402Envelope(envelope: x402PaymentRequiredEnvelope, now?: nu
 /**
  * Decode the RETIRED s402 v1 flat requirements shape into a wire-v2 402.
  *
- * v1 was `{ s402Version: '1', accepts: ['exact', 'prepaid'], network, asset,
- * amount, payTo, … }` — one price line plus a list of scheme NAMES. v2 is one
- * `accepts[]` entry per scheme, so a v1 document expands: every entry carries
- * the same network/asset/amount/payTo and the same per-requirement fields, and
- * differs only in `scheme`.
- *
- * **Nothing emits v1.** This exists because understanding what a peer said is an
- * obligation and saying it yourself is not (ADR-013), and it is scoped to one
- * major version. `exact` is hoisted to the front for the same reason the
- * emitter does it: an x402 client pays the first entry it can handle.
- *
- * v1 had no `resource`; x402's V2 envelope requires one. Pass the URL you
- * fetched if you have it — an empty `url` is honest about not knowing, and is
- * what a re-emitted envelope would otherwise claim to know.
- *
- * @throws {s402Error} `INVALID_PAYLOAD` if the document is not a well-formed v1 402.
+ * Re-exported from `http.ts`, where it lives so the native decode path can
+ * reach it without `http.ts` importing this module back. `s402/compat/x402` is
+ * the documented home and stays the documented home.
  */
-export function fromS402V1Requirements(
-  v1: Record<string, unknown>,
-  options?: { resource?: s402ResourceInfo },
-): s402PaymentRequired {
-  if (v1 == null || typeof v1 !== 'object' || Array.isArray(v1)) {
-    throw new s402Error('INVALID_PAYLOAD',
-      `s402 v1 requirements must be a plain object, got ${v1 === null ? 'null' : Array.isArray(v1) ? 'array' : typeof v1}`);
-  }
-  if (v1.s402Version !== '1') {
-    throw new s402Error('INVALID_PAYLOAD',
-      `Unsupported s402Version ${JSON.stringify(v1.s402Version)}: fromS402V1Requirements reads the flat "1" shape only.`);
-  }
-  if (!Array.isArray(v1.accepts) || v1.accepts.length === 0) {
-    throw new s402Error('INVALID_PAYLOAD',
-      's402 v1 requirements must carry a non-empty accepts array of scheme names');
-  }
-  for (const scheme of v1.accepts) {
-    if (typeof scheme !== 'string' || scheme.length === 0) {
-      throw new s402Error('INVALID_PAYLOAD',
-        `Invalid entry in s402 v1 accepts array: expected a non-empty string, got ${typeof scheme}`);
-    }
-  }
-
-  // Deduplicate, then hoist `exact` — v1 documents were not required to list it
-  // first, and wire v2 is.
-  const schemes = [...new Set(v1.accepts as string[])]
-    .sort((a, b) => (a === 'exact' ? -1 : b === 'exact' ? 1 : 0));
-
-  // Every v1 field except `accepts` describes the ONE offer the document made;
-  // each expanded entry therefore carries all of them.
-  const shared: Record<string, unknown> = {};
-  for (const key of V1_SHARED_KEYS) {
-    if (v1[key] !== undefined) shared[key] = v1[key];
-  }
-
-  const required: s402PaymentRequired = {
-    x402Version: 2,
-    resource: options?.resource ?? { url: '' },
-    accepts: schemes.map((scheme) => ({ ...shared, scheme } as unknown as s402PaymentRequirements)),
-  };
-  if (v1.mandate !== undefined) {
-    required.mandate = v1.mandate as s402PaymentRequired['mandate'];
-  }
-
-  // Validate through the canonical wire validator rather than a second copy of
-  // it: project to the wire, check, and lift back. A v1 document with a bad
-  // amount or a `file://` facilitatorUrl fails here exactly as it did before.
-  const wire = toRequirementsWire(required) as Record<string, unknown>;
-  validateRequirementsShape(wire);
-  return pickRequirementsFields(wire);
-}
-
-/** The v1 flat fields that describe the offer itself, and so ride on every expanded entry. */
-const V1_SHARED_KEYS = [
-  'network', 'asset', 'amount', 'payTo',
-  'facilitatorUrl', 'protocolFeeBps', 'protocolFeeAddress', 'receiptRequired',
-  'settlementMode', 'expiresAt',
-  'upto', 'settlementOverrides', 'prepaid', 'stream', 'escrow', 'unlock',
-  'extensions',
-] as const;
+export { fromS402V1Requirements } from '../http.js';
 
 /**
  * Auto-detect and normalize any 402 document into s402's wire-v2 shape.
@@ -1040,7 +1063,7 @@ export function normalizeRequirements(
       accepts: [entry],
     };
     const wire = toRequirementsWire(required) as Record<string, unknown>;
-    validateRequirementsShape(wire);
+    validateRequirementsShape(wire, { liftedFromLegacy: true });
     return pickRequirementsFields(wire);
   }
 

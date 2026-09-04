@@ -414,5 +414,69 @@
     },
     "shouldReject": true,
     "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a network that is not CAIP-2 (x402 V2 requires \":\" and 3+ characters)",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJiYXNlLXNlcG9saWEiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a network shorter than 3 characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJhOiIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects maxTimeoutSeconds of 0 (x402 V2 requires a positive timeout)",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects an empty asset",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCJ9LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a resource.serviceName longer than 32 characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsInNlcnZpY2VOYW1lIjoieHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4eHh4In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a resource.serviceName containing non-printable-ASCII characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsInNlcnZpY2VOYW1lIjoiQ2Fmw6kgUGFpZW1lbnQifSwiYWNjZXB0cyI6W3sic2NoZW1lIjoiZXhhY3QiLCJuZXR3b3JrIjoic3VpOm1haW5uZXQiLCJhc3NldCI6IlNVSSIsImFtb3VudCI6IjEwMDAiLCJwYXlUbyI6IjB4YWJjIiwibWF4VGltZW91dFNlY29uZHMiOjYwLCJleHRyYSI6e319XSwiZXh0ZW5zaW9ucyI6eyJzNDAyIjp7InZlcnNpb24iOiIyIn19fQ=="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects more than 5 resource.tags",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsInRhZ3MiOlsiYSIsImIiLCJjIiwiZCIsImUiLCJmIl19LCJhY2NlcHRzIjpbeyJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsImFzc2V0IjoiU1VJIiwiYW1vdW50IjoiMTAwMCIsInBheVRvIjoiMHhhYmMiLCJtYXhUaW1lb3V0U2Vjb25kcyI6NjAsImV4dHJhIjp7fX1dLCJleHRlbnNpb25zIjp7InM0MDIiOnsidmVyc2lvbiI6IjIifX19"
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
+  },
+  {
+    "description": "Rejects a resource.iconUrl longer than 2048 characters",
+    "input": {
+      "header": "eyJ4NDAyVmVyc2lvbiI6MiwicmVzb3VyY2UiOnsidXJsIjoiaHR0cHM6Ly9hcGkuZXhhbXBsZS5jb20vcGFpZCIsImljb25VcmwiOiJodHRwczovL3gveXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5eXl5In0sImFjY2VwdHMiOlt7InNjaGVtZSI6ImV4YWN0IiwibmV0d29yayI6InN1aTptYWlubmV0IiwiYXNzZXQiOiJTVUkiLCJhbW91bnQiOiIxMDAwIiwicGF5VG8iOiIweGFiYyIsIm1heFRpbWVvdXRTZWNvbmRzIjo2MCwiZXh0cmEiOnt9fV0sImV4dGVuc2lvbnMiOnsiczQwMiI6eyJ2ZXJzaW9uIjoiMiJ9fX0="
+    },
+    "shouldReject": true,
+    "expectedErrorCode": "INVALID_PAYLOAD"
   }
 ]

@@ -130,6 +130,18 @@ function assertOffered(accepts: readonly s402PaymentRequirements[]): void {
     throw new s402Error('INVALID_PAYLOAD',
       's402Gate requires at least one payment requirement; an empty `accepts` is a 402 no client can pay.');
   }
+  // Every route offers `exact`. On the retired flat wire the builder prepended
+  // it unconditionally, so this was true by construction; wire v2 moved that
+  // job to `buildPaymentRequired`, and a hand-built list bypasses it. The
+  // result type-checks and emits a 402 no unmodified x402 client can pay,
+  // which is the one outcome ADR-016 exists to prevent — so it is refused
+  // where the misconfiguration is, not once per request forever.
+  if (!accepts.some((offer) => offer.scheme === 'exact')) {
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      's402Gate requires an `exact` offer on every route: an x402 client pays the first ' +
+      `accepts[] entry it has a handler for, and offered [${accepts.map((o) => o.scheme).join(', ')}] ` +
+      'it has none. `s402ResourceServer.buildPaymentRequired()` adds it for you.');
+  }
 }
 
 /** The wire dialect a payment arrived in; the receipt is answered in the same one. */
@@ -406,13 +418,33 @@ function selectOffer(
   accepted: Record<string, unknown> | null,
 ): s402PaymentRequirements {
   if (accepted) {
-    const match = required.accepts.find((offer) =>
-      offer.scheme === accepted.scheme &&
-      offer.network === accepted.network &&
-      offer.asset === accepted.asset &&
-      offer.amount === accepted.amount &&
-      offer.payTo === accepted.payTo);
-    if (match) return match;
+    // Full economic match first, compared the way peers actually serialize
+    // these: an EVM client re-checksums `payTo`, a proxy re-serializes
+    // `amount` as a number or with a leading zero. None of that is a different
+    // contract, and refusing it sent a payment that main settled to
+    // SCHEME_NOT_SUPPORTED.
+    const exactMatch = required.accepts.find((offer) =>
+      sameIdentifier(offer.scheme, accepted.scheme) &&
+      sameIdentifier(offer.network, accepted.network) &&
+      sameIdentifier(offer.asset, accepted.asset) &&
+      sameIdentifier(offer.payTo, accepted.payTo) &&
+      sameAmount(offer.amount, accepted.amount));
+    if (exactMatch) return exactMatch;
+
+    // `x402PaymentPayload.accepted` is typed `{ scheme?, network? }`, so a
+    // conforming client may send exactly that. Fall back to the route match —
+    // but ONLY when the payload named no economic fields at all. A stated
+    // price that matches nothing is a different contract, not a truncation,
+    // and must keep failing.
+    const statedEconomics = ['asset', 'amount', 'payTo'].some((key) => accepted[key] !== undefined);
+    if (!statedEconomics) {
+      const onRoute = required.accepts.filter((offer) =>
+        sameIdentifier(offer.scheme, accepted.scheme) &&
+        sameIdentifier(offer.network, accepted.network));
+      if (onRoute.length === 1) return onRoute[0];
+      if (onRoute.length > 1) throw ambiguous(onRoute.length, String(accepted.scheme), String(accepted.network));
+    }
+
     throw new s402Error('SCHEME_NOT_SUPPORTED',
       `The payment names a requirement this route did not offer ` +
       `(scheme "${String(accepted.scheme)}", network "${String(accepted.network)}", ` +
@@ -420,17 +452,71 @@ function selectOffer(
       `payTo "${String(accepted.payTo)}").`);
   }
 
-  const candidates = required.accepts.filter((offer) => offer.scheme === payload.scheme);
-  if (candidates.length === 1) return candidates[0];
+  let candidates = required.accepts.filter((offer) => offer.scheme === payload.scheme);
   if (candidates.length === 0) {
     throw new s402Error('SCHEME_NOT_SUPPORTED',
       `Scheme "${payload.scheme}" is not offered by this route. ` +
       `Offered: [${required.accepts.map((o) => o.scheme).join(', ')}].`);
   }
-  throw new s402Error('INVALID_PAYLOAD',
-    `Ambiguous payment: ${candidates.length} offers use scheme "${payload.scheme}" and the ` +
-    `payload does not say which one it paid. Pay in x402's V2 dialect, whose payload carries ` +
-    `the full \`accepted\` requirement, or offer that scheme once.`);
+
+  // A native payload may name the network it was signed for. That is what
+  // separates `exact` on Sui from `exact` on Base — the configuration the
+  // upgrade guide recommends, which the gate used to refuse outright.
+  if (payload.network !== undefined) {
+    const onNetwork = candidates.filter((offer) => sameIdentifier(offer.network, payload.network));
+    if (onNetwork.length === 0) {
+      throw new s402Error('SCHEME_NOT_SUPPORTED',
+        `Scheme "${payload.scheme}" is not offered on network "${payload.network}" by this route. ` +
+        `Offered: [${required.accepts.map((o) => `${o.scheme}@${o.network}`).join(', ')}].`);
+    }
+    candidates = onNetwork;
+  }
+
+  if (candidates.length === 1) return candidates[0];
+  // Several left, and if they are the same contract it does not matter which
+  // one settles. Refusing there was pedantry: a route may list one dish twice.
+  if (candidates.every((offer) => sameContract(offer, candidates[0]))) return candidates[0];
+  throw ambiguous(candidates.length, String(payload.scheme), payload.network);
+}
+
+/** The refusal for "several offers, and they are not the same contract". */
+function ambiguous(count: number, scheme: string, network?: string): s402Error {
+  return new s402Error('INVALID_PAYLOAD',
+    `Ambiguous payment: ${count} offers on this route use scheme "${scheme}"` +
+    (network ? ` on network "${network}"` : '') +
+    ' at different prices, and the payment does not say which one it paid. ' +
+    'Set `network` on the payment payload, or offer that scheme once per network.');
+}
+
+/**
+ * Compare two wire identifiers the way peers actually serialize them.
+ *
+ * `scheme`, `network`, `asset` and `payTo` are case-insensitive in practice —
+ * EVM addresses arrive EIP-55-checksummed or not depending on who touched them
+ * last, and neither spelling means a different recipient.
+ */
+function sameIdentifier(a: unknown, b: unknown): boolean {
+  if (typeof a === 'string' && typeof b === 'string') return a.toLowerCase() === b.toLowerCase();
+  return a === b;
+}
+
+/** Compare two base-unit amounts numerically: `"01000"`, `"1000"` and `1000` are one price. */
+function sameAmount(a: unknown, b: unknown): boolean {
+  const norm = (v: unknown): string | null => {
+    if (typeof v === 'number') return Number.isSafeInteger(v) && v >= 0 ? String(v) : null;
+    if (typeof v !== 'string' || !/^\d+$/.test(v)) return null;
+    return v.replace(/^0+(?=\d)/, '');
+  };
+  const na = norm(a);
+  return na !== null && na === norm(b);
+}
+
+/** Two offers are the same contract when every economic field agrees. */
+function sameContract(a: s402PaymentRequirements, b: s402PaymentRequirements): boolean {
+  return sameIdentifier(a.network, b.network)
+    && sameIdentifier(a.asset, b.asset)
+    && sameIdentifier(a.payTo, b.payTo)
+    && sameAmount(a.amount, b.amount);
 }
 
 async function resolveRequired(
@@ -442,13 +528,22 @@ async function resolveRequired(
     : options.requirements;
   const accepts = Array.isArray(resolved) ? resolved : [resolved];
   assertOffered(accepts);
+
+  // A mandate authorizes the AGENT, so the wire carries one, on the envelope.
+  // Schemes and the facilitator are handed ONE offer and never see the
+  // envelope, so the decode side copies it down onto every entry — and the
+  // gate did not, which meant a mandate-required route verified as
+  // mandate-free downstream. Same rule, same place: `pickRequirementsFields`.
+  const mandate = resolveMandate(accepts, options.mandate);
   const required: s402PaymentRequired = {
     x402Version: 2,
     resource: options.resource,
     error: 'Payment Required',
-    accepts,
+    // Copied, never written through: `options.requirements` may be a static
+    // array the caller keeps and reuses, and a gate is not entitled to edit it.
+    accepts: mandate === undefined ? accepts : accepts.map((offer) => ({ ...offer, mandate })),
   };
-  if (options.mandate !== undefined) required.mandate = options.mandate;
+  if (mandate !== undefined) required.mandate = mandate;
   if (options.extensions !== undefined) required.extensions = options.extensions;
   return required;
 }

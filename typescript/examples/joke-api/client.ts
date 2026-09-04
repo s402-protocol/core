@@ -46,10 +46,12 @@ async function getJoke() {
   }
 
   console.log('← 402 Payment Required');
-  console.log(`  Schemes: [${requirements.accepts.join(', ')}]`);
-  console.log(`  Amount:  ${requirements.amount} MIST`);
-  console.log(`  Network: ${requirements.network}`);
-  console.log(`  Pay to:  ${requirements.payTo.slice(0, 10)}...`);
+  // `accepts` is a list of requirement OBJECTS since wire v2, not scheme names.
+  const offer = requirements.accepts[0];
+  console.log(`  Schemes: [${requirements.accepts.map((a) => a.scheme).join(', ')}]`);
+  console.log(`  Amount:  ${offer.amount} MIST`);
+  console.log(`  Network: ${offer.network}`);
+  console.log(`  Pay to:  ${offer.payTo.slice(0, 10)}...`);
 
   // 3. Build payment using registered scheme (auto-selects best match)
   const payload = await client.createPayment(requirements);

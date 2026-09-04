@@ -97,15 +97,23 @@ describe('FINDING 2: detectProtocol now uses in-check (FIXED)', () => {
     expect(detectProtocol(headers)).toBe('s402');
   });
 
-  it('a retired s402 v1 flat document is never reported as an s402-profile 402', () => {
-    // isS402 still flags the flat shape for the compat reader (its job is
-    // "which era wrote this")...
+  it('a retired s402 v1 flat document is reported as s402 — a different ERA, not a different protocol', () => {
+    // REVISED with ADR-016's rework (item 8). This used to expect 'unknown',
+    // which is also what a response with NO payment-required header returns —
+    // so during a rolling upgrade a client could not tell "the server wants
+    // money in a shape I used to speak" from "no payment required", and it
+    // neither paid nor errored. `detectProtocol` answers whose document this
+    // is; which era wrote it is `isS402`'s question, and it still answers.
     const obj = { s402Version: 0 };
     expect(isS402(obj as any)).toBe(true);
-    // ...but it carries no extensions.s402, so detectProtocol will not claim it.
     const headers = new Headers();
     headers.set('payment-required', btoa(JSON.stringify(obj)));
-    expect(detectProtocol(headers)).toBe('unknown');
+    expect(detectProtocol(headers)).toBe('s402');
+
+    // And the eras stay distinguishable where it matters: the wire-v2 decoder
+    // still refuses the flat shape and says which reader to use instead.
+    expect(() => decodePaymentRequired(btoa(JSON.stringify(obj))))
+      .toThrow(/flat requirements shape|s402Version/);
   });
 });
 
@@ -158,6 +166,7 @@ describe('FINDING 3: V2 envelope inner requirement field injection → fromX402R
       x402Version: 2,
       resource: { url: 'https://api.example.com/paid' },
       accepts: [{
+        x402Version: 2,
         scheme: 'exact',
         network: 'sui:testnet',
         asset: '0x2::sui::SUI',
@@ -469,7 +478,7 @@ describe('FINDING 12: toX402Requirements passes s402.extensions to x402 output',
   it('s402-specific data leaks into x402 output via extensions field', () => {
     const s402Req = {
       s402Version: '1' as const,
-      accepts: ['exact' as const],
+      scheme: 'exact' as const,
       network: 'sui:testnet',
       asset: '0x2::sui::SUI',
       amount: '1000',

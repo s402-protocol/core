@@ -58,6 +58,46 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm build
 
+  consumers:
+    # The workspace packages that consume `s402` and the README's own front
+    # door. A wire major left every one of them broken on the branch that
+    # shipped it, and CI said nothing: it ran `typescript/` and `python/` only.
+    name: Workspace Consumers + Demo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+          cache-dependency-path: pnpm-lock.yaml
+
+      - run: pnpm install --frozen-lockfile
+
+      # `s402` resolves to `typescript/` via `workspace:*`, and its types are
+      # `dist/index.d.mts`. Nothing else in this job builds them, so without
+      # this step every consumer fails with "Cannot find module 's402'" — which
+      # is what happened on the first run of this job.
+      - name: Build s402 so the consumers can resolve its types
+        run: pnpm --filter s402 build
+
+      - name: Typecheck server-ts
+        run: pnpm --filter @sweefi/server exec tsc --noEmit
+
+      - name: Typecheck demo-api
+        run: pnpm --filter s402-demo-api exec tsc --noEmit
+
+      - name: Typecheck mcp-demo
+        run: pnpm --filter s402-mcp-demo exec tsc --noEmit
+
+      - name: Run the README quickstart demo
+        run: pnpm demo
+
   boundary-check:
     name: S7 Chain-Agnostic Boundary
     runs-on: ubuntu-latest

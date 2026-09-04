@@ -613,7 +613,10 @@ describe('s402 compat layer', () => {
       for (const entry of result.accepts) {
         expect(entry.mandate).toEqual({ required: true, minPerTx: '100' });
       }
-      const wire = JSON.parse(atob(encodePaymentRequired(result)));
+      // Re-emitted with a real resource: a v1 document knew no URL, and since
+      // wire v2 an empty `resource.url` is a document x402's decoder refuses,
+      // so emission is where that gap has to surface.
+      const wire = JSON.parse(atob(encodePaymentRequired({ ...result, resource: RESOURCE })));
       expect(wire.extensions.s402.mandate).toEqual({ required: true, minPerTx: '100' });
       expect(wire.accepts.every((a: { mandate?: unknown }) => a.mandate === undefined)).toBe(true);
     });
@@ -800,7 +803,10 @@ describe('toX402V2Envelope (write path)', () => {
         error: 'Optional error string',
       },
     );
-    expect(envelope.extensions).toEqual({ sep2007: { multiRail: true } });
+    // s402's own marker rides alongside the caller's extensions — it is what
+    // makes the document an s402-profile 402, and assembling the envelope by
+    // hand used to drop it (and any mandate with it).
+    expect(envelope.extensions).toEqual({ sep2007: { multiRail: true }, s402: { version: '2' } });
     expect(envelope.error).toBe('Optional error string');
   });
 
@@ -828,9 +834,11 @@ describe('toX402V2Envelope (write path)', () => {
     expect(recovered.accepts[0].payTo).toBe(SAMPLE_S402.payTo);
   });
 
-  it('omits extensions / error when not provided (no undefined keys leak)', () => {
+  it('carries only s402\'s own extensions when the caller supplies none, and no error key leaks', () => {
     const envelope = toX402V2Envelope(SAMPLE_S402, { url: 'mcp://tool/summarize' });
-    expect('extensions' in envelope).toBe(false);
+    // `extensions.s402` is not optional: its presence is what identifies an
+    // s402-profile 402 (ADR-016 rule 4), so the hand path publishes it too.
+    expect(envelope.extensions).toEqual({ s402: { version: '2' } });
     expect('error' in envelope).toBe(false);
   });
 });

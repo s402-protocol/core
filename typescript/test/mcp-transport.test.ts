@@ -100,7 +100,7 @@ describe('mcpTransport — payment in the MCP `_meta` slot (ADR-011 Chunk 1a-iii
   it('strips unknown keys via the canonical pick* (parity with HTTP decode)', () => {
     const frame = { [S402_MCP_META_KEY]: { ...requirementsWire, bogusKey: 'evil' } };
     const decoded = mcpTransport.decodeRequirements(frame)!;
-    expect('bogusKey' in (decoded.value as Record<string, unknown>)).toBe(false);
+    expect('bogusKey' in (decoded.value as unknown as Record<string, unknown>)).toBe(false);
     // …at the entry level too: `accepts[]` is x402's shape, not an open bag.
     const entryFrame = {
       [S402_MCP_META_KEY]: {
@@ -109,7 +109,7 @@ describe('mcpTransport — payment in the MCP `_meta` slot (ADR-011 Chunk 1a-iii
       },
     };
     const entry = mcpTransport.decodeRequirements(entryFrame)!.value.accepts[0];
-    expect('bogusEntryKey' in (entry as Record<string, unknown>)).toBe(false);
+    expect('bogusEntryKey' in (entry as unknown as Record<string, unknown>)).toBe(false);
   });
 });
 

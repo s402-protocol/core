@@ -270,10 +270,6 @@
     "description": "x402 V2 envelope with resource metadata",
     "input": {
       "x402Version": 2,
-      "resource": {
-        "url": "https://api.example.com/data",
-        "mimeType": "application/json"
-      },
       "accepts": [
         {
           "scheme": "exact",
@@ -282,7 +278,11 @@
           "amount": "3000000",
           "payTo": "0xrecipientRes"
         }
-      ]
+      ],
+      "resource": {
+        "url": "https://api.example.com/data",
+        "mimeType": "application/json"
+      }
     },
     "expected": {
       "x402Version": 2,

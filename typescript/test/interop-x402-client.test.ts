@@ -4,6 +4,7 @@ import { describe, it, expect } from 'vitest';
 // the test passes, an unmodified `@x402/fetch` consumer got paid content from
 // an s402 gate. If x402 changes its wire behavior, this test changes with it.
 import { x402Client } from '@x402/core/client';
+import { parsePaymentRequired } from '@x402/core/schemas';
 import { x402HTTPClient } from '@x402/core/http';
 import type { SchemeNetworkClient, PaymentRequirements } from '@x402/core/types';
 import { wrapFetchWithPayment } from '@x402/fetch';
@@ -22,6 +23,7 @@ import {
   type s402ExactPayload,
 } from '../src/index.js';
 import { s402Gate } from '../src/gate.js';
+import { s402Error } from '../src/errors.js';
 
 // ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -398,5 +400,67 @@ describe('an unmodified x402 client pays an s402 gate', () => {
     const res = await handler(new Request(URL_, { headers: { 'PAYMENT-SIGNATURE': btoa(JSON.stringify(forged)) } }));
     expect(res.status).toBe(402);
     expect(((await res.json()) as { errorCode: string }).errorCode).toBe('SCHEME_NOT_SUPPORTED');
+  });
+});
+
+// ── Item 12: the invariant, checked with upstream's own parser ────────────
+//
+// The tests above drive `@x402/fetch`, whose header decoder only `JSON.parse`s
+// what it is given — so for the whole life of ADR-016 the named ratchet could
+// not have caught a 402 that violated the invariant. `parsePaymentRequired` is
+// upstream's schema, and these are the configurations that got past everything
+// else: each one type-checks as `S402GateOptions`, and each one used to produce
+// a header the pinned `@x402/core` refuses.
+
+describe('every 402 the gate emits parses under the pinned @x402/core schema', () => {
+  const gateFor = (over: Partial<Parameters<typeof s402Gate>[0]>) => s402Gate({
+    server: buildServer('x'),
+    requirements: { scheme: 'exact', network: NETWORK, asset: ASSET, amount: PRICE, payTo: PAY_TO },
+    resource: { url: URL_ },
+    ...over,
+  } as Parameters<typeof s402Gate>[0]);
+
+  it('the ordinary case parses, and the parse is a real check (a hand-broken document fails it)', async () => {
+    const res = await gateFor({})(async () => Response.json({}))(new Request(URL_));
+    const emitted = JSON.parse(atob(res.headers.get('payment-required')!));
+    expect(parsePaymentRequired(emitted).success).toBe(true);
+
+    // The negative control. Without it, `success: true` above could mean the
+    // parser accepts everything — which is exactly the hole `@x402/fetch` left.
+    expect(parsePaymentRequired({ ...emitted, resource: { url: '' } }).success).toBe(false);
+    expect(parsePaymentRequired({ ...emitted, accepts: [] }).success).toBe(false);
+  });
+
+  const REFUSED: Array<[string, Partial<Parameters<typeof s402Gate>[0]>]> = [
+    ['an empty resource.url', { resource: { url: '' } }],
+    ['a zero maxTimeoutSeconds', { requirements: { scheme: 'exact', network: NETWORK, asset: ASSET, amount: PRICE, payTo: PAY_TO, maxTimeoutSeconds: 0 } }],
+    ['a network that is not CAIP-2', { requirements: { scheme: 'exact', network: 'base-sepolia', asset: ASSET, amount: PRICE, payTo: PAY_TO } }],
+    ['a non-ASCII serviceName', { resource: { url: URL_, serviceName: 'Café Paiement ☕' } }],
+    ['a serviceName over 32 characters', { resource: { url: URL_, serviceName: 'x'.repeat(33) } }],
+    ['six tags where upstream caps at five', { resource: { url: URL_, tags: ['a', 'b', 'c', 'd', 'e', 'f'] } }],
+    ['an iconUrl over 2048 characters', { resource: { url: URL_, iconUrl: 'https://x/' + 'y'.repeat(2100) } }],
+    ['an empty payTo', { requirements: { scheme: 'exact', network: NETWORK, asset: ASSET, amount: PRICE, payTo: '' } }],
+    ['an empty asset', { requirements: { scheme: 'exact', network: NETWORK, asset: '', amount: PRICE, payTo: PAY_TO } }],
+    ['an amount that is a number, not a string', { requirements: { scheme: 'exact', network: NETWORK, asset: ASSET, amount: 1000 as unknown as string, payTo: PAY_TO } }],
+  ];
+
+  for (const [label, over] of REFUSED) {
+    it(`refuses to emit a 402 with ${label} rather than publishing one upstream cannot read`, async () => {
+      const handler = gateFor(over)(async () => Response.json({}));
+      await expect(handler(new Request(URL_))).rejects.toThrow(s402Error);
+    });
+  }
+
+  it('a resource omitted entirely is refused too (x402 V2 requires one)', async () => {
+    const handler = gateFor({ resource: undefined as unknown as { url: string } })(async () => Response.json({}));
+    await expect(handler(new Request(URL_))).rejects.toThrow(s402Error);
+  });
+
+  it('and the body carries the same document the header does, so both are checked', async () => {
+    const res = await gateFor({})(async () => Response.json({}))(new Request(URL_));
+    const fromHeader = JSON.parse(atob(res.headers.get('payment-required')!));
+    const fromBody = await res.clone().json();
+    expect(fromBody).toEqual(fromHeader);
+    expect(parsePaymentRequired(fromBody).success).toBe(true);
   });
 });

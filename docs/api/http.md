@@ -23,19 +23,33 @@ All header encoders convert an object → base64 string for use in HTTP headers.
 Encode payment requirements for the `payment-required` response header.
 
 ```typescript
-function encodePaymentRequired(requirements: s402PaymentRequirements): string;
+function encodePaymentRequired(required: s402PaymentRequired): string;
 ```
+
+Takes the 402 **document** — an x402 V2 `PaymentRequired` envelope — not one
+requirement. `resource` is mandatory and its `url` must be non-empty, and each
+`accepts[]` entry is one offered scheme.
+
+The encoder validates what it is about to publish against the schema the pinned
+`@x402/core` will parse it with, and throws `s402Error` (`INVALID_PAYLOAD`)
+rather than emitting a 402 an x402 client cannot read. A non-CAIP-2 `network`,
+a `maxTimeoutSeconds` of zero, an empty `resource.url`, a `serviceName` over 32
+printable-ASCII characters, more than five `tags`, or an `iconUrl` over 2048
+characters all fail here.
 
 **Example:**
 
 ```typescript
 const header = encodePaymentRequired({
-  s402Version: '1',
-  accepts: ['exact'],
-  network: 'sui:mainnet',
-  asset: '0x2::sui::SUI',
-  amount: '1000000',
-  payTo: '0xrecipient...',
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:mainnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xrecipient...',
+  }],
 });
 
 res.status(402).set('payment-required', header).end();
@@ -66,14 +80,24 @@ All header decoders convert a base64 header string → typed object. They valida
 Decode the `payment-required` header from a 402 response.
 
 ```typescript
-function decodePaymentRequired(header: string): s402PaymentRequirements;
+function decodePaymentRequired(header: string, now?: number): s402PaymentRequired;
 ```
+
+Works on a **plain x402 V2 402** as well as an s402-profile one: the only
+difference between them is the presence of `extensions.s402`, and its absence is
+not an error. What comes back is payable either way.
 
 **Throws:** `s402Error` with code `INVALID_PAYLOAD` if:
 - Base64 decoding fails
 - JSON parsing fails
-- `s402Version` is missing or not `'1'` (for x402 format, use [`normalizeRequirements()`](/api/compat#normalizerequirements-obj) instead)
-- Required fields are missing (`accepts`, `network`, `asset`, `amount`, `payTo`)
+- `x402Version` is missing, or is not `2` (an s402 402 IS an x402 V2 envelope). A
+  document carrying `s402Version` is the **retired flat v1 shape** — reading it
+  is [`fromS402V1Requirements()`](/api/compat)'s job, and an x402 **V1** flat 402
+  is [`normalizeRequirements()`](/api/compat#normalizerequirements-obj)'s.
+- `resource` is missing, or `resource.url` is not a string
+- `accepts` is missing, is not an array, or is empty
+- An entry is missing `scheme`, `network`, `asset`, `amount` or `payTo`, or its
+  `network` is not CAIP-2, or its `maxTimeoutSeconds` is not positive
 - `amount` is not a valid non-negative integer string
 
 ### `decodePaymentPayload(header)`
@@ -89,7 +113,11 @@ function decodePaymentPayload(header: string): s402PaymentPayload;
 - `scheme` is missing or not one of the six valid schemes
 - `payload` object is missing
 
-> **Note:** `s402Version` is **not** required on payment payloads. Requirements include it, but payloads omit it for x402 wire compatibility — the scheme field is the discriminant.
+> **Note:** `s402Version` is **not** required on payment payloads, and since wire
+> v2 it does not appear on a 402 at all — the 402's version lives in
+> `extensions.s402.version`. A payload may also carry an optional `network`,
+> naming which `accepts[]` entry it is paying; `s402Client` fills it in, and a
+> gate offering the same scheme on two networks needs it to tell them apart.
 
 ### `decodeSettleResponse(header)`
 
@@ -111,7 +139,14 @@ Detect whether a 402 response uses s402, x402, or an unknown protocol.
 function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown';
 ```
 
-Reads the `payment-required` header, decodes it, and checks for `s402Version` or `x402Version`.
+Reads the `payment-required` header and decodes it. Since wire v2 both protocols
+share one envelope, so what separates them is the presence of **`extensions.s402`**
+— not a version field. The retired flat 402, which carries `s402Version` and no
+extensions, is also reported as `'s402'`: it is still ours to read, and calling it
+`'unknown'` would make a server mid-upgrade indistinguishable from a free route.
+
+`'x402'` names the **absence of s402's extensions**, never "not for us" — a plain
+x402 402 is payable by an s402 client.
 
 **Example:**
 
@@ -120,9 +155,9 @@ const response = await fetch(url);
 if (response.status === 402) {
   const protocol = detectProtocol(response.headers);
   switch (protocol) {
-    case 's402': // handle with s402 client
-    case 'x402': // handle with x402 client or normalize
-    case 'unknown': // raw 402, no payment protocol
+    case 's402': // an s402-profile 402 (or the retired flat shape)
+    case 'x402': // a plain x402 402 — still payable, just no s402 extensions
+    case 'unknown': // no payment-required header, or an unreadable one
   }
 }
 ```
@@ -165,12 +200,20 @@ Use this when building Sui-specific scheme implementations to reject amounts tha
 
 ### `extractRequirementsFromResponse(response)`
 
-Extract and decode payment requirements from a 402 `Response` object. Returns `null` if the header is missing or malformed (never throws).
+Extract and decode the 402 document from a `Response`. Returns `null` if the
+header is missing or unreadable (never throws).
+
+Reads three shapes: s402's wire v2, a plain x402 V2 402 (the same envelope), and
+the **retired s402 v1 flat 402** from a server that has not upgraded yet. That
+last one matters during a rolling upgrade — returning `null` for it is
+indistinguishable from "no payment required", so the client would neither pay nor
+error. An x402 **V1** flat 402 is not read here; use
+[`normalizeRequirements()`](/api/compat#normalizerequirements-obj).
 
 ```typescript
 function extractRequirementsFromResponse(
   response: Response,
-): s402PaymentRequirements | null;
+): s402PaymentRequired | null;
 ```
 
 **Example:**
@@ -214,19 +257,24 @@ The MIME type for s402 body transport. Set this as the `Content-Type` header whe
 Encode payment requirements as a JSON string for use in a response body.
 
 ```typescript
-function encodeRequirementsBody(requirements: s402PaymentRequirements): string;
+function encodeRequirementsBody(required: s402PaymentRequired): string;
 ```
+
+The same envelope the header carries, and validated the same way on the way out.
 
 **Example:**
 
 ```typescript
 const body = encodeRequirementsBody({
-  s402Version: '1',
-  accepts: ['exact'],
-  network: 'sui:mainnet',
-  asset: '0x2::sui::SUI',
-  amount: '1000000',
-  payTo: '0xrecipient...',
+  x402Version: 2,
+  resource: { url: 'https://api.example.com/paid' },
+  accepts: [{
+    scheme: 'exact',
+    network: 'sui:mainnet',
+    asset: '0x2::sui::SUI',
+    amount: '1000000',
+    payTo: '0xrecipient...',
+  }],
 });
 
 res.status(402)
@@ -239,7 +287,7 @@ res.status(402)
 Decode payment requirements from a JSON string (response body).
 
 ```typescript
-function decodeRequirementsBody(body: string): s402PaymentRequirements;
+function decodeRequirementsBody(body: string, now?: number): s402PaymentRequired;
 ```
 
 **Throws:** `s402Error` with code `INVALID_PAYLOAD` — same validation as `decodePaymentRequired()`.
@@ -321,8 +369,27 @@ switch (transport) {
 
 ### `validateRequirementsShape(obj)`
 
-Validate that an unknown object has the shape of `s402PaymentRequirements`. Throws `s402Error` with code `INVALID_PAYLOAD` if required fields are missing or have wrong types. Used internally by `decodePaymentRequired()` and `decodeRequirementsBody()` — call directly when you have a pre-parsed JSON object.
+Validate that an unknown object is a well-formed 402 **wire envelope** —
+`{ x402Version: 2, resource, accepts: [...] }` — not the lifted in-memory view.
+Everything s402 adds is checked where it actually travels: inside each entry's
+`extra`, and inside `extensions.s402`. Throws `s402Error` with code
+`INVALID_PAYLOAD`.
+
+Used internally by `decodePaymentRequired()`, `decodeRequirementsBody()` and both
+encoders — call it directly when you have a pre-parsed JSON object.
 
 ```typescript
-function validateRequirementsShape(obj: unknown): void;
+function validateRequirementsShape(
+  obj: unknown,
+  options?: {
+    /** Held to upstream's own V2 schema: `resource.url` must be non-empty. */
+    emitting?: boolean;
+    /**
+     * Lifted out of a retired flat shape (x402 V1, s402 v1), which predate
+     * x402 V2's CAIP-2 `network` rule. Skips that one check. Such a document
+     * can be READ and cannot be re-emitted.
+     */
+    liftedFromLegacy?: boolean;
+  },
+): void;
 ```
