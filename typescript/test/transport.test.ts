@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import {
   httpTransport,
+  mcpTransport,
+  a2aTransport,
   encodePaymentRequired,
   decodePaymentRequired,
   encodePaymentPayload,
@@ -103,5 +105,48 @@ describe('httpTransport — behavior-preserving over the http.ts codec (ADR-011 
   it('decodeRequirements propagates the codec validator on malformed input', () => {
     const frame = new Headers({ [S402_HEADERS.PAYMENT_REQUIRED]: 'not-base64-json!!!' });
     expect(() => httpTransport.decodeRequirements(frame)).toThrow();
+  });
+});
+
+// ══════════════════════════════════════════════════════════════
+// N2 — every carrier emits a document its own decoder can read
+// ══════════════════════════════════════════════════════════════
+
+// The HTTP encoders check the emitted document against the schema the pinned
+// `@x402/core` parses it with (ADR-016). MCP and A2A projected the same
+// document and skipped the check, so "emit a 402 you cannot read back"
+// survived off the HTTP path: a non-CAIP-2 network and an empty `resource.url`
+// both encode, and both carriers' own decoders then refuse the result.
+describe('N2 — MCP and A2A hold emission to the same schema as HTTP', () => {
+  const nonCaip2: s402PaymentRequired = {
+    x402Version: 2,
+    resource: { url: '' },
+    accepts: [{
+      scheme: 'exact',
+      network: 'base-sepolia',
+      asset: '0x2::sui::SUI',
+      amount: '1000000',
+      payTo: '0xabc',
+      maxTimeoutSeconds: 60,
+    }],
+  };
+
+  it('the HTTP encoder refuses it — the baseline the other carriers must match', () => {
+    expect(() => encodePaymentRequired(nonCaip2)).toThrow(/CAIP-2|resource\.url/);
+  });
+
+  it('mcpTransport.encodeRequirements refuses a document its own decoder rejects', () => {
+    expect(() => mcpTransport.encodeRequirements(nonCaip2)).toThrow(/CAIP-2|resource\.url/);
+  });
+
+  it('a2aTransport.encodeRequirements refuses a document its own decoder rejects', () => {
+    expect(() => a2aTransport.encodeRequirements(nonCaip2)).toThrow(/CAIP-2|resource\.url/);
+  });
+
+  it('a valid document still encodes and round-trips on both carriers', () => {
+    const mcpFrame = mcpTransport.encodeRequirements(requirements);
+    expect(mcpTransport.decodeRequirements(mcpFrame)?.value.accepts[0].network).toBe('sui:testnet');
+    const a2aFrame = a2aTransport.encodeRequirements(requirements);
+    expect(a2aTransport.decodeRequirements(a2aFrame)?.value.accepts[0].network).toBe('sui:testnet');
   });
 });

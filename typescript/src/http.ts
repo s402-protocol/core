@@ -91,8 +91,12 @@ export function encodePaymentRequired(required: s402PaymentRequired): string {
  * `JSON.parse`s. Eight type-valid gate configurations produced 402s upstream
  * refuses; four of them s402's own decoder refuses too, so the gate could emit
  * a document it could not read back.
+ *
+ * Exported because the invariant belongs to EMISSION, not to HTTP: the MCP and
+ * A2A carriers project the same document onto their own frames, and a carrier
+ * that skips this check reintroduces the same bug one transport over.
  */
-function toEmittableWire(required: s402PaymentRequired): Record<string, unknown> {
+export function toEmittableWire(required: s402PaymentRequired): Record<string, unknown> {
   const wire = toRequirementsWire(required);
   validateRequirementsShape(wire, { emitting: true });
   return wire;
