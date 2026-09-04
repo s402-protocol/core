@@ -3,9 +3,11 @@
 [![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
 
-**Chain-agnostic HTTP 402 protocol.** Six payment schemes for AI agent commerce. Wire-compatible with x402 — audited and tested against x402 @ `2cc7e9a6` (`x402-foundation/x402`, 2026-09-04; `@x402/core` 2.25.0). Zero runtime dependencies. Includes a compat layer (`s402/compat`) for normalizing x402 input.
+**Chain-agnostic HTTP 402 protocol.** Six payment schemes for AI agent commerce. Wire-compatible with x402 — audited and tested against x402 @ `2cc7e9a6` (`x402-foundation/x402`, 2026-09-04; `@x402/core` 2.25.0). Zero runtime dependencies. Includes an optional compat layer (`s402/compat/x402`) for normalizing x402 input.
 
-s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for six payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)). The reference implementation on Sui uses Programmable Transaction Blocks to reduce 1,000 payments to just 2 on-chain transactions via the Prepaid scheme, cutting per-call effective gas from $0.007 to $0.000014 and making micropayments economically viable for AI agents for the first time.
+s402 is a chain-agnostic HTTP 402 wire format — types, HTTP encoding, scheme registry, and error handling for six payment schemes. The protocol layer contains no chain-specific logic (see [S7 invariant](./AGENTS.md)).
+
+The Sui reference implementation ships separately as [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui). Its Prepaid scheme uses Programmable Transaction Blocks to settle 1,000 API calls in **2 on-chain transactions instead of 1,000** — a *modelled* effective gas cost of ~$0.000014 per call against ~$0.007 for one-shot Exact. Those are estimates under stated price and congestion assumptions, not measurements from production traffic: the model, its inputs, and the cases where a competitor is cheaper are all in [the whitepaper's gas section](./docs/whitepaper.md).
 
 ```bash
 npm install s402
@@ -15,6 +17,31 @@ deno add npm:s402
 ```
 
 > **ESM-only.** This package ships ES modules only (`"type": "module"`). Requires Node.js >= 20. CommonJS `require()` is not supported.
+
+## The one demo — 60 seconds, no wallet
+
+```bash
+git clone https://github.com/s402-protocol/core.git && cd core
+pnpm install
+pnpm demo
+```
+
+**What you will see:** a server encoding a 402 into a single HTTP header, a client
+decoding it with no shared code, an x402 payment body being absorbed through the compat
+layer, and the 167 published conformance vectors run against the code you just cloned —
+including 45 malformed headers that **must** be refused.
+
+**What it proves:** the wire format works, on this build, in your terminal. **What it does
+not prove:** anything about settlement on Sui — that needs a chain, and lives in
+[`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui).
+
+Nothing in the demo touches a network, a key, or a testnet faucet. Source:
+[`typescript/examples/quickstart.mjs`](./typescript/examples/quickstart.mjs).
+
+> Two larger demos ship in this repo and need more than 60 seconds:
+> [`mcp-demo/`](./mcp-demo) (three payment protocols in one MCP envelope — **read its README
+> first, it cannot reach the network today**) and [`demo-api/`](./demo-api) (a paid HTTP
+> endpoint).
 
 ## Governing Principle
 
@@ -37,12 +64,19 @@ HTTP 402 ("Payment Required") has been reserved since 1999 — waiting for a pay
 | **Settlement** | Two-step: verify then settle (temporal gap) | Atomic: verify + settle in one PTB |
 | **Finality** | 12+ second blocks (EVM L1) | ~400ms (Sui) |
 | **Payment models** | Exact (one-shot) only | Six schemes: Exact, Prepaid, Escrow, Unlock, Stream, Upto |
-| **Micro-payments** | ~$1.60 gas per 1K calls on Base (broken) | $0.014 gas per 1K calls (prepaid) |
+| **Micro-payments** | ~$1.60 per 1K calls on Base* | ~$0.014 per 1K calls (prepaid)* |
 | **Coin handling** | approve + transferFrom | Native `coinWithBalance` + `splitCoins` |
 | **Agent auth** | None | AP2 mandate delegation |
 | **Direct mode** | No | Yes (no facilitator needed) |
 | **Receipts** | Off-chain | On-chain NFT proofs |
 | **Compatibility** | n/a | Optional x402 compat layer (`s402/compat`) |
+
+\* **Modelled, not measured.** Gas figures are estimates under stated ETH-price and congestion
+assumptions; the model and its inputs are in [the whitepaper](./docs/whitepaper.md#the-gas-comparison).
+Read that table before quoting these — it is more honest than a two-column summary can be, and it
+names the case we lose: **x402 on Solana (~$0.25 per 1K calls) is cheaper than s402 Exact on Sui
+(~$7.00) for one-shot calls.** s402 Prepaid wins on *fixed overhead regardless of volume*, not on
+per-transaction cost.
 
 **s402 is Sui-native by design.** These advantages come from Sui's object model, PTBs, and sub-second finality. They can't be replicated on EVM — and they don't need to be. x402 already handles EVM well. s402 handles Sui better.
 
@@ -58,6 +92,38 @@ ships with conformance vectors to check yourself against.
 say so. Also skip it if you want a payments *product*: s402 is a wire format and a set of types
 with zero runtime dependencies. It does not move money, custody funds, or run a facilitator for
 you. Fiat and card rails are out of scope and will stay that way.
+
+## What Is True Today
+
+The honest tense, as of the current release. Nothing below is described in the present tense
+before it ships.
+
+| | State |
+|---|---|
+| **`s402` wire format** (this repo) | **Shipped** — `0.9.0` on npm. Types, HTTP encoding, scheme registry, error taxonomy, six schemes defined. Zero runtime dependencies. |
+| **Conformance vectors** | **Shipped** — 167 across 14 files, in `spec/vectors/`, run by `pnpm demo`. |
+| **`@sweefi/sui`** (Sui adapter) | **Published** — PTB builders and the payment adapter. Settlement lives here, not in this repo. |
+| **`@sweefi/server`** (HTTP middleware) | **Published.** |
+| **Unlock scheme** | **Partial** — depends on encryption key-server infrastructure; under active development. |
+| **`mcp-demo/`** | **Built, not currently runnable end-to-end** — Sui deprecated JSON-RPC on public fullnodes. Its README says so first. |
+| **Architecture decisions** | 12 ADRs: **7 shipped**, 1 upheld, 2 in-progress, 2 not-started. Each carries an `Implementation:` field, so "ratified" and "built" are distinguishable. |
+
+## Receipts
+
+Claims in this README are checkable. These are the checks.
+
+| Claim | How you check it |
+|---|---|
+| The wire format works | `pnpm demo` — encode, decode, x402 compat, and 167 vectors, offline |
+| The test suite is green | `cd typescript && pnpm vitest run` → **1108 tests across 29 files** |
+| It typechecks and builds | `cd typescript && pnpm typecheck && pnpm build` |
+| Malformed input is refused | `pnpm demo` reports how many rejected **and how many leaked through**. The second number is the real one |
+| 167 vectors, 14 files | `ls spec/vectors/ \| wc -l`, and the demo runs them |
+| Zero runtime dependencies | `cat typescript/package.json` — there is no `dependencies` key |
+| Which decisions were built | `grep -h -o '\*\*Implementation:\*\* *[a-z-]*' docs/adr/*.md \| sort \| uniq -c` |
+
+Last observed on a clean clone of `main`: typecheck clean, **1108/1108 tests across 29 files**,
+build 23 files. If any of the above does not run for you, that is a bug — please open an issue.
 
 ## Which Scheme Should I Use?
 
@@ -220,7 +286,7 @@ import {
   isX402,
   toX402Requirements,
   fromX402Requirements,
-} from 's402/compat';
+} from 's402/compat/x402';
 
 // Normalize x402 JSON (V1 or V2) to s402 format
 const requirements = normalizeRequirements(rawJsonObject);
@@ -295,11 +361,17 @@ if (result.success) {
 ## Sub-path Exports
 
 ```typescript
-import { ... } from 's402';         // Everything
+import { ... } from 's402';              // Everything
 import type { ... } from 's402/types';   // Types + constants only
-import { ... } from 's402/http';     // HTTP encode/decode
-import { ... } from 's402/compat';   // x402 interop
-import { ... } from 's402/errors';   // Error types
+import { ... } from 's402/http';         // HTTP encode/decode
+import { ... } from 's402/server';       // s402Gate server helpers
+import { ... } from 's402/errors';       // Error types
+import { ... } from 's402/receipts';     // On-chain receipt parsing
+import { ... } from 's402/extensions';   // Extension registry
+import { ... } from 's402/compat/x402';  // x402 interop
+import { ... } from 's402/compat/mpp';   // Stripe MPP interop
+import { ... } from 's402/compat/l402';  // L402 interop
+import { ... } from 's402/test-utils';   // Fixtures for your own tests
 ```
 
 ## Implementing a Scheme
@@ -367,9 +439,9 @@ const requirements: s402PaymentRequirements = {
 
 ## Design Principles
 
-1. **Protocol-agnostic core, Sui-native reference.** `s402` defines chain-agnostic protocol types and HTTP encoding. The reference implementation (`@sweefi/sui`, coming soon) will exploit Sui's unique properties — PTBs, object model, sub-second finality. Other chains can implement s402 schemes using their own primitives.
+1. **Protocol-agnostic core, Sui-native reference.** `s402` defines chain-agnostic protocol types and HTTP encoding. The reference implementation, [`@sweefi/sui`](https://www.npmjs.com/package/@sweefi/sui), is **published** and exploits Sui's properties — PTBs, object model, sub-second finality. Other chains can implement s402 schemes using their own primitives.
 
-2. **Optional x402 compat.** The `s402/compat` subpath provides a migration aid for codebases with x402-formatted JSON. It normalizes x402 V1 (`maxAmountRequired`) and V2 (`amount`) to s402 format. This is opt-in — the core protocol has no x402 dependency.
+2. **Optional x402 compat.** The `s402/compat/x402` subpath provides a migration aid for codebases with x402-formatted JSON. It normalizes x402 V1 (`maxAmountRequired`) and V2 (`amount`) to s402 format. This is opt-in — the core protocol has no x402 dependency.
 
 3. **Scheme-specific verification.** Each scheme has its own verify logic. Exact verify (signature recovery + dry-run) is fundamentally different from stream verify (deposit check + rate validation). The facilitator dispatches — it doesn't share logic.
 
