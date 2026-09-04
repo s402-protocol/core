@@ -225,7 +225,7 @@ def from_s402_v1_requirements(
     # it: project to the wire, check, and lift back. A v1 document with a bad
     # amount or a `file://` facilitatorUrl fails here exactly as it did before.
     wire = to_requirements_wire(required)
-    validate_requirements_shape(wire)
+    validate_requirements_shape(wire, lifted_from_legacy=True)
     return pick_requirements_fields(wire)
 
 
@@ -279,7 +279,7 @@ def normalize_requirements(obj: Any, now: int | None = None) -> dict[str, Any]:
             resource["description"] = obj["description"]
         required = {"x402Version": 2, "resource": resource, "accepts": [entry]}
         wire = to_requirements_wire(required)
-        validate_requirements_shape(wire)
+        validate_requirements_shape(wire, lifted_from_legacy=True)
         return pick_requirements_fields(wire)
 
     raise S402Error("INVALID_PAYLOAD", "Unrecognized payment requirements format: missing s402Version or x402Version")

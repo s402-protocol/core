@@ -1443,6 +1443,92 @@ export function decodeSettleBody(body: string): s402SettleResponse {
   return pickSettleResponseFields(parsed as Record<string, unknown>);
 }
 
+// ══════════════════════════════════════════════════════════════
+// Intake of s402's own past — the retired v1 flat 402 (ADR-013)
+// ══════════════════════════════════════════════════════════════
+
+/**
+ * Decode the RETIRED s402 v1 flat requirements shape into a wire-v2 402.
+ *
+ * v1 was `{ s402Version: '1', accepts: ['exact', 'prepaid'], network, asset,
+ * amount, payTo, … }` — one price line plus a list of scheme NAMES. v2 is one
+ * `accepts[]` entry per scheme, so a v1 document expands: every entry carries
+ * the same network/asset/amount/payTo and the same per-requirement fields, and
+ * differs only in `scheme`.
+ *
+ * **Nothing emits v1.** This exists because understanding what a peer said is an
+ * obligation and saying it yourself is not (ADR-013), and it is scoped to one
+ * major version. `exact` is hoisted to the front for the same reason the
+ * emitter does it: an x402 client pays the first entry it can handle.
+ *
+ * v1 had no `resource`; x402's V2 envelope requires one. Pass the URL you
+ * fetched if you have it — an empty `url` is honest about not knowing, and is
+ * what a re-emitted envelope would otherwise claim to know.
+ *
+ * @throws {s402Error} `INVALID_PAYLOAD` if the document is not a well-formed v1 402.
+ */
+export function fromS402V1Requirements(
+  v1: Record<string, unknown>,
+  options?: { resource?: s402ResourceInfo },
+): s402PaymentRequired {
+  if (v1 == null || typeof v1 !== 'object' || Array.isArray(v1)) {
+    throw new s402Error('INVALID_PAYLOAD',
+      `s402 v1 requirements must be a plain object, got ${v1 === null ? 'null' : Array.isArray(v1) ? 'array' : typeof v1}`);
+  }
+  if (v1.s402Version !== '1') {
+    throw new s402Error('INVALID_PAYLOAD',
+      `Unsupported s402Version ${JSON.stringify(v1.s402Version)}: fromS402V1Requirements reads the flat "1" shape only.`);
+  }
+  if (!Array.isArray(v1.accepts) || v1.accepts.length === 0) {
+    throw new s402Error('INVALID_PAYLOAD',
+      's402 v1 requirements must carry a non-empty accepts array of scheme names');
+  }
+  for (const scheme of v1.accepts) {
+    if (typeof scheme !== 'string' || scheme.length === 0) {
+      throw new s402Error('INVALID_PAYLOAD',
+        `Invalid entry in s402 v1 accepts array: expected a non-empty string, got ${typeof scheme}`);
+    }
+  }
+
+  // Deduplicate, then hoist `exact` — v1 documents were not required to list it
+  // first, and wire v2 is.
+  const schemes = [...new Set(v1.accepts as string[])]
+    .sort((a, b) => (a === 'exact' ? -1 : b === 'exact' ? 1 : 0));
+
+  // Every v1 field except `accepts` describes the ONE offer the document made;
+  // each expanded entry therefore carries all of them.
+  const shared: Record<string, unknown> = {};
+  for (const key of V1_SHARED_KEYS) {
+    if (v1[key] !== undefined) shared[key] = v1[key];
+  }
+
+  const required: s402PaymentRequired = {
+    x402Version: 2,
+    resource: options?.resource ?? { url: '' },
+    accepts: schemes.map((scheme) => ({ ...shared, scheme } as unknown as s402PaymentRequirements)),
+  };
+  if (v1.mandate !== undefined) {
+    required.mandate = v1.mandate as s402PaymentRequired['mandate'];
+  }
+
+  // Validate through the canonical wire validator rather than a second copy of
+  // it: project to the wire, check, and lift back. A v1 document with a bad
+  // amount or a `file://` facilitatorUrl fails here exactly as it did before.
+  const wire = toRequirementsWire(required) as Record<string, unknown>;
+  validateRequirementsShape(wire, { liftedFromLegacy: true });
+  return pickRequirementsFields(wire);
+}
+
+/** The v1 flat fields that describe the offer itself, and so ride on every expanded entry. */
+const V1_SHARED_KEYS = [
+  'network', 'asset', 'amount', 'payTo',
+  'facilitatorUrl', 'protocolFeeBps', 'protocolFeeAddress', 'receiptRequired',
+  'settlementMode', 'expiresAt',
+  'upto', 'settlementOverrides', 'prepaid', 'stream', 'escrow', 'unlock',
+  'extensions',
+] as const;
+
+
 /**
  * Detect transport mode from an incoming request.
  *
@@ -1487,6 +1573,11 @@ export function detectProtocol(headers: Headers): 's402' | 'x402' | 'unknown' {
     if (!isPlainObject(decoded)) return 'unknown';
     const extensions = decoded.extensions;
     if (isPlainObject(extensions) && isPlainObject(extensions[S402_EXTENSION_KEY])) return 's402';
+    // The retired v1 flat 402, from a server that has not upgraded yet. It is
+    // ours — reading it is an obligation (ADR-013) — and calling it 'unknown'
+    // made a rolling upgrade indistinguishable from "no payment required": the
+    // client neither paid nor errored.
+    if ('s402Version' in decoded) return 's402';
     if ('x402Version' in decoded) return 'x402';
     return 'unknown';
   } catch {
@@ -1524,6 +1615,20 @@ export function extractRequirementsFromResponse(response: Response): s402Payment
   try {
     return decodePaymentRequired(header);
   } catch {
+    // Not the wire-v2 envelope. Before giving up, try the one other shape s402
+    // is obliged to read: its own retired v1 flat 402, which a server mid-
+    // upgrade is still emitting. Returning `null` for that document is
+    // indistinguishable from "no payment required", so the client silently
+    // does nothing. An x402 V1 flat 402 needs `normalizeRequirements()` from
+    // `s402/compat/x402` and is deliberately not tried here.
+    try {
+      const decoded: unknown = JSON.parse(fromBase64(header));
+      if (isPlainObject(decoded) && 's402Version' in decoded) {
+        return fromS402V1Requirements(decoded);
+      }
+    } catch {
+      // fall through
+    }
     return null;
   }
 }

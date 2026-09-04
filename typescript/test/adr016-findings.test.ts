@@ -14,6 +14,8 @@ import {
 } from '../src/compat/x402.js';
 import {
   encodePaymentRequired,
+  detectProtocol,
+  extractRequirementsFromResponse,
 } from '../src/http.js';
 import type { s402PaymentRequirements } from '../src/types.js';
 import { s402ResourceServer } from '../src/server.js';
@@ -216,5 +218,108 @@ describe('items 2 & 10: which offer a payment settles against', () => {
     }));
     expect(res.status).toBe(402);
     expect((await res.json() as { errorCode: string }).errorCode).toBe('SCHEME_NOT_SUPPORTED');
+  });
+});
+
+// ── Item 8 ────────────────────────────────────────────────────────────────
+
+describe('item 8: a 402 from a server that has not upgraded yet is still legible', () => {
+  const v1 = {
+    s402Version: '1',
+    accepts: ['exact'],
+    network: NETWORK,
+    asset: ASSET,
+    amount: '1000',
+    payTo: PAY_TO,
+  };
+  const header = btoa(JSON.stringify(v1));
+
+  it('detectProtocol calls a v1 flat 402 s402, not "unknown"', () => {
+    // "unknown" is what this returns when there is NO payment-required header
+    // at all, so a rolling upgrade turned "the server wants money in a shape I
+    // used to speak" into "no payment required" — the client neither paid nor
+    // errored.
+    expect(detectProtocol(new Headers({ 'payment-required': header }))).toBe('s402');
+  });
+
+  it('extractRequirementsFromResponse returns something payable from a v1 flat 402', () => {
+    const res = new Response(null, { status: 402, headers: { 'payment-required': header } });
+    const required = extractRequirementsFromResponse(res);
+    expect(required).not.toBeNull();
+    expect(required!.accepts[0]).toMatchObject({ scheme: 'exact', network: NETWORK, amount: '1000', payTo: PAY_TO });
+  });
+
+  it('a genuinely malformed header is still null / unknown', () => {
+    const junk = btoa(JSON.stringify({ s402Version: '1' }));
+    expect(extractRequirementsFromResponse(new Response(null, { headers: { 'payment-required': junk } }))).toBeNull();
+    expect(detectProtocol(new Headers({ 'payment-required': 'not base64 at all' }))).toBe('unknown');
+  });
+});
+
+// ── Item 9 ────────────────────────────────────────────────────────────────
+
+describe('item 9: a gate cannot be built around a 402 no x402 client can pay', () => {
+  const server = () => new s402ResourceServer();
+
+  it('refuses a static offer list with no `exact` entry, at construction', () => {
+    expect(() => s402Gate({
+      server: server(),
+      requirements: [offer({ scheme: 'prepaid' })],
+      resource: { url: URL_ },
+    })).toThrow(/exact/);
+  });
+
+  it('refuses the same list when a `requirements` function produces it, at the request', async () => {
+    const gate = s402Gate({
+      server: server(),
+      requirements: () => [offer({ scheme: 'unlock' })],
+      resource: { url: URL_ },
+    });
+    await expect(gate.check(new Request(URL_))).rejects.toThrow(/exact/);
+  });
+
+  it('accepts a list that offers exact anywhere in it', () => {
+    expect(() => s402Gate({
+      server: server(),
+      requirements: [offer({ scheme: 'prepaid' }), offer({ scheme: 'exact' })],
+      resource: { url: URL_ },
+    })).not.toThrow();
+  });
+});
+
+// ── Item 11 ───────────────────────────────────────────────────────────────
+
+describe('item 11: the mandate reaches the offer the facilitator is handed', () => {
+  it('puts the route mandate on every offer, not only in the envelope', async () => {
+    const mandate = { required: true, minPerTx: '500' } as const;
+    const seen: Array<unknown> = [];
+    const srv = new s402ResourceServer();
+    const fac = new s402Facilitator();
+    srv.register(NETWORK, { scheme: 'exact', buildRequirements: () => offer() });
+    fac.register(NETWORK, {
+      scheme: 'exact',
+      async verify(_p, r) { seen.push(r.mandate); return { valid: true as const, payerAddress: '0xp' }; },
+      async settle() { return { success: true as const, txDigest: 'D', finalityMs: 1 }; },
+    });
+    srv.setFacilitator(fac);
+
+    const gate = s402Gate({ server: srv, requirements: [offer()], resource: { url: URL_ }, mandate });
+    const result = await gate.check(new Request(URL_, {
+      headers: { 'x-payment': btoa(JSON.stringify({ s402Version: '1', scheme: 'exact', payload: { transaction: 'tx', signature: 'sig' } })) },
+    }));
+
+    expect(result.accepted).toBe(true);
+    if (!result.accepted) return;
+    // The offer the caller is handed, and the one `verify` was handed, both
+    // carry it — a mandate-required route used to verify as mandate-free.
+    expect(result.requirements.mandate).toEqual(mandate);
+    expect(seen).toEqual([mandate]);
+    expect(result.required.accepts.every((o) => o.mandate !== undefined)).toBe(true);
+  });
+
+  it('does not write the mandate back onto the caller\'s own requirements object', () => {
+    const shared = offer();
+    s402Gate({ server: new s402ResourceServer(), requirements: [shared], resource: { url: URL_ }, mandate: { required: true } });
+    expect(shared.mandate).toBeUndefined();
   });
 });

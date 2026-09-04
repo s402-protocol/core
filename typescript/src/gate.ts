@@ -130,6 +130,18 @@ function assertOffered(accepts: readonly s402PaymentRequirements[]): void {
     throw new s402Error('INVALID_PAYLOAD',
       's402Gate requires at least one payment requirement; an empty `accepts` is a 402 no client can pay.');
   }
+  // Every route offers `exact`. On the retired flat wire the builder prepended
+  // it unconditionally, so this was true by construction; wire v2 moved that
+  // job to `buildPaymentRequired`, and a hand-built list bypasses it. The
+  // result type-checks and emits a 402 no unmodified x402 client can pay,
+  // which is the one outcome ADR-016 exists to prevent — so it is refused
+  // where the misconfiguration is, not once per request forever.
+  if (!accepts.some((offer) => offer.scheme === 'exact')) {
+    throw new s402Error('SCHEME_NOT_SUPPORTED',
+      's402Gate requires an `exact` offer on every route: an x402 client pays the first ' +
+      `accepts[] entry it has a handler for, and offered [${accepts.map((o) => o.scheme).join(', ')}] ` +
+      'it has none. `s402ResourceServer.buildPaymentRequired()` adds it for you.');
+  }
 }
 
 /** The wire dialect a payment arrived in; the receipt is answered in the same one. */
@@ -516,13 +528,22 @@ async function resolveRequired(
     : options.requirements;
   const accepts = Array.isArray(resolved) ? resolved : [resolved];
   assertOffered(accepts);
+
+  // A mandate authorizes the AGENT, so the wire carries one, on the envelope.
+  // Schemes and the facilitator are handed ONE offer and never see the
+  // envelope, so the decode side copies it down onto every entry — and the
+  // gate did not, which meant a mandate-required route verified as
+  // mandate-free downstream. Same rule, same place: `pickRequirementsFields`.
+  const mandate = resolveMandate(accepts, options.mandate);
   const required: s402PaymentRequired = {
     x402Version: 2,
     resource: options.resource,
     error: 'Payment Required',
-    accepts,
+    // Copied, never written through: `options.requirements` may be a static
+    // array the caller keeps and reuses, and a gate is not entitled to edit it.
+    accepts: mandate === undefined ? accepts : accepts.map((offer) => ({ ...offer, mandate })),
   };
-  if (options.mandate !== undefined) required.mandate = options.mandate;
+  if (mandate !== undefined) required.mandate = mandate;
   if (options.extensions !== undefined) required.extensions = options.extensions;
   return required;
 }

@@ -301,12 +301,15 @@ def apply_foreign_expiry(required: dict[str, Any], now: int | None = None) -> No
             continue
         if "expiresAt" in offer:
             continue
+        # No ``> 0`` guard. A zero timeout used to fall through here and leave
+        # the offer with NO ``expiresAt``, which walks past every stale-payment
+        # layer — the one outcome this function exists to prevent. Zero now
+        # means "already expired", which is what a server saying zero meant.
         timeout = offer.get("maxTimeoutSeconds")
         if timeout is None:
             timeout = S402_DEFAULT_MAX_TIMEOUT_SECONDS
-        if timeout > 0:
-            ref = now if now is not None else int(time.time() * 1000)
-            offer["expiresAt"] = ref + timeout * 1000
+        ref = now if now is not None else int(time.time() * 1000)
+        offer["expiresAt"] = ref + max(timeout, 0) * 1000
 
 
 def pick_requirements_fields(obj: dict[str, Any], now: int | None = None) -> dict[str, Any]:
@@ -597,7 +600,45 @@ def _validate_extra_fields(extra: dict[str, Any], where: str) -> None:
     _validate_sub_objects(extra)
 
 
-def _validate_requirement_entry(entry: Any, index: int) -> None:
+def _is_caip2_network(value: str) -> bool:
+    """x402 V2's CAIP-2 rule, verbatim: at least 3 characters, containing a colon."""
+    return len(value) >= 3 and ":" in value
+
+
+_PRINTABLE_ASCII_RE = re.compile(r"^[\x20-\x7e]+$")
+
+
+def _validate_resource_info(resource: dict[str, Any]) -> None:
+    """Validate the x402 V2 ``ResourceInfo`` bounds upstream enforces.
+
+    ``serviceName`` and each ``tag`` are 1-32 printable ASCII, the tag list caps
+    at five, and ``iconUrl`` at 2048. A gate that set a 33-character service
+    name emitted a 402 the pinned ``@x402/core`` refuses to parse, with nothing
+    in s402 saying so.
+    """
+    service_name = resource.get("serviceName")
+    if service_name is not None:
+        if (not isinstance(service_name, str) or not 1 <= len(service_name) <= 32
+                or not _PRINTABLE_ASCII_RE.match(service_name)):
+            raise S402Error("INVALID_PAYLOAD",
+                            "resource.serviceName must be 1-32 printable ASCII characters (x402 V2 ResourceInfo)")
+    tags = resource.get("tags")
+    if tags is not None:
+        if not isinstance(tags, list) or len(tags) > 5:
+            raise S402Error("INVALID_PAYLOAD",
+                            "resource.tags must be an array of at most 5 entries (x402 V2 ResourceInfo)")
+        for tag in tags:
+            if not isinstance(tag, str) or not 1 <= len(tag) <= 32 or not _PRINTABLE_ASCII_RE.match(tag):
+                raise S402Error("INVALID_PAYLOAD",
+                                "each resource.tags entry must be 1-32 printable ASCII characters (x402 V2 ResourceInfo)")
+    icon_url = resource.get("iconUrl")
+    if icon_url is not None:
+        if not isinstance(icon_url, str) or len(icon_url) > 2048:
+            raise S402Error("INVALID_PAYLOAD",
+                            "resource.iconUrl must be a string of at most 2048 characters (x402 V2 ResourceInfo)")
+
+
+def _validate_requirement_entry(entry: Any, index: int, lifted_from_legacy: bool = False) -> None:
     """Validate one ``accepts[]`` entry as it arrived on the wire."""
     where = f"accepts[{index}]"
     if not _is_plain_object(entry):
@@ -613,6 +654,8 @@ def _validate_requirement_entry(entry: Any, index: int) -> None:
         missing.append("network (string)")
     if not isinstance(entry.get("asset"), str):
         missing.append("asset (string)")
+    elif len(entry["asset"]) == 0:
+        raise S402Error("INVALID_PAYLOAD", f"{where}: asset must be a non-empty string")
     if not isinstance(entry.get("amount"), str):
         missing.append("amount (string)")
     elif not is_valid_amount(entry["amount"]):
@@ -632,10 +675,25 @@ def _validate_requirement_entry(entry: Any, index: int) -> None:
         if _CONTROL_CHAR_RE.search(entry[field]):
             raise S402Error("INVALID_PAYLOAD", f"{where}: {field} contains control characters")
 
+    # CAIP-2, after the control-character sweep so a null byte still reports as
+    # a null byte. Upstream's ``NetworkSchemaV2`` is min-3-plus-a-colon; a 402
+    # carrying anything else is one the pinned @x402/core decoder refuses.
+    # Skipped only for a document lifted out of a retired flat shape, whose own
+    # schema predates the rule (ADR-013 obliges us to READ those).
+    if not lifted_from_legacy and not _is_caip2_network(entry["network"]):
+        raise S402Error(
+            "INVALID_PAYLOAD",
+            f'{where}: network "{entry["network"]}" is not CAIP-2 (at least 3 characters, containing ":"). '
+            "x402 V2 requires it, so a 402 carrying anything else is one the pinned @x402/core decoder refuses.",
+        )
+
+    # Upstream's schema is ``z.number().positive()``. Zero was accepted here and
+    # is not merely a schema mismatch: an offer good for zero seconds was never
+    # payable, and it used to arrive with no ``expiresAt`` at all.
     if "maxTimeoutSeconds" in entry:
         v = entry["maxTimeoutSeconds"]
-        if isinstance(v, bool) or not isinstance(v, (int, float)) or (isinstance(v, float) and not math.isfinite(v)) or v < 0:
-            raise S402Error("INVALID_PAYLOAD", f"{where}: maxTimeoutSeconds must be a non-negative finite number, got {json.dumps(v)}")
+        if isinstance(v, bool) or not isinstance(v, (int, float)) or (isinstance(v, float) and not math.isfinite(v)) or v <= 0:
+            raise S402Error("INVALID_PAYLOAD", f"{where}: maxTimeoutSeconds must be a positive finite number, got {json.dumps(v)}")
 
     if "extra" in entry:
         if not _is_plain_object(entry["extra"]):
@@ -650,12 +708,26 @@ def _validate_requirement_entry(entry: Any, index: int) -> None:
             _validate_extra_fields(entry["extra"], where)
 
 
-def validate_requirements_shape(obj: Any) -> None:
+def validate_requirements_shape(
+    obj: Any,
+    *,
+    emitting: bool = False,
+    lifted_from_legacy: bool = False,
+) -> None:
     """Validate a decoded 402 document. Raises S402Error on invalid shape.
 
     Takes the WIRE envelope — ``{ x402Version: 2, resource, accepts: [...] }`` —
     not the lifted s402 view. Everything s402 adds is validated where it actually
     travels: inside each entry's ``extra``, and inside ``extensions.s402``.
+
+    :param emitting: This document is about to go ON the wire, so it is held to
+        upstream's own V2 schema — ``resource.url`` must be non-empty, which a
+        decoder has no business demanding of a peer.
+    :param lifted_from_legacy: This document was lifted out of a retired flat
+        shape (x402 V1, s402 v1). Those predate x402 V2's CAIP-2 ``network``
+        rule and ADR-013 makes reading them an obligation, so that one check is
+        skipped. A lifted document that fails the strict check is one s402 can
+        read and must not re-emit.
     """
     if obj is None or not isinstance(obj, dict):
         raise S402Error("INVALID_PAYLOAD", "Payment requirements is not an object")
@@ -685,6 +757,13 @@ def validate_requirements_shape(obj: Any) -> None:
         raise S402Error("INVALID_PAYLOAD", "Malformed payment requirements: missing resource (object with a url)")
     if not isinstance(obj["resource"].get("url"), str):
         raise S402Error("INVALID_PAYLOAD", "Malformed payment requirements: resource.url must be a string")
+    if emitting and len(obj["resource"]["url"]) == 0:
+        raise S402Error(
+            "INVALID_PAYLOAD",
+            "resource.url must be non-empty on emission: x402 V2 requires it and the pinned "
+            "@x402/core decoder refuses an empty one. Pass the URL of the resource being paid for.",
+        )
+    _validate_resource_info(obj["resource"])
 
     if not isinstance(obj.get("accepts"), list):
         raise S402Error("INVALID_PAYLOAD", "Malformed payment requirements: missing accepts (array of requirement objects)")
@@ -692,7 +771,7 @@ def validate_requirements_shape(obj: Any) -> None:
     if len(obj["accepts"]) == 0:
         raise S402Error("INVALID_PAYLOAD", "accepts array must contain at least one requirement")
     for index, entry in enumerate(obj["accepts"]):
-        _validate_requirement_entry(entry, index)
+        _validate_requirement_entry(entry, index, lifted_from_legacy)
 
     if "error" in obj and not isinstance(obj["error"], str):
         raise S402Error("INVALID_PAYLOAD", f"error must be a string, got {type(obj['error']).__name__}")
@@ -804,6 +883,18 @@ def _validate_settle_shape(obj: Any) -> None:
 # ══════════════════════════════════════════════════════════════
 
 
+def _to_emittable_wire(requirements: dict[str, Any]) -> dict[str, Any]:
+    """Project a 402 to the wire AND check it against the schema the pinned
+    ``@x402/core`` will parse it with.
+
+    ADR-016's invariant is a promise about what s402 emits, and until now
+    nothing checked it on the way out.
+    """
+    wire = to_requirements_wire(requirements)
+    validate_requirements_shape(wire, emitting=True)
+    return wire
+
+
 def encode_payment_required(requirements: dict[str, Any]) -> str:
     """Encode a 402 document for the ``payment-required`` header.
 
@@ -811,7 +902,7 @@ def encode_payment_required(requirements: dict[str, Any]) -> str:
     are projected into each entry's ``extra``; ``mandate`` and the wire version
     are projected into ``extensions.s402``.
     """
-    return _to_base64(json.dumps(to_requirements_wire(requirements), separators=(",", ":")))
+    return _to_base64(json.dumps(_to_emittable_wire(requirements), separators=(",", ":")))
 
 
 def encode_payment_payload(payload: dict[str, Any]) -> str:
@@ -888,7 +979,7 @@ def decode_settle_response(header: str) -> dict[str, Any]:
 
 def encode_requirements_body(requirements: dict[str, Any]) -> str:
     """Serialize a 402 document for a JSON body — the same envelope the header carries."""
-    return json.dumps(to_requirements_wire(requirements), separators=(",", ":"))
+    return json.dumps(_to_emittable_wire(requirements), separators=(",", ":"))
 
 
 def decode_requirements_body(body: str, now: int | None = None) -> dict[str, Any]:
@@ -942,6 +1033,10 @@ def detect_protocol(headers: dict[str, str]) -> str:
 
     Since wire v2 the two share one envelope, so what separates them is the
     presence of ``extensions.s402`` — not a version field (ADR-016 rule 4).
+
+    The one exception is the retired v1 flat 402, which carries ``s402Version``
+    and no extensions. It is still ours, and ``from_s402_v1_requirements`` in
+    :mod:`s402.compat` reads it.
     """
     payment_required = headers.get(S402_HEADERS["PAYMENT_REQUIRED"])
     if not payment_required:
@@ -953,6 +1048,12 @@ def detect_protocol(headers: dict[str, str]) -> str:
         if _is_plain_object(decoded):
             extensions = decoded.get("extensions")
             if _is_plain_object(extensions) and _is_plain_object(extensions.get(S402_EXTENSION_KEY)):
+                return "s402"
+            # The retired v1 flat 402, from a server that has not upgraded yet.
+            # It is ours — reading it is an obligation (ADR-013) — and calling
+            # it "unknown" made a rolling upgrade indistinguishable from "no
+            # payment required": the client neither paid nor errored.
+            if "s402Version" in decoded:
                 return "s402"
             if "x402Version" in decoded:
                 return "x402"
