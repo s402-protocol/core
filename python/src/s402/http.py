@@ -98,7 +98,11 @@ _SUB_OBJECT_KEYS: dict[str, list[str]] = {
     "prepaid": ["ratePerCall", "maxCalls", "minDeposit", "withdrawalDelayMs", "providerPubkey", "disputeWindowMs"],
 }
 
-_PAYLOAD_TOP_KEYS = ["s402Version", "scheme", "payload"]
+# `network` names which `accepts[]` entry the payment answers. Since wire v2 a
+# 402 may offer the same scheme on several networks, so a decoder that strips
+# it hands the gate an ambiguous payment it must refuse. Key order matches
+# TypeScript's S402_PAYLOAD_TOP_KEYS so both languages emit the same bytes.
+_PAYLOAD_TOP_KEYS = ["s402Version", "scheme", "network", "payload"]
 
 _PAYLOAD_INNER_KEYS: dict[str, list[str]] = {
     "exact": ["transaction", "signature"],

@@ -125,6 +125,22 @@
     "shouldReject": false
   },
   {
+    "description": "Decode exact payload carrying the network disambiguator",
+    "input": {
+      "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJleGFjdCIsIm5ldHdvcmsiOiJzdWk6bWFpbm5ldCIsInBheWxvYWQiOnsidHJhbnNhY3Rpb24iOiJkSGhmWW5sMFpYTT0iLCJzaWduYXR1cmUiOiJjMmxuWDJKNWRHVnoifX0="
+    },
+    "expected": {
+      "s402Version": "1",
+      "scheme": "exact",
+      "network": "sui:mainnet",
+      "payload": {
+        "transaction": "dHhfYnl0ZXM=",
+        "signature": "c2lnX2J5dGVz"
+      }
+    },
+    "shouldReject": false
+  },
+  {
     "description": "Decode strips unknown top-level keys from payload",
     "input": {
       "header": "eyJzNDAyVmVyc2lvbiI6IjEiLCJzY2hlbWUiOiJleGFjdCIsInBheWxvYWQiOnsidHJhbnNhY3Rpb24iOiJkSGhmWW5sMFpYTT0iLCJzaWduYXR1cmUiOiJjMmxuWDJKNWRHVnoifSwidW5rbm93blRvcExldmVsIjoic2hvdWxkIGJlIHN0cmlwcGVkIiwieDQwMlZlcnNpb24iOjF9"

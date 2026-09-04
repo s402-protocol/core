@@ -578,6 +578,16 @@ function generatePayloadDecode(): TestVector[] {
         signature: 'B'.repeat(500),
       },
     }],
+    // Since wire v2 a 402 may offer the same scheme on several networks, so the
+    // scheme name alone cannot say which offer a payment answers. `network` is
+    // the disambiguator, and a decoder that strips it hands the gate an
+    // ambiguous payment it must refuse (spec §5.1, §10.2).
+    ['Decode exact payload carrying the network disambiguator', {
+      s402Version: '1',
+      scheme: 'exact',
+      network: 'sui:mainnet',
+      payload: { transaction: 'dHhfYnl0ZXM=', signature: 'c2lnX2J5dGVz' },
+    }],
   ];
 
   const results = payloads.map(([description, input]) => {
