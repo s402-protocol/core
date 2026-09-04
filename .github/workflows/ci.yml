@@ -79,6 +79,13 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # `s402` resolves to `typescript/` via `workspace:*`, and its types are
+      # `dist/index.d.mts`. Nothing else in this job builds them, so without
+      # this step every consumer fails with "Cannot find module 's402'" — which
+      # is what happened on the first run of this job.
+      - name: Build s402 so the consumers can resolve its types
+        run: pnpm --filter s402 build
+
       - name: Typecheck server-ts
         run: pnpm --filter @sweefi/server exec tsc --noEmit
 
