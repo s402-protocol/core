@@ -8,7 +8,7 @@ description: s402 Wire Format Specification v1 — the formal, field-by-field de
 
 This document defines the s402 wire format — the exact encoding, field definitions, validation rules, and error semantics for the s402 HTTP 402 payment protocol. It is the authoritative reference for any implementation in any language.
 
-The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (195 vectors across 14 files).
+The TypeScript reference implementation lives at [github.com/s402-protocol/core](https://github.com/s402-protocol/core). Machine-readable conformance test vectors ship in the npm package (196 vectors across 14 files).
 
 ## 1. Terminology
 
@@ -133,7 +133,7 @@ Three levels, and which level a field sits at is the whole design:
 | Field | Type | Required | Constraints | Description |
 |-------|------|----------|-------------|-------------|
 | `x402Version` | number | Yes | MUST be `2` | Envelope version. |
-| `resource` | object | Yes | MUST carry a string `url` | What is being paid for. Also `description`, `mimeType`, `serviceName`, `tags`, `iconUrl`. |
+| `resource` | object | Yes | MUST carry a string `url`. Fields per §4.1.2. | What is being paid for. |
 | `accepts` | object[] | Yes | Non-empty. Each entry per §4.2. | One entry per offered scheme. `exact` MUST be listed first whenever it is offered — an x402 client pays the first entry it has a handler for. |
 | `error` | string | No | — | Human-readable reason, surfaced by x402 clients. |
 | `extensions` | object | No | Opaque bag | Envelope-level extensions. s402's own live under the `s402` key; see §4.1.1. |
@@ -148,6 +148,24 @@ Three levels, and which level a field sits at is the whole design:
 A 402 carrying no `extensions.s402` is a plain x402 402. Implementations MUST decode it and MUST
 NOT treat its absence as an error.
 
+#### 4.1.2 `resource` fields
+
+x402 V2's `ResourceInfo`. The bounds are upstream's, not s402's, and an emitted 402 that breaks
+one is a document the pinned `@x402/core` decoder refuses to parse.
+
+| Field | Type | Required | Constraints | Description |
+|-------|------|----------|-------------|-------------|
+| `url` | string | Yes | MUST be a string on decode. MUST be non-empty on emission. | URL of the resource being paid for. |
+| `description` | string | No | — | Human-readable description. |
+| `mimeType` | string | No | — | Media type of the paid response. |
+| `serviceName` | string | No | 1–32 characters, printable ASCII (`U+0020`–`U+007E`) only. | Display name of the service. |
+| `tags` | string[] | No | At most 5 entries; each 1–32 characters, printable ASCII only. | Discovery tags. |
+| `iconUrl` | string | No | At most 2048 characters. | Icon for the service. |
+
+The asymmetry on `url` is deliberate: emission is held to upstream's schema because that is what
+the interop claim is about, while a decoder has no business refusing a peer's payable 402 over
+empty metadata.
+
 ### 4.2 `accepts[]` Entry Fields
 
 Each entry is an x402 V2 `PaymentRequirements`.
@@ -155,11 +173,11 @@ Each entry is an x402 V2 `PaymentRequirements`.
 | Field | Type | Required | Constraints | Description |
 |-------|------|----------|-------------|-------------|
 | `scheme` | string | Yes | Non-empty. No control characters. | The single scheme this entry offers. Implementations MUST NOT reject an unrecognized scheme name — a client SKIPS an offer it cannot pay. |
-| `network` | string | Yes | Non-empty. No control characters. | Network identifier. RECOMMENDED format: CAIP-2 (e.g., `"sui:mainnet"`, `"eip155:8453"`). |
+| `network` | string | Yes | MUST be CAIP-2: at least 3 characters and containing `":"` (e.g., `"sui:mainnet"`, `"eip155:8453"`). No control characters. | Network identifier. x402 V2 requires CAIP-2, so an emitted 402 carrying anything else is one the pinned `@x402/core` decoder refuses; implementations MUST reject it with `INVALID_PAYLOAD`. The single exception is read-only intake: a document lifted out of a retired flat shape (§11.3) predates the rule — x402 V1's own schema is a non-empty string — and ADR-013 makes reading it an obligation. Such a document MUST be readable and MUST NOT be re-emitted. |
 | `asset` | string | Yes | Non-empty. No control characters. | Asset/coin type identifier. Chain-specific, opaque to s402. |
 | `amount` | string | Yes | Canonical non-negative integer. See §4.3. | Payment amount in base units. |
 | `payTo` | string | Yes | Non-empty. No control characters. | Recipient address. Chain-specific, opaque to s402. |
-| `maxTimeoutSeconds` | number | No | Non-negative finite number. | Seconds the facilitator will wait before rejecting. Emitters SHOULD always send it; `60` is the default when a requirement does not name one. |
+| `maxTimeoutSeconds` | number | No | Positive finite number. Zero and negatives MUST be rejected with `INVALID_PAYLOAD`. | Seconds the facilitator will wait before rejecting. Emitters SHOULD always send it; `60` is the default when a requirement does not name one. Upstream's schema is positive, and an offer good for zero seconds was never payable. |
 | `extra` | object | No | Opaque bag | Scheme-specific requirement fields. s402's own are listed in §4.2.1. Keys s402 does not name MUST be preserved on decode — this bag is x402's and open by specification. |
 
 The fields in §4.2.1 are defined **only for the six s402 schemes**. On an entry naming any other
@@ -520,6 +538,8 @@ Inner payload keys per scheme:
 
 s402 is a **profile of x402**: the 402 leg is x402 V2's own document, and the payment and receipt legs share x402 V1's header names.
 
+**The pin.** Every constraint this document attributes to x402 is read from [`x402-foundation/x402`](https://github.com/x402-foundation/x402) at commit `2cc7e9a6` (`@x402/core` 2.25.0), `typescript/packages/core/src/schemas/index.ts` — `ResourceInfoSchema`, `NetworkSchemaV2`, `PaymentRequirementsV2Schema`, `PaymentRequiredV2Schema`. "The pinned `@x402/core` decoder" elsewhere in this document means that commit. An s402 implementation is free to be stricter than upstream and MUST NOT be looser on emission.
+
 ### 11.1 Header Names
 
 s402 uses the same HTTP header names as x402 V1. An x402 V1 client sending an `exact` payment can interact with an s402 server without modification.
@@ -589,7 +609,7 @@ An implementation is **s402-conformant** if it:
 2. Validates all required fields per §4.1, §5.1, and §6
 3. Rejects malformed input with the appropriate error code from §8
 4. Strips unknown keys on decode per §10
-5. Passes **every** machine-readable conformance test vector shipped in the `s402` npm package (195 vectors across 14 files as of v0.9.0)
+5. Passes **every** machine-readable conformance test vector shipped in the `s402` npm package (196 vectors across 14 files as of v0.9.0)
 
 The conformance vectors cover: encode, decode, body transport, x402 compat normalization, receipt format/parse, settlement verification, validation rejection, key stripping, and roundtrip identity. See the [Conformance Vectors guide](/guide/conformance) for the vector format and implementation instructions.
 
