@@ -203,6 +203,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   its own shape would take down the `exact` offer beside it. Those validators now run only on
   entries whose scheme is one of s402's six; a foreign entry's `extra` is carried through whole,
   and nothing is lifted out of it.
+- **A mandate written with its fields in a different order read as a conflict.** The
+  agreement check between two offers compared serialized JSON, so `{ required, minPerTx }` and
+  `{ minPerTx, required }` — the same mandate — refused the 402. Comparison is field-wise now, and
+  the check runs at `s402Gate()` construction for a static `requirements` array rather than on
+  every 402: an operator who misconfigures it learns once, at boot, not once per request. The
+  encode-time check remains for a dynamic `requirements` function, which cannot be inspected until
+  it runs.
 - **`s402Gate` accepted an empty `requirements` array**, emitted a 402 with `"accepts": []` that no
   decoder — including its own — will read, and then handed `undefined` to `verify`. It is refused
   at gate construction now, and at resolve time for a dynamic `requirements` function.

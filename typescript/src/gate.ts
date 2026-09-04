@@ -34,6 +34,7 @@ import {
   encodeRequirementsBody,
   decodePaymentPayload,
   encodeSettleResponse,
+  resolveMandate,
 } from './http.js';
 import {
   fromX402PayloadHeaders,
@@ -223,7 +224,16 @@ export function s402Gate(options: S402GateOptions): S402Gate {
   // A gate with nothing to sell emits a 402 whose `accepts` is empty — a
   // document no decoder accepts, ours included — and then hands `undefined` to
   // verify. Refuse at construction, where the misconfiguration actually is.
-  if (Array.isArray(options.requirements)) assertOffered(options.requirements);
+  //
+  // Same for a mandate two offers disagree about. The encoder catches that too,
+  // but the encoder runs on every 402: an operator who got it wrong would learn
+  // once per request, forever, instead of once, at boot. The encode-time check
+  // stays as the backstop for a `requirements` FUNCTION, which cannot be
+  // inspected until it runs.
+  if (Array.isArray(options.requirements)) {
+    assertOffered(options.requirements);
+    resolveMandate(options.requirements, options.mandate);
+  }
 
   const middleware: S402Middleware = (next) => {
     return async (request: Request): Promise<Response> => {

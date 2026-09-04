@@ -693,3 +693,52 @@ describe('s402Gate — a 402 with no offers is a misconfiguration, not a respons
     await expect(handler(new Request('http://test/api/paid'))).rejects.toThrow(/at least one/i);
   });
 });
+
+describe('s402Gate — a mandate disagreement is a misconfiguration, not a per-request error', () => {
+  const withMandate = (required: boolean): s402PaymentRequirements => ({
+    scheme: required ? 'exact' : 'prepaid',
+    network: NETWORK, asset: '0x2::sui::SUI', amount: '1000000', payTo: PAY_TO,
+    mandate: { required },
+  });
+
+  it('throws at construction when two static offers disagree', () => {
+    // A mandate authorizes the AGENT, so two answers on one 402 is a question
+    // the wire has no slot for. The encoder catches it — but the encoder runs
+    // on every 402, so an operator who got this wrong learns about it once per
+    // request forever instead of once, at boot.
+    const server = buildServer();
+    expect(() => s402Gate({
+      server,
+      requirements: [withMandate(true), withMandate(false)],
+      resource: RESOURCE,
+    })).toThrow(s402Error);
+    expect(() => s402Gate({
+      server,
+      requirements: [withMandate(true), withMandate(false)],
+      resource: RESOURCE,
+    })).toThrow(/mandate/i);
+  });
+
+  it('accepts static offers whose mandates differ only in key order', () => {
+    const server = buildServer();
+    expect(() => s402Gate({
+      server,
+      requirements: [
+        { ...withMandate(true), mandate: { required: true, minPerTx: '5' } },
+        { ...withMandate(true), scheme: 'prepaid', mandate: { minPerTx: '5', required: true } },
+      ],
+      resource: RESOURCE,
+    })).not.toThrow();
+  });
+
+  it('still catches a dynamic disagreement at 402 time — the encoder is the backstop', () => {
+    const server = buildServer();
+    const gate = s402Gate({
+      server,
+      requirements: () => [withMandate(true), withMandate(false)],
+      resource: RESOURCE,
+    });
+    const handler = gate(async () => Response.json({ data: 'nope' }));
+    return expect(handler(new Request('http://test/api/paid'))).rejects.toThrow(/mandate/i);
+  });
+});

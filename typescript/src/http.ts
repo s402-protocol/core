@@ -207,7 +207,7 @@ export function toRequirementsWire(required: s402PaymentRequired): Record<string
   const carried = isPlainObject(rest[S402_EXTENSION_KEY]) ? rest[S402_EXTENSION_KEY] as Record<string, unknown> : {};
   delete rest[S402_EXTENSION_KEY];
   const s402Ext: Record<string, unknown> = { version: S402_WIRE_VERSION };
-  const mandate = resolveEnvelopeMandate(required);
+  const mandate = resolveMandate(required.accepts ?? [], required.mandate);
   if (mandate !== undefined) s402Ext.mandate = mandate;
   for (const [k, v] of Object.entries(carried)) {
     if (k !== 'version' && k !== 'mandate') s402Ext[k] = v;
@@ -237,6 +237,14 @@ function exactFirst(accepts: readonly s402PaymentRequirements[]): s402PaymentReq
     : [...exact, ...accepts.filter((offer) => offer.scheme !== 'exact')];
 }
 
+/** The fields a mandate requirement has. Two mandates are the same iff these all match. */
+const S402_MANDATE_FIELDS = ['required', 'minPerTx', 'coinType'] as const;
+
+/** Field-wise equality over a mandate. */
+function sameMandate(a: s402MandateRequirements, b: s402MandateRequirements): boolean {
+  return S402_MANDATE_FIELDS.every((field) => a[field] === b[field]);
+}
+
 /**
  * The one mandate this 402 declares, gathered from the envelope and from every
  * entry that names one.
@@ -247,15 +255,23 @@ function exactFirst(accepts: readonly s402PaymentRequirements[]): s402PaymentReq
  * where the facilitator and the scheme implementations read it; this is the
  * function that reconciles the two.
  *
+ * Comparison is field-wise, not serialized. `{ required, minPerTx }` and
+ * `{ minPerTx, required }` are the same mandate, and refusing a valid 402 over
+ * JSON key order would be a failure with no visible cause — the two objects
+ * print the same in every error message you would go on to read.
+ *
  * @throws {s402Error} `INVALID_PAYLOAD` if two of them disagree. Publishing one
  *   of two answers silently is the failure mode worth refusing.
  */
-function resolveEnvelopeMandate(required: s402PaymentRequired): s402MandateRequirements | undefined {
-  let found: s402MandateRequirements | undefined = required.mandate;
-  for (const offer of required.accepts ?? []) {
+export function resolveMandate(
+  accepts: readonly s402PaymentRequirements[],
+  envelopeMandate?: s402MandateRequirements,
+): s402MandateRequirements | undefined {
+  let found: s402MandateRequirements | undefined = envelopeMandate;
+  for (const offer of accepts ?? []) {
     if (offer.mandate === undefined) continue;
     if (found === undefined) { found = offer.mandate; continue; }
-    if (JSON.stringify(found) !== JSON.stringify(offer.mandate)) {
+    if (!sameMandate(found, offer.mandate)) {
       throw new s402Error('INVALID_PAYLOAD',
         'Conflicting mandate requirements on one 402: a mandate authorizes the agent, ' +
         'not a single offer, and the wire carries exactly one at extensions.s402.mandate. ' +

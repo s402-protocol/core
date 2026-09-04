@@ -1255,6 +1255,34 @@ describe('mandate survives the round trip (it is a field, not a note)', () => {
     expect(wire.accepts[0].extra.mandate).toBeUndefined();
   });
 
+  it('does not mistake key order for disagreement', () => {
+    // Two entries carrying the SAME mandate, written in different field order.
+    // A serialize-and-compare says these differ; they do not, and refusing a
+    // valid 402 over JSON key order is a failure the caller cannot even see.
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [
+        { ...SAMPLE_OFFER, mandate: { required: true, minPerTx: '100000', coinType: '0x2::sui::SUI' } },
+        { ...SAMPLE_OFFER, scheme: 'prepaid', mandate: { coinType: '0x2::sui::SUI', minPerTx: '100000', required: true } },
+      ],
+    };
+    const wire = JSON.parse(atob(encodePaymentRequired(doc)));
+    expect(wire.extensions.s402.mandate).toEqual({ required: true, minPerTx: '100000', coinType: '0x2::sui::SUI' });
+  });
+
+  it('still catches a real disagreement in a field that is absent on one side', () => {
+    const doc: s402PaymentRequired = {
+      x402Version: 2,
+      resource: { url: RESOURCE_URL },
+      accepts: [
+        { ...SAMPLE_OFFER, mandate: { required: true, minPerTx: '100000' } },
+        { ...SAMPLE_OFFER, scheme: 'prepaid', mandate: { required: true } },
+      ],
+    };
+    expect(() => encodePaymentRequired(doc)).toThrow(/mandate/i);
+  });
+
   it('refuses to emit two entries that disagree about the mandate', () => {
     const doc: s402PaymentRequired = {
       x402Version: 2,
