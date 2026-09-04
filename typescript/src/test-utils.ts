@@ -153,8 +153,7 @@ export function mockExactServerScheme(): s402ServerScheme {
     scheme: 'exact',
     buildRequirements(config: s402RouteConfig): s402PaymentRequirements {
       return {
-        s402Version: S402_VERSION,
-        accepts: [...new Set([...config.schemes, 'exact' as const])],
+        scheme: 'exact',
         network: config.network,
         asset: config.asset,
         amount: config.price,

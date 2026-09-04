@@ -5,10 +5,10 @@
  *   1. Reads the payment header from the incoming `Request` — s402's `x-payment`,
  *      or x402's `PAYMENT-SIGNATURE` (V2) / `X-PAYMENT` (V1). x402 intake is
  *      always on: compatibility obliges s402 to understand x402 (ADR-013).
- *   2. If absent → responds `402 Payment Required` with encoded requirements.
- *      s402-native by default; an x402 V2 `PaymentRequired` envelope when the
- *      `x402` option is set (ADR-015 — an unmodified x402 client cannot read
- *      the native 402, and the two dialects cannot share one header).
+ *   2. If absent → responds `402 Payment Required` with an x402 V2
+ *      `PaymentRequired` envelope in the header and the body. Always, on every
+ *      route, with no option to select another grammar (ADR-016) — which is why
+ *      an unmodified x402 client can pay this gate with no server flag.
  *   3. If present → decodes, runs server.process() (verify + settle), then
  *      invokes the downstream handler and attaches the `payment-response`
  *      header to its `Response` so the client sees the settlement receipt —
@@ -22,23 +22,24 @@
 
 import {
   S402_HEADERS,
+  type s402PaymentRequired,
   type s402PaymentRequirements,
   type s402PaymentPayload,
   type s402SettleResponse,
+  type s402ResourceInfo,
+  type s402MandateRequirements,
 } from './types.js';
 import {
   encodePaymentRequired,
+  encodeRequirementsBody,
   decodePaymentPayload,
   encodeSettleResponse,
 } from './http.js';
 import {
   fromX402PayloadHeaders,
   x402PayloadDialect,
-  toX402V2Envelope,
-  encodeX402V2Envelope,
   toX402SettleResponse,
   encodeX402SettleResponse,
-  type x402V2ResourceInfo,
 } from './compat/x402.js';
 import type { s402ResourceServer } from './server.js';
 
@@ -54,12 +55,33 @@ export interface S402GateOptions {
   server: s402ResourceServer;
 
   /**
-   * Payment requirements for the gated route. May be a static object or a
-   * function called per-request (e.g. for dynamic pricing / path-based rules).
+   * What the route costs: one offer, or several — one per scheme the route
+   * accepts. May be a static value or a function called per-request (e.g. for
+   * dynamic pricing / path-based rules).
+   *
+   * Order matters. An x402 client pays the FIRST entry it has a handler for, so
+   * put `exact` first whenever it is offered (`buildPaymentRequired` does this
+   * for you).
    */
   requirements:
     | s402PaymentRequirements
-    | ((request: Request) => s402PaymentRequirements | Promise<s402PaymentRequirements>);
+    | s402PaymentRequirements[]
+    | ((request: Request) =>
+        | s402PaymentRequirements
+        | s402PaymentRequirements[]
+        | Promise<s402PaymentRequirements | s402PaymentRequirements[]>);
+
+  /**
+   * What is being paid for. **Required**, because x402's V2 envelope requires
+   * it and s402's 402 is that envelope on every route (ADR-016).
+   */
+  resource: s402ResourceInfo;
+
+  /** AP2 mandate requirements for this route. Rides in `extensions.s402.mandate`. */
+  mandate?: s402MandateRequirements;
+
+  /** Envelope-level extensions to publish alongside s402's own. */
+  extensions?: Record<string, unknown>;
 
   /**
    * Optional custom 402 response builder. Defaults to JSON body with `payment-required`
@@ -67,7 +89,7 @@ export interface S402GateOptions {
    */
   on402?: (
     request: Request,
-    requirements: s402PaymentRequirements,
+    required: s402PaymentRequired,
   ) => Response | Promise<Response> | undefined;
 
   /**
@@ -93,34 +115,6 @@ export interface S402GateOptions {
    * @default true
    */
   verifyBeforeServe?: boolean;
-
-  /**
-   * Emit the 402 as an x402 V2 `PaymentRequired` envelope instead of s402's
-   * native requirements, so an **unmodified x402 client** (`@x402/fetch`,
-   * `x402Client`) can read it and pay. Opt-in, because the two dialects cannot
-   * share the `payment-required` header: both use the key `accepts`, s402 for
-   * a list of scheme names and x402 for a list of requirement objects.
-   *
-   * Only `exact`-first requirements are expressible (that is the x402 scheme
-   * s402 shares); anything else throws at 402 time rather than silently
-   * downgrading. s402-only requirement fields (`facilitatorUrl`, `mandate`,
-   * `expiresAt`, fee fields, `extensions`) are not carried on an x402 envelope.
-   *
-   * s402 clients hitting a gate in this mode must normalize the 402 with
-   * `normalizeRequirements()` from `s402/compat/x402` — which they need anyway
-   * to talk to x402 servers. Payment INTAKE is unaffected by this option: x402
-   * payloads are accepted whether or not it is set.
-   */
-  x402?: {
-    /** Required by the x402 V2 envelope: what is being paid for. */
-    resource: x402V2ResourceInfo;
-    /** x402 `maxTimeoutSeconds` on the emitted requirement. @default 60 */
-    maxTimeoutSeconds?: number;
-    /** Scheme-specific `extra` on the emitted requirement. @default {} */
-    extra?: Record<string, unknown>;
-    /** Envelope-level x402 extensions. */
-    extensions?: Record<string, unknown>;
-  };
 }
 
 /** The wire dialect a payment arrived in; the receipt is answered in the same one. */
@@ -137,8 +131,14 @@ export type S402CheckResult =
       accepted: true;
       /** Decoded payload. Pass to `result.settle()` when ready. */
       payload: s402PaymentPayload;
-      /** Resolved requirements (after dynamic evaluation). */
+      /**
+       * The single offer this payment is being settled against — the entry from
+       * `accepts[]` whose scheme the payload named, or the first one when it
+       * named none.
+       */
       requirements: s402PaymentRequirements;
+      /** The whole 402 document that was on offer, after dynamic evaluation. */
+      required: s402PaymentRequired;
       /**
        * Which dialect the client paid in. Callers threading settlement through
        * their own framework should encode the receipt for this dialect
@@ -184,7 +184,7 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
  * @example Hono
  * ```ts
  * import { s402Gate } from '@sweefi/server';
- * const gate = s402Gate({ server, requirements });
+ * const gate = s402Gate({ server, requirements, resource: { url: 'https://api.example.com/paid' } });
  *
  * app.get('/api/paid', (c) =>
  *   gate(async () => Response.json({ data: 'hello, paid world' }))(c.req.raw),
@@ -193,7 +193,7 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
  *
  * @example Next.js App Router
  * ```ts
- * export const GET = s402Gate({ server, requirements })(async () =>
+ * export const GET = s402Gate({ server, requirements, resource })(async () =>
  *   Response.json({ data: 'paid content' }),
  * );
  * ```
@@ -201,7 +201,7 @@ const CORS_EXPOSE = `${S402_HEADERS.PAYMENT_REQUIRED}, ${S402_HEADERS.PAYMENT_RE
  * @example Bun / Cloudflare Workers / Deno
  * ```ts
  * Bun.serve({
- *   fetch: s402Gate({ server, requirements })(async () => Response.json({ ok: true })),
+ *   fetch: s402Gate({ server, requirements, resource })(async () => Response.json({ ok: true })),
  * });
  * ```
  */
@@ -263,14 +263,14 @@ async function runCheck(
   request: Request,
   options: S402GateOptions,
 ): Promise<S402CheckResult> {
-  const requirements = await resolveRequirements(request, options);
+  const required = await resolveRequired(request, options);
   const paymentHeader = request.headers.get(S402_HEADERS.PAYMENT);
   const dialect: S402PaymentDialect = x402PayloadDialect(request.headers) ?? 's402';
 
   if (!paymentHeader && dialect === 's402') {
     return {
       accepted: false,
-      response: await build402(request, options, requirements),
+      response: await build402(request, options, required),
     };
   }
 
@@ -293,6 +293,14 @@ async function runCheck(
       }),
     };
   }
+
+  // A 402 may offer several schemes; the payment picked one. Settle against
+  // THAT offer — its own price, network and expiry — not against whichever
+  // entry happened to be listed first. An offer the payload does not match
+  // falls through to `accepts[0]`, where the facilitator's own scheme
+  // cross-check rejects it with a reason.
+  const requirements = required.accepts.find((offer) => offer.scheme === payload.scheme)
+    ?? required.accepts[0];
 
   // Security-first (default): verify the payment cryptographically BEFORE the
   // protected handler runs, so an invalid payment never triggers handler compute
@@ -325,6 +333,7 @@ async function runCheck(
     accepted: true,
     payload,
     requirements,
+    required,
     dialect,
     settle: async () => {
       if (settled) {
@@ -336,66 +345,46 @@ async function runCheck(
   };
 }
 
-async function resolveRequirements(
+async function resolveRequired(
   request: Request,
   options: S402GateOptions,
-): Promise<s402PaymentRequirements> {
-  return typeof options.requirements === 'function'
-    ? options.requirements(request)
+): Promise<s402PaymentRequired> {
+  const resolved = typeof options.requirements === 'function'
+    ? await options.requirements(request)
     : options.requirements;
+  const accepts = Array.isArray(resolved) ? resolved : [resolved];
+  const required: s402PaymentRequired = {
+    x402Version: 2,
+    resource: options.resource,
+    error: 'Payment Required',
+    accepts,
+  };
+  if (options.mandate !== undefined) required.mandate = options.mandate;
+  if (options.extensions !== undefined) required.extensions = options.extensions;
+  return required;
 }
 
 async function build402(
   request: Request,
   options: S402GateOptions,
-  requirements: s402PaymentRequirements,
+  required: s402PaymentRequired,
 ): Promise<Response> {
-  const custom = await options.on402?.(request, requirements);
+  const custom = await options.on402?.(request, required);
   if (custom) return withHygiene(custom);
 
-  if (options.x402) {
-    // x402 V2 envelope in the header AND the body: upstream's own resource
-    // server does the same, and a V1 client reads only the body. Throws
-    // (s402Error INVALID_PAYLOAD) if the requirements are not exact-first —
-    // a misconfiguration that must surface, not a silent downgrade.
-    const envelope = toX402V2Envelope(requirements, options.x402.resource, {
-      maxTimeoutSeconds: options.x402.maxTimeoutSeconds,
-      extra: options.x402.extra,
-      extensions: options.x402.extensions,
-      error: 'Payment Required',
-    });
-    return new Response(JSON.stringify(envelope), {
-      status: 402,
-      headers: {
-        'content-type': JSON_CT,
-        'cache-control': 'no-store',
-        'x-content-type-options': 'nosniff',
-        'access-control-expose-headers': CORS_EXPOSE,
-        [S402_HEADERS.PAYMENT_REQUIRED]: encodeX402V2Envelope(envelope),
-      },
-    });
-  }
-
-  return new Response(
-    JSON.stringify({
-      error: 'Payment Required',
-      s402Version: requirements.s402Version,
-      accepts: requirements.accepts,
-      network: requirements.network,
-      amount: requirements.amount,
-      asset: requirements.asset,
-    }),
-    {
-      status: 402,
-      headers: {
-        'content-type': JSON_CT,
-        'cache-control': 'no-store',
-        'x-content-type-options': 'nosniff',
-        'access-control-expose-headers': CORS_EXPOSE,
-        [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(requirements),
-      },
+  // The envelope goes in the header AND the body: upstream's own resource
+  // server does the same, and an x402 V1 client reads only the body. One
+  // document, one grammar — there is no s402-native alternative to select.
+  return new Response(encodeRequirementsBody(required), {
+    status: 402,
+    headers: {
+      'content-type': JSON_CT,
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+      'access-control-expose-headers': CORS_EXPOSE,
+      [S402_HEADERS.PAYMENT_REQUIRED]: encodePaymentRequired(required),
     },
-  );
+  });
 }
 
 async function buildError(

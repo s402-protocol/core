@@ -13,6 +13,9 @@
 export type {
   s402Scheme,
   s402SettlementMode,
+  s402SchemeName,
+  s402ResourceInfo,
+  s402PaymentRequired,
   s402PaymentRequirements,
   // Scheme-specific extras (ordered by tier)
   s402UptoExtra,
@@ -44,7 +47,12 @@ export type {
   s402ServiceEntry,
   s402RegistryQuery,
 } from './types.js';
-export { S402_VERSION, S402_HEADERS } from './types.js';
+export {
+  S402_VERSION,
+  S402_WIRE_VERSION,
+  S402_DEFAULT_MAX_TIMEOUT_SECONDS,
+  S402_HEADERS,
+} from './types.js';
 
 // Scheme interfaces
 export type {
@@ -79,6 +87,7 @@ export {
   isValidAmount,
   isValidU64Amount,
   validateRequirementsShape,
+  toRequirementsWire,
 } from './http.js';
 
 // HTTP helpers — body transport (raw JSON, 1 MB cap for defense-in-depth)

@@ -6,7 +6,12 @@
  * server's `accepts` array.
  */
 
-import type { s402PaymentRequirements, s402PaymentPayload, s402Scheme } from './types.js';
+import type {
+  s402PaymentRequired,
+  s402PaymentRequirements,
+  s402PaymentPayload,
+  s402Scheme,
+} from './types.js';
 import type { s402ClientScheme } from './scheme.js';
 import { s402Error } from './errors.js';
 
@@ -39,18 +44,20 @@ export class s402Client {
   }
 
   /**
-   * Create a payment payload for the given requirements.
+   * Create a payment payload for a 402.
    *
-   * Auto-selects the best scheme: prefers the first scheme in the server's
-   * `accepts` array that we have a registered implementation for.
+   * Pass the whole 402 document and the client picks: the FIRST `accepts[]`
+   * entry it has a registered scheme for on that entry's own network. Entries
+   * naming a scheme (or a network) this client cannot pay are skipped, not
+   * refused — one 402 may legitimately offer `exact` on Sui and something else
+   * somewhere else. Pass a single requirement instead to pay exactly that one.
    *
-   * Accepts typed s402PaymentRequirements only. For x402 input, normalize
-   * first via `normalizeRequirements()` from 's402/compat/x402'.
+   * A plain x402 V2 402 decodes into the same document, so it works here too.
    *
-   * @param requirements - Server's payment requirements (from a 402 response)
+   * @param input - The decoded 402 document, or one `accepts[]` entry from it
    * @returns Payment payload ready to send in the `x-payment` header
-   * @throws {s402Error} `NETWORK_MISMATCH` if no schemes registered for the network
-   * @throws {s402Error} `SCHEME_NOT_SUPPORTED` if no registered scheme matches server's accepts
+   * @throws {s402Error} `NETWORK_MISMATCH` if no schemes are registered for the network
+   * @throws {s402Error} `SCHEME_NOT_SUPPORTED` if no registered scheme matches any offer
    *
    * @example
    * ```ts
@@ -59,33 +66,35 @@ export class s402Client {
    * const client = new s402Client();
    * client.register('sui:mainnet', exactScheme);
    *
-   * const requirements = decodePaymentRequired(res.headers.get('payment-required')!);
-   * const payload = await client.createPayment(requirements);
+   * const required = decodePaymentRequired(res.headers.get('payment-required')!);
+   * const payload = await client.createPayment(required);
    * fetch(url, { headers: { [S402_HEADERS.PAYMENT]: encodePaymentPayload(payload) } });
    * ```
    */
   async createPayment(
-    requirements: s402PaymentRequirements,
+    input: s402PaymentRequired | s402PaymentRequirements,
   ): Promise<s402PaymentPayload> {
-    const networkSchemes = this.schemes.get(requirements.network);
-    if (!networkSchemes) {
+    const offers: s402PaymentRequirements[] = 'accepts' in input ? input.accepts : [input];
+
+    // Report the more specific failure when it is the only one available: a
+    // caller with nothing registered for the network needs a different message
+    // from one whose networks match but whose schemes do not.
+    const networksMatched = offers.some((o) => this.schemes.has(o.network));
+    if (!networksMatched) {
       throw new s402Error(
         'NETWORK_MISMATCH',
-        `No schemes registered for network "${requirements.network}"`,
+        `No schemes registered for network${offers.length > 1 ? 's' : ''} "${[...new Set(offers.map((o) => o.network))].join('", "')}"`,
       );
     }
 
-    // Find the first accepted scheme we support
-    for (const accepted of requirements.accepts) {
-      const scheme = networkSchemes.get(accepted);
-      if (scheme) {
-        return scheme.createPayment(requirements);
-      }
+    for (const offer of offers) {
+      const scheme = this.schemes.get(offer.network)?.get(offer.scheme as s402Scheme);
+      if (scheme) return scheme.createPayment(offer);
     }
 
     throw new s402Error(
       'SCHEME_NOT_SUPPORTED',
-      `No registered scheme matches server's accepts: [${requirements.accepts.join(', ')}]`,
+      `No registered scheme matches server's accepts: [${offers.map((o) => o.scheme).join(', ')}]`,
     );
   }
 

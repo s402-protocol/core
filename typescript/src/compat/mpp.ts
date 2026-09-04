@@ -45,7 +45,6 @@
  */
 
 import type { s402PaymentRequirements } from '../types.js';
-import { S402_VERSION } from '../types.js';
 import { s402Error } from '../errors.js';
 import { isValidAmount } from '../http.js';
 import { canonicalizeToString } from '../canonicalization.js';
@@ -708,8 +707,7 @@ export function fromMppChargeChallenge(
   }
 
   return {
-    s402Version: S402_VERSION,
-    accepts: ['exact'],
+    scheme: 'exact',
     network: resolveNetwork(challenge.method, request.methodDetails),
     asset: request.currency,
     amount: request.amount,
