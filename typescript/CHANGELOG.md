@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- A payment payload may carry `network`, naming which `accepts[]` entry it answers, and every
+  decoder now keeps it. Since wire v2 a 402 can offer the same scheme on several networks, so the
+  scheme name alone cannot identify the offer — and the specification had told decoders to strip
+  the field, which made a conformant peer or proxy hand the gate a payment it had to refuse as
+  ambiguous. Specification §5.1 and §10.2, the Python decoder, and a new conformance vector now
+  agree with what the TypeScript client already sent.
+
+### Fixed
+
+- The MCP and A2A carriers hold an outgoing 402 to the same schema the HTTP encoders do. They
+  projected the document and skipped the check, so a 402 with a non-CAIP-2 network or an empty
+  `resource.url` encoded cleanly on either carrier and was then refused by that carrier's own
+  decoder.
+
 ### Changed
 
 - **BREAKING (npm major, s402 wire v2): the `payment-required` header now carries an x402 V2

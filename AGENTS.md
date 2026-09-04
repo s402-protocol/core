@@ -8,11 +8,11 @@
 
 ```
 s402-protocol/core
-├── spec/vectors/          — 195 conformance test vectors (THE protocol spec, language-agnostic) <!-- corrected 2026-07-02: was 132; count verified on disk + v0.8.0 changelog -->
+├── spec/vectors/          — 196 conformance test vectors (THE protocol spec, language-agnostic) <!-- corrected 2026-07-02: was 132; count verified on disk + v0.8.0 changelog -->
 ├── docs/                  — VitePress docs site (s402-protocol.org) + wire format specification
 ├── typescript/            — TypeScript reference implementation (npm: s402)
 │   ├── src/               — 19 source files (incl. 3 compat), zero runtime deps <!-- corrected 2026-07-19: was 11, then 16; count verified on disk -->
-│   ├── test/              — 1,336 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-09-04: was 1,256, itself stale when written; measured by `pnpm test` -->
+│   ├── test/              — 1,341 tests (adversarial, fuzz, MC/DC, conformance) <!-- corrected 2026-09-04: was 1,256, itself stale when written; measured by `pnpm test` -->
 │   └── examples/          — Runnable joke-api demo
 ├── python/                — Python implementation (pip: s402)
 │   ├── src/s402/          — 5 source files, zero runtime deps
@@ -64,18 +64,18 @@ typescript/src/
 # TypeScript (run from typescript/)
 cd typescript
 pnpm run build      # Build with tsdown
-pnpm run test       # Run tests (1,336 across 33 files, incl. 195-vector conformance)
+pnpm run test       # Run tests (1,341 across 33 files, incl. 196-vector conformance)
 pnpm run typecheck  # tsc --noEmit
 
 # Python (run from python/)
 cd python
 pip install -e ".[dev]"
-pytest              # 185 tests (182 codec vectors + the protocol-detection cases; settlement-verification and transport-carriers vectors are TS-only for now)
+pytest              # 186 tests (183 codec vectors + the protocol-detection cases; settlement-verification and transport-carriers vectors are TS-only for now)
 ```
 
 ## Conformance test suite
 
-`spec/vectors/` contains 195 machine-readable JSON test vectors across 14 files. <!-- corrected 2026-07-02: was "132 across 12" --> These are the **product** — both the TypeScript and Python implementations read from this single directory. Cross-language implementors (Go, Rust) use these same vectors to verify s402 conformance.
+`spec/vectors/` contains 196 machine-readable JSON test vectors across 14 files. <!-- corrected 2026-07-02: was "132 across 12" --> These are the **product** — both the TypeScript and Python implementations read from this single directory. Cross-language implementors (Go, Rust) use these same vectors to verify s402 conformance.
 
 - **Generator**: `npx tsx test/conformance/generate-vectors.ts` — regenerate after any encode/decode changes
 - **TS Runner**: `typescript/test/conformance/conformance.test.ts`
