@@ -95,7 +95,7 @@ The compat layers let existing x402 and MPP traffic flow through an s402 server 
 | **MPP Charge (write)** | `s402/compat/mpp` | 📋 v0.4 roadmap | Emit MPP-shaped `WWW-Authenticate: Payment` challenges |
 | **MPP Session** | `s402/compat/mpp` | 📋 v0.4 roadmap | Cumulative voucher ↔ Prepaid translation |
 | **MPP `Accept-Payment`** | `s402/compat/mpp` | ✅ Production | `parseMppAcceptPayment` — method/intent pairs with wildcards + q-values |
-| **s402 `Accept-Payment`** | core `s402` | ✅ Production | Flat scheme token negotiation ([DAN-341](https://linear.app/dannydevs/issue/DAN-341)) |
+| **s402 `Accept-Payment`** | core `s402` | ✅ Production | Flat scheme token negotiation |
 | **L402 / LSAT** (Lightning Labs) | `s402/compat/l402` | ✅ v0.7 | `parseWwwAuthenticateL402` + `fromL402Challenge` — BOLT-11 HRP decode, macaroon+invoice passthrough |
 
 See [Migrating from x402](/guide/upgrade-x402) and [Migrating from MPP](/guide/upgrade-mpp) for code.
