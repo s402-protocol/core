@@ -3,8 +3,20 @@ name: CI
 on:
   push:
     branches: [main]
+  # NO `branches:` filter here, deliberately (DAN-873).
+  #
+  # `pull_request.branches` filters on the PR's BASE branch. With `[main]`, a
+  # stacked PR — one opened against another PR's branch — matched nothing and
+  # ran ZERO jobs, while GitHub still rendered a green checks column from the
+  # Vercel deployment. Measured 2026-08-16:
+  #
+  #   PR #7  base agent-a/DAN-855-…   0 CI jobs + 2 Vercel   "green"
+  #   PR #8  base main                8 CI jobs + 2 Vercel    green
+  #
+  # Absence of a failing check is not the same as absence of checking, and the
+  # two are indistinguishable at a glance. Stacking is a normal way to work
+  # here, so the suite must follow the code rather than the base branch.
   pull_request:
-    branches: [main]
 
 permissions:
   contents: read
