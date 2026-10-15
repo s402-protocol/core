@@ -1,5 +1,8 @@
 # s402
 
+> [!IMPORTANT]
+> **s402 was retired in September 2026.** It was an HTTP 402 payment protocol for agents on Sui, and x402 has since become the industry standard. The npm package is deprecated and this repository is archived as a record of the work. For new work, use [x402](https://x402.org).
+
 [![CI](https://github.com/s402-protocol/core/actions/workflows/ci.yml/badge.svg)](https://github.com/s402-protocol/core/actions/workflows/ci.yml)
 [![npm version](https://img.shields.io/npm/v/s402.svg)](https://www.npmjs.com/package/s402)
 

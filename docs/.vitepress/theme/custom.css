@@ -94,3 +94,40 @@
     flex-shrink: 0;
   }
 }
+
+/*
+ * Retired banner (DAN-1262). `--vp-layout-top-height` is measured by
+ * RetiredBanner.vue; these values only cover the first paint.
+ */
+:root {
+  --vp-layout-top-height: 44px;
+}
+@media (max-width: 639px) {
+  :root {
+    --vp-layout-top-height: 88px;
+  }
+}
+
+.retired-banner {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: calc(var(--vp-z-index-nav) + 1);
+  padding: 10px 24px;
+  background: var(--vp-c-warning-soft);
+  border-bottom: 1px solid var(--vp-c-warning-2);
+  color: var(--vp-c-text-1);
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+}
+.retired-banner p {
+  margin: 0;
+}
+.retired-banner a {
+  color: var(--vp-c-brand-1);
+  font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
